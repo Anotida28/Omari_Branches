@@ -1,0 +1,99 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const client_1 = require("@prisma/client");
+const prisma = new client_1.PrismaClient();
+function todayDateOnly() {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+async function main() {
+    const branches = [
+        { city: "Harare", label: "HQ" },
+        { city: "Bulawayo", label: "Central" },
+        { city: "Mutare", label: "East" }
+    ];
+    for (const b of branches) {
+        await prisma.branch.upsert({
+            where: {
+                uq_branch_city_label: {
+                    city: b.city,
+                    label: b.label
+                }
+            },
+            update: {},
+            create: b
+        });
+    }
+    const allBranches = await prisma.branch.findMany();
+    const today = todayDateOnly();
+    const currentPeriod = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}`;
+    for (const branch of allBranches) {
+        await prisma.branchMetric.upsert({
+            where: {
+                uq_branch_date: {
+                    branchId: branch.id,
+                    metricDate: today
+                }
+            },
+            update: {},
+            create: {
+                branchId: branch.id,
+                metricDate: today,
+                cashBalance: 0,
+                cashInVolume: 0,
+                cashInValue: 0,
+                cashOutVolume: 0,
+                cashOutValue: 0
+            }
+        });
+        const existingExpense = await prisma.expense.findFirst({
+            where: {
+                branchId: branch.id,
+                period: currentPeriod,
+                expenseType: "RENT"
+            }
+        });
+        if (!existingExpense) {
+            await prisma.expense.create({
+                data: {
+                    branchId: branch.id,
+                    expenseType: "RENT",
+                    period: currentPeriod,
+                    dueDate: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000),
+                    amount: 1000,
+                    currency: "USD",
+                    vendor: "Default Landlord"
+                }
+            });
+        }
+    }
+    const ruleOffsets = [
+        { ruleType: "DUE_REMINDER", dayOffset: -7 },
+        { ruleType: "DUE_REMINDER", dayOffset: -3 },
+        { ruleType: "DUE_REMINDER", dayOffset: -1 },
+        { ruleType: "OVERDUE_ESCALATION", dayOffset: 1 },
+        { ruleType: "OVERDUE_ESCALATION", dayOffset: 7 },
+        { ruleType: "OVERDUE_ESCALATION", dayOffset: 14 }
+    ];
+    for (const rule of ruleOffsets) {
+        await prisma.alertRule.upsert({
+            where: {
+                uq_rule_type_offset: {
+                    ruleType: rule.ruleType,
+                    dayOffset: rule.dayOffset
+                }
+            },
+            update: {},
+            create: rule
+        });
+    }
+    console.log("Seed completed successfully.");
+}
+main()
+    .catch((e) => {
+    console.error(e);
+    process.exit(1);
+})
+    .finally(async () => {
+    await prisma.$disconnect();
+});
