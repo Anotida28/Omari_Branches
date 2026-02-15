@@ -20,6 +20,7 @@ export type DocumentCreateInput = {
   uploadedBy?: string;
   expenseId?: bigint;
   paymentId?: bigint;
+  metricId?: bigint;
   docType?: DocumentType;
 };
 
@@ -32,6 +33,7 @@ export type DocumentResponse = {
   storageKey: string;
   expenseId: string | null;
   paymentId: string | null;
+  metricId: string | null;
   uploadedBy: string | null;
   uploadedAt: string;
 };
@@ -53,6 +55,7 @@ function toDocumentResponse(document: Document): DocumentResponse {
     storageKey: document.filePath,
     expenseId: document.expenseId ? document.expenseId.toString() : null,
     paymentId: document.paymentId ? document.paymentId.toString() : null,
+    metricId: document.metricId ? document.metricId.toString() : null,
     uploadedBy: document.uploadedBy,
     uploadedAt: formatDateTime(document.uploadedAt),
   };
@@ -70,16 +73,13 @@ function mapForeignKeyError(error: unknown): never {
 export async function createDocument(
   input: DocumentCreateInput,
 ): Promise<DocumentResponse> {
-  if (input.expenseId && input.paymentId) {
-    throw new DocumentServiceError(
-      "Provide exactly one of expenseId or paymentId",
-      400,
-    );
-  }
+  const relationCount = [input.expenseId, input.paymentId, input.metricId].filter(
+    (value) => value !== undefined,
+  ).length;
 
-  if (!input.expenseId && !input.paymentId) {
+  if (relationCount !== 1) {
     throw new DocumentServiceError(
-      "Provide exactly one of expenseId or paymentId",
+      "Provide exactly one of expenseId, paymentId, or metricId",
       400,
     );
   }
@@ -93,6 +93,7 @@ export async function createDocument(
     uploadedBy: input.uploadedBy,
     expense: input.expenseId ? { connect: { id: input.expenseId } } : undefined,
     payment: input.paymentId ? { connect: { id: input.paymentId } } : undefined,
+    metric: input.metricId ? { connect: { id: input.metricId } } : undefined,
   };
 
   try {
@@ -137,6 +138,26 @@ export async function listDocumentsForPayment(
 
   const documents = await prisma.document.findMany({
     where: { paymentId },
+    orderBy: { uploadedAt: "desc" },
+  });
+
+  return documents.map(toDocumentResponse);
+}
+
+export async function listDocumentsForMetric(
+  metricId: bigint,
+): Promise<DocumentResponse[] | null> {
+  const metric = await prisma.branchMetric.findUnique({
+    where: { id: metricId },
+    select: { id: true },
+  });
+
+  if (!metric) {
+    return null;
+  }
+
+  const documents = await prisma.document.findMany({
+    where: { metricId },
     orderBy: { uploadedAt: "desc" },
   });
 

@@ -1,6 +1,6 @@
-import { Prisma, PrismaClient, type Branch } from "@prisma/client";
+import { Prisma, type Branch } from "@prisma/client";
 
-const prisma = new PrismaClient();
+import { prisma } from "../db/prisma";
 
 export class BranchServiceError extends Error {
   status: number;

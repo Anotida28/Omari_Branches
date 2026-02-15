@@ -1,9 +1,12 @@
 {
-  "dependencies": {
-    "@prisma/client": "^7.3.0",
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "prisma": "^7.3.0"
+  "name": "omari-branch-system",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix backend run dev",
+    "build": "npm --prefix backend run build",
+    "start": "npm --prefix backend run start",
+    "prisma:generate": "npm --prefix backend run prisma:generate",
+    "prisma:migrate": "npm --prefix backend run prisma:migrate",
+    "prisma:seed": "npm --prefix backend run prisma:seed"
   }
 }

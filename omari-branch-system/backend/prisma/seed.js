@@ -15,7 +15,7 @@ async function main() {
     for (const b of branches) {
         await prisma.branch.upsert({
             where: {
-                uq_branch_city_label: {
+                city_label: {
                     city: b.city,
                     label: b.label
                 }

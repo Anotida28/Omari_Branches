@@ -7,6 +7,7 @@ import {
   createDocument,
   deleteDocument,
   listDocumentsForExpense,
+  listDocumentsForMetric,
   listDocumentsForPayment,
 } from "../services/documents.service";
 
@@ -44,20 +45,25 @@ const createDocumentSchema = z
     fileName: z.string().min(1),
     mimeType: z.string().min(1),
     sizeBytes: sizeSchema,
-    storageKey: z.string().min(1),
-    url: z.string().optional(),
+    storageKey: z.string().min(1).optional(),
+    url: z.string().min(1).optional(),
     uploadedBy: z.string().optional(),
     docType: z.nativeEnum(DocumentType).optional(),
     expenseId: relationIdSchema.optional(),
     paymentId: relationIdSchema.optional(),
+    metricId: relationIdSchema.optional(),
   })
   .strict()
+  .refine((data) => Boolean(data.storageKey || data.url), {
+    message: "Provide storageKey or url",
+  })
   .refine(
     (data) =>
-      (data.expenseId && !data.paymentId) ||
-      (!data.expenseId && data.paymentId),
+      [data.expenseId, data.paymentId, data.metricId].filter(
+        (value) => value !== undefined,
+      ).length === 1,
     {
-      message: "Provide exactly one of expenseId or paymentId",
+      message: "Provide exactly one of expenseId, paymentId, or metricId",
     },
   );
 
@@ -84,7 +90,20 @@ export async function createDocumentHandler(
   }
 
   try {
-    const document = await createDocument(parsedBody.data);
+    const { url, ...baseInput } = parsedBody.data;
+    const storageKey = baseInput.storageKey ?? url;
+    if (!storageKey) {
+      res.status(400).json({
+        error: "Validation error",
+        details: { formErrors: ["Provide storageKey or url"], fieldErrors: {} },
+      });
+      return;
+    }
+
+    const document = await createDocument({
+      ...baseInput,
+      storageKey,
+    });
     res.status(201).json({ data: document });
   } catch (error) {
     if (handleServiceError(res, error)) {
@@ -135,6 +154,32 @@ export async function listPaymentDocumentsHandler(
     const documents = await listDocumentsForPayment(parsedId.data);
     if (!documents) {
       res.status(404).json({ error: "Payment not found" });
+      return;
+    }
+    res.json({ items: documents });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+    next(error);
+  }
+}
+
+export async function listMetricDocumentsHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const parsedId = idParamSchema.safeParse(req.params.id);
+  if (!parsedId.success) {
+    res.status(400).json({ error: "Invalid metric id" });
+    return;
+  }
+
+  try {
+    const documents = await listDocumentsForMetric(parsedId.data);
+    if (!documents) {
+      res.status(404).json({ error: "Metric not found" });
       return;
     }
     res.json({ items: documents });

@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const expenses_controller_1 = require("../controllers/expenses.controller");
+const payments_controller_1 = require("../controllers/payments.controller");
+const documents_controller_1 = require("../controllers/documents.controller");
+const router = (0, express_1.Router)();
+router.post("/", expenses_controller_1.createExpenseHandler);
+router.get("/", expenses_controller_1.listExpensesHandler);
+router.get("/:id", expenses_controller_1.getExpenseByIdHandler);
+router.patch("/:id", expenses_controller_1.updateExpenseHandler);
+router.delete("/:id", expenses_controller_1.deleteExpenseHandler);
+router.post("/:id/payments", payments_controller_1.createPaymentHandler);
+router.get("/:id/payments", payments_controller_1.listPaymentsForExpenseHandler);
+router.get("/:id/documents", documents_controller_1.listExpenseDocumentsHandler);
+exports.default = router;

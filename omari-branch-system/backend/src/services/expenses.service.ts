@@ -258,19 +258,31 @@ export async function refreshExpenseStatus(expenseId: bigint): Promise<{
   return { expense, totalPaid, status };
 }
 
-function mapForeignKeyError(error: unknown): never {
+function mapCreateExpenseError(error: unknown): never {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === "P2003") {
       throw new ExpenseServiceError("Branch not found", 404);
+    }
+    if (error.code === "P2002") {
+      throw new ExpenseServiceError(
+        "Expense with this branch, expenseType, and period already exists",
+        409,
+      );
     }
   }
   throw error;
 }
 
-function mapNotFoundError(error: unknown): null | never {
+function mapUpdateExpenseError(error: unknown): null | never {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === "P2025") {
       return null;
+    }
+    if (error.code === "P2002") {
+      throw new ExpenseServiceError(
+        "Expense with this branch, expenseType, and period already exists",
+        409,
+      );
     }
   }
   throw error;
@@ -302,7 +314,7 @@ export async function createExpense(
     const expense = await prisma.expense.create({ data });
     return buildExpenseResponse(expense, ZERO);
   } catch (error) {
-    mapForeignKeyError(error);
+    mapCreateExpenseError(error);
   }
 }
 
@@ -357,7 +369,7 @@ export async function updateExpense(
 
     return buildExpenseResponse(expense, totalPaid);
   } catch (error) {
-    return mapNotFoundError(error);
+    return mapUpdateExpenseError(error);
   }
 }
 
@@ -401,7 +413,13 @@ export async function listExpenses(
         dueDateFilter.lt = today;
       } else if (params.status === ExpenseStatus.PENDING) {
         const currentGte = dueDateFilter.gte;
-        if (!currentGte || currentGte.getTime() < today.getTime()) {
+        const currentGteDate =
+          currentGte instanceof Date
+            ? currentGte
+            : currentGte
+              ? new Date(currentGte)
+              : null;
+        if (!currentGteDate || currentGteDate.getTime() < today.getTime()) {
           dueDateFilter.gte = today;
         }
       }

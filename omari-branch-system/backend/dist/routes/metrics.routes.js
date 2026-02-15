@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const metrics_controller_1 = require("../controllers/metrics.controller");
+const documents_controller_1 = require("../controllers/documents.controller");
+const router = (0, express_1.Router)();
+router.post("/upsert", metrics_controller_1.upsertMetricHandler);
+router.get("/", metrics_controller_1.listMetricsHandler);
+router.get("/by-branch-date", metrics_controller_1.getMetricByBranchDateHandler);
+router.get("/:id/documents", documents_controller_1.listMetricDocumentsHandler);
+router.get("/:id", metrics_controller_1.getMetricByIdHandler);
+router.delete("/:id", metrics_controller_1.deleteMetricHandler);
+exports.default = router;
