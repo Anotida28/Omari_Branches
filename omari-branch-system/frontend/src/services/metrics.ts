@@ -23,3 +23,7 @@ export async function upsertMetric(input: UpsertMetricInput): Promise<BranchMetr
   );
   return data.data;
 }
+
+export async function deleteMetric(metricId: string): Promise<void> {
+  await api.delete(`/api/metrics/${metricId}`);
+}

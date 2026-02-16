@@ -48,6 +48,9 @@ export type BranchMetric = {
   branchId: string;
   date: string;
   cashBalance: string;
+  eFloatBalance: string;
+  cashInVault: string;
+  cashOnBranch: string;
   cashInVolume: number;
   cashInValue: string;
   cashOutVolume: number;
@@ -70,6 +73,8 @@ export type UpsertMetricInput = {
   branchId: string;
   date: string;
   cashBalance: number;
+  eFloatBalance: number;
+  cashInVault: number;
   cashInVolume: number;
   cashInValue: number;
   cashOutVolume: number;
@@ -169,7 +174,7 @@ export type CreateDocumentInput = {
 };
 
 export type CreatePaymentResponse = {
-  payment: Payment;
+  data: Payment;
   expense: Expense;
 };
 

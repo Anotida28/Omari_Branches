@@ -37,29 +37,11 @@ export async function createPayment(
   expenseId: string,
   input: CreatePaymentInput,
 ): Promise<CreatePaymentResponse> {
-  type CreatePaymentPayload =
-    | { data: CreatePaymentResponse }
-    | { data: CreatePaymentResponse["payment"]; expense: CreatePaymentResponse["expense"] };
-
-  const { data } = await api.post<CreatePaymentPayload>(
+  const { data } = await api.post<CreatePaymentResponse>(
     `/api/expenses/${expenseId}/payments`,
     input,
   );
-  const payloadData = data.data as CreatePaymentPayload["data"];
-
-  if (
-    payloadData &&
-    typeof payloadData === "object" &&
-    "payment" in payloadData &&
-    "expense" in payloadData
-  ) {
-    return payloadData as CreatePaymentResponse;
-  }
-
-  return {
-    payment: payloadData as CreatePaymentResponse["payment"],
-    expense: (data as CreatePaymentPayload).expense,
-  };
+  return data;
 }
 
 export async function createDocument(

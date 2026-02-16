@@ -73,6 +73,8 @@ model BranchMetric {
   metricDate DateTime @db.Date
 
   cashBalance   Decimal @default(0.00) @db.Decimal(18, 2)
+  eFloatBalance Decimal @default(0.00) @db.Decimal(18, 2)
+  cashInVault   Decimal @default(0.00) @db.Decimal(18, 2)
   cashInVolume  Int     @default(0) @db.UnsignedInt
   cashInValue   Decimal @default(0.00) @db.Decimal(18, 2)
   cashOutVolume Int     @default(0) @db.UnsignedInt

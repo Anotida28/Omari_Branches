@@ -58,11 +58,13 @@ const upsertMetricSchema = zod_1.z
     .object({
     branchId: branchIdSchema,
     date: dateSchema,
-    cashBalance: zod_1.z.number().min(0),
-    cashInVolume: zod_1.z.number().int().min(0),
-    cashInValue: zod_1.z.number().min(0),
-    cashOutVolume: zod_1.z.number().int().min(0),
-    cashOutValue: zod_1.z.number().min(0),
+    cashBalance: zod_1.z.coerce.number().min(0),
+    eFloatBalance: zod_1.z.coerce.number().min(0),
+    cashInVault: zod_1.z.coerce.number().min(0),
+    cashInVolume: zod_1.z.coerce.number().int().min(0),
+    cashInValue: zod_1.z.coerce.number().min(0),
+    cashOutVolume: zod_1.z.coerce.number().int().min(0),
+    cashOutValue: zod_1.z.coerce.number().min(0),
 })
     .strict();
 const listQuerySchema = zod_1.z.object({

@@ -17,6 +17,8 @@ export type MetricUpsertInput = {
   branchId: bigint;
   date: Date;
   cashBalance: number;
+  eFloatBalance: number;
+  cashInVault: number;
   cashInVolume: number;
   cashInValue: number;
   cashOutVolume: number;
@@ -36,6 +38,9 @@ export type MetricResponse = {
   branchId: string;
   date: string;
   cashBalance: string;
+  eFloatBalance: string;
+  cashInVault: string;
+  cashOnBranch: string;
   cashInVolume: number;
   cashInValue: string;
   cashOutVolume: number;
@@ -53,11 +58,21 @@ export type MetricListResult = {
   total: number;
 };
 
+type BranchMetricWithBalances = BranchMetric & {
+  eFloatBalance?: Prisma.Decimal | number | string | null;
+  cashInVault?: Prisma.Decimal | number | string | null;
+};
+
 function decimalToString(value: Prisma.Decimal | number | string): string {
   return new Prisma.Decimal(value).toString();
 }
 
 function toMetricResponse(metric: BranchMetric): MetricResponse {
+  const metricWithBalances = metric as BranchMetricWithBalances;
+  const cashBalance = new Prisma.Decimal(metric.cashBalance);
+  const eFloatBalance = new Prisma.Decimal(metricWithBalances.eFloatBalance ?? 0);
+  const cashInVault = new Prisma.Decimal(metricWithBalances.cashInVault ?? 0);
+  const cashOnBranch = cashBalance.plus(eFloatBalance).plus(cashInVault);
   const cashInValue = new Prisma.Decimal(metric.cashInValue);
   const cashOutValue = new Prisma.Decimal(metric.cashOutValue);
   const netCashValue = cashInValue.minus(cashOutValue);
@@ -66,7 +81,10 @@ function toMetricResponse(metric: BranchMetric): MetricResponse {
     id: metric.id.toString(),
     branchId: metric.branchId.toString(),
     date: metric.metricDate.toISOString().slice(0, 10),
-    cashBalance: decimalToString(metric.cashBalance),
+    cashBalance: cashBalance.toString(),
+    eFloatBalance: eFloatBalance.toString(),
+    cashInVault: cashInVault.toString(),
+    cashOnBranch: cashOnBranch.toString(),
     cashInVolume: metric.cashInVolume,
     cashInValue: decimalToString(metric.cashInValue),
     cashOutVolume: metric.cashOutVolume,
@@ -90,13 +108,27 @@ function mapForeignKeyError(error: unknown): never {
 export async function upsertMetric(
   input: MetricUpsertInput,
 ): Promise<MetricResponse> {
-  const updateData: Prisma.BranchMetricUpdateInput = {
+  const updateData = {
     cashBalance: input.cashBalance,
+    eFloatBalance: input.eFloatBalance,
+    cashInVault: input.cashInVault,
     cashInVolume: input.cashInVolume,
     cashInValue: input.cashInValue,
     cashOutVolume: input.cashOutVolume,
     cashOutValue: input.cashOutValue,
-  };
+  } as Prisma.BranchMetricUpdateInput;
+
+  const createData = {
+    branchId: input.branchId,
+    metricDate: input.date,
+    cashBalance: input.cashBalance,
+    eFloatBalance: input.eFloatBalance,
+    cashInVault: input.cashInVault,
+    cashInVolume: input.cashInVolume,
+    cashInValue: input.cashInValue,
+    cashOutVolume: input.cashOutVolume,
+    cashOutValue: input.cashOutValue,
+  } as Prisma.BranchMetricUncheckedCreateInput;
 
   try {
     const metric = await prisma.branchMetric.upsert({
@@ -107,15 +139,7 @@ export async function upsertMetric(
         },
       },
       update: updateData,
-      create: {
-        branchId: input.branchId,
-        metricDate: input.date,
-        cashBalance: input.cashBalance,
-        cashInVolume: input.cashInVolume,
-        cashInValue: input.cashInValue,
-        cashOutVolume: input.cashOutVolume,
-        cashOutValue: input.cashOutValue,
-      },
+      create: createData,
     });
 
     return toMetricResponse(metric);

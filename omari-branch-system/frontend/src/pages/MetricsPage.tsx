@@ -15,7 +15,7 @@ import {
 import { getErrorMessage } from "../services/api";
 import { listBranches } from "../services/branches";
 import { formatCurrency } from "../services/format";
-import { listMetrics, upsertMetric } from "../services/metrics";
+import { deleteMetric, listMetrics, upsertMetric } from "../services/metrics";
 import type { UpsertMetricInput } from "../types/api";
 
 const PAGE_SIZE = 10;
@@ -24,6 +24,8 @@ const DEFAULT_UPSERT: UpsertMetricInput = {
   branchId: "",
   date: new Date().toISOString().slice(0, 10),
   cashBalance: 0,
+  eFloatBalance: 0,
+  cashInVault: 0,
   cashInVolume: 0,
   cashInValue: 0,
   cashOutVolume: 0,
@@ -65,6 +67,13 @@ export default function MetricsPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: deleteMetric,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+    },
+  });
+
   const branchMap = useMemo(() => {
     return new Map(
       (branchesQuery.data?.items ?? []).map((branch) => [branch.id, branch.displayName]),
@@ -83,6 +92,8 @@ export default function MetricsPage() {
     upsertMutation.mutate({
       ...upsertForm,
       cashBalance: Number(upsertForm.cashBalance),
+      eFloatBalance: Number(upsertForm.eFloatBalance),
+      cashInVault: Number(upsertForm.cashInVault),
       cashInVolume: Math.trunc(Number(upsertForm.cashInVolume)),
       cashInValue: Number(upsertForm.cashInValue),
       cashOutVolume: Math.trunc(Number(upsertForm.cashOutVolume)),
@@ -99,6 +110,9 @@ export default function MetricsPage() {
     }
     if (upsertMutation.isError) {
       return getErrorMessage(upsertMutation.error);
+    }
+    if (deleteMutation.isError) {
+      return getErrorMessage(deleteMutation.error);
     }
     return "";
   })();
@@ -236,6 +250,40 @@ export default function MetricsPage() {
             </div>
 
             <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">E-Float Balance</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={upsertForm.eFloatBalance}
+                onChange={(event) =>
+                  setUpsertForm((prev) => ({
+                    ...prev,
+                    eFloatBalance: Number(event.target.value),
+                  }))
+                }
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Cash in Vault</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={upsertForm.cashInVault}
+                onChange={(event) =>
+                  setUpsertForm((prev) => ({
+                    ...prev,
+                    cashInVault: Number(event.target.value),
+                  }))
+                }
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Cash In Volume</label>
               <input
                 type="number"
@@ -325,21 +373,25 @@ export default function MetricsPage() {
               <TableHeadCell>Branch</TableHeadCell>
               <TableHeadCell>Date</TableHeadCell>
               <TableHeadCell className="text-right">Cash Balance</TableHeadCell>
+              <TableHeadCell className="text-right">E-Float Balance</TableHeadCell>
+              <TableHeadCell className="text-right">Cash in Vault</TableHeadCell>
+              <TableHeadCell className="text-right">Cash on Branch</TableHeadCell>
               <TableHeadCell className="text-right">Cash In</TableHeadCell>
               <TableHeadCell className="text-right">Cash Out</TableHeadCell>
               <TableHeadCell className="text-right">Net Cash</TableHeadCell>
+              <TableHeadCell className="text-right">Actions</TableHeadCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {metricsQuery.isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500">
+                <TableCell colSpan={10} className="text-center text-slate-500">
                   Loading metrics...
                 </TableCell>
               </TableRow>
             ) : (metricsQuery.data?.items.length ?? 0) === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500">
+                <TableCell colSpan={10} className="text-center text-slate-500">
                   No metrics found.
                 </TableCell>
               </TableRow>
@@ -354,6 +406,15 @@ export default function MetricsPage() {
                     {formatCurrency(Number(metric.cashBalance))}
                   </TableCell>
                   <TableCell className="text-right">
+                    {formatCurrency(Number(metric.eFloatBalance))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(Number(metric.cashInVault))}
+                  </TableCell>
+                  <TableCell className="text-right font-medium text-slate-900">
+                    {formatCurrency(Number(metric.cashOnBranch))}
+                  </TableCell>
+                  <TableCell className="text-right">
                     {metric.cashInVolume} / {formatCurrency(Number(metric.cashInValue))}
                   </TableCell>
                   <TableCell className="text-right">
@@ -361,6 +422,16 @@ export default function MetricsPage() {
                   </TableCell>
                   <TableCell className="text-right font-medium text-slate-900">
                     {formatCurrency(Number(metric.netCashValue))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => deleteMutation.mutate(metric.id)}
+                      disabled={deleteMutation.isPending}
+                      className="rounded-md border border-rose-300 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                    </button>
                   </TableCell>
                 </TableRow>
               ))

@@ -21,6 +21,11 @@ function decimalToString(value) {
     return new client_1.Prisma.Decimal(value).toString();
 }
 function toMetricResponse(metric) {
+    const metricWithBalances = metric;
+    const cashBalance = new client_1.Prisma.Decimal(metric.cashBalance);
+    const eFloatBalance = new client_1.Prisma.Decimal(metricWithBalances.eFloatBalance ?? 0);
+    const cashInVault = new client_1.Prisma.Decimal(metricWithBalances.cashInVault ?? 0);
+    const cashOnBranch = cashBalance.plus(eFloatBalance).plus(cashInVault);
     const cashInValue = new client_1.Prisma.Decimal(metric.cashInValue);
     const cashOutValue = new client_1.Prisma.Decimal(metric.cashOutValue);
     const netCashValue = cashInValue.minus(cashOutValue);
@@ -28,7 +33,10 @@ function toMetricResponse(metric) {
         id: metric.id.toString(),
         branchId: metric.branchId.toString(),
         date: metric.metricDate.toISOString().slice(0, 10),
-        cashBalance: decimalToString(metric.cashBalance),
+        cashBalance: cashBalance.toString(),
+        eFloatBalance: eFloatBalance.toString(),
+        cashInVault: cashInVault.toString(),
+        cashOnBranch: cashOnBranch.toString(),
         cashInVolume: metric.cashInVolume,
         cashInValue: decimalToString(metric.cashInValue),
         cashOutVolume: metric.cashOutVolume,
@@ -50,6 +58,19 @@ function mapForeignKeyError(error) {
 async function upsertMetric(input) {
     const updateData = {
         cashBalance: input.cashBalance,
+        eFloatBalance: input.eFloatBalance,
+        cashInVault: input.cashInVault,
+        cashInVolume: input.cashInVolume,
+        cashInValue: input.cashInValue,
+        cashOutVolume: input.cashOutVolume,
+        cashOutValue: input.cashOutValue,
+    };
+    const createData = {
+        branchId: input.branchId,
+        metricDate: input.date,
+        cashBalance: input.cashBalance,
+        eFloatBalance: input.eFloatBalance,
+        cashInVault: input.cashInVault,
         cashInVolume: input.cashInVolume,
         cashInValue: input.cashInValue,
         cashOutVolume: input.cashOutVolume,
@@ -64,15 +85,7 @@ async function upsertMetric(input) {
                 },
             },
             update: updateData,
-            create: {
-                branchId: input.branchId,
-                metricDate: input.date,
-                cashBalance: input.cashBalance,
-                cashInVolume: input.cashInVolume,
-                cashInValue: input.cashInValue,
-                cashOutVolume: input.cashOutVolume,
-                cashOutValue: input.cashOutValue,
-            },
+            create: createData,
         });
         return toMetricResponse(metric);
     }
