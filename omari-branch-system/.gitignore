@@ -1,0 +1,28 @@
+# Node
+node_modules/
+
+# Build outputs
+frontend/dist/
+backend/dist/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env files
+.env
+.env.*
+
+# OS
+.DS_Store
+
+# Prisma
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+backend/prisma/dev.db-wal
+backend/prisma/dev.db-shm
+
+# Vite
+frontend/.vite/
