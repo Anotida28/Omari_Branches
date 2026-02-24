@@ -6,7 +6,6 @@ import { Card, CardHeader } from "../components/ui/Card";
 import { useAuth } from "../hooks/useAuth";
 import { api, getErrorMessage } from "../services/api";
 import { sendTestEmail } from "../services/admin";
-import { PageHeader } from "../shared/components/PageHeader";
 
 type HealthResponse = {
   ok: boolean;
@@ -62,12 +61,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <section className="space-y-4">
-      <PageHeader
-        title="Settings"
-        subtitle="System settings, operational checks, and role visibility"
-      />
-
+    <section className="space-y-5 motion-fade-up">
       {!canWrite ? (
         <Alert severity="info" variant="outlined">
           You are in VIEWER mode. Configuration actions are disabled.
@@ -161,4 +155,3 @@ export default function SettingsPage() {
     </section>
   );
 }
-

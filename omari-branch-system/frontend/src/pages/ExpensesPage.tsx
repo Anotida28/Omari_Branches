@@ -21,6 +21,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { useSearchParams } from "react-router-dom";
 
 import { Modal } from "../components/ui/Modal";
 import { Pagination } from "../components/ui/Pagination";
@@ -40,7 +41,6 @@ import { ConfirmDialog } from "../shared/components/ConfirmDialog";
 import { DrawerPanel } from "../shared/components/DrawerPanel";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
-import { PageHeader } from "../shared/components/PageHeader";
 import type {
   CreateExpenseInput,
   CreatePaymentInput,
@@ -117,11 +117,15 @@ function statusColor(status: ExpenseStatus): "warning" | "success" | "error" {
 export default function ExpensesPage() {
   const queryClient = useQueryClient();
   const { canWrite, user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [page, setPage] = useState(1);
-  const [branchId, setBranchId] = useState("");
-  const [status, setStatus] = useState("");
-  const [period, setPeriod] = useState("");
+  const [page, setPage] = useState(() => {
+    const parsed = Number(searchParams.get("page"));
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+  });
+  const [branchId, setBranchId] = useState(() => searchParams.get("branchId") ?? "");
+  const [status, setStatus] = useState(() => searchParams.get("status") ?? "");
+  const [period, setPeriod] = useState(() => searchParams.get("period") ?? "");
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [expenseForm, setExpenseForm] = useState<CreateExpenseInput>(INITIAL_EXPENSE_FORM);
@@ -152,6 +156,23 @@ export default function ExpensesPage() {
       setDocumentFormError("");
     }
   }, [selectedExpenseId, user?.username]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (page > 1) {
+      next.set("page", String(page));
+    }
+    if (branchId) {
+      next.set("branchId", branchId);
+    }
+    if (status) {
+      next.set("status", status);
+    }
+    if (period) {
+      next.set("period", period);
+    }
+    setSearchParams(next, { replace: true });
+  }, [branchId, page, period, setSearchParams, status]);
 
   const branchesQuery = useQuery({
     queryKey: ["branches", "all", "for-expenses"],
@@ -339,21 +360,17 @@ export default function ExpensesPage() {
   const rows = expensesQuery.data?.items ?? [];
 
   return (
-    <section className="space-y-4">
-      <PageHeader
-        title="Expenses"
-        subtitle="Track expense lifecycle, balances, payments, and supporting documents"
-        actions={
-          <Button
-            variant="contained"
-            startIcon={<Plus size={16} />}
-            disabled={!canWrite}
-            onClick={() => setIsCreateOpen(true)}
-          >
-            Create Expense
-          </Button>
-        }
-      />
+    <section className="space-y-5 motion-fade-up">
+      <Stack direction="row" justifyContent="flex-end">
+        <Button
+          variant="contained"
+          startIcon={<Plus size={16} />}
+          disabled={!canWrite}
+          onClick={() => setIsCreateOpen(true)}
+        >
+          Create Expense
+        </Button>
+      </Stack>
 
       <FilterBar>
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5}>

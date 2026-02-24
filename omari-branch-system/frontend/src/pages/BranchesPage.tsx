@@ -22,6 +22,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { useSearchParams } from "react-router-dom";
 
 import { Modal } from "../components/ui/Modal";
 import { Pagination } from "../components/ui/Pagination";
@@ -39,7 +40,6 @@ import { ConfirmDialog } from "../shared/components/ConfirmDialog";
 import { DrawerPanel } from "../shared/components/DrawerPanel";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
-import { PageHeader } from "../shared/components/PageHeader";
 import type { Branch, CreateBranchInput, CreateRecipientInput } from "../types/api";
 
 const PAGE_SIZE = 10;
@@ -60,9 +60,16 @@ const INITIAL_RECIPIENT_FORM: CreateRecipientInput = {
 export default function BranchesPage() {
   const queryClient = useQueryClient();
   const { canWrite } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const initialPage = (() => {
+    const parsed = Number(searchParams.get("page"));
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+  })();
+  const initialSearch = searchParams.get("search") ?? "";
+
+  const [search, setSearch] = useState(initialSearch);
+  const [page, setPage] = useState(initialPage);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<CreateBranchInput>(INITIAL_FORM);
   const [formError, setFormError] = useState("");
@@ -82,6 +89,17 @@ export default function BranchesPage() {
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (debouncedSearch) {
+      next.set("search", debouncedSearch);
+    }
+    if (page > 1) {
+      next.set("page", String(page));
+    }
+    setSearchParams(next, { replace: true });
+  }, [debouncedSearch, page, setSearchParams]);
 
   const branchesQuery = useQuery({
     queryKey: ["branches", { page, pageSize: PAGE_SIZE, search: debouncedSearch }],
@@ -246,21 +264,17 @@ export default function BranchesPage() {
   };
 
   return (
-    <section className="space-y-4">
-      <PageHeader
-        title="Branches"
-        subtitle="Manage branch locations, active status, and alert recipients"
-        actions={
-          <Button
-            variant="contained"
-            startIcon={<Plus size={16} />}
-            disabled={!canWrite}
-            onClick={() => setIsCreateOpen(true)}
-          >
-            Create Branch
-          </Button>
-        }
-      />
+    <section className="space-y-5 motion-fade-up">
+      <Stack direction="row" justifyContent="flex-end">
+        <Button
+          variant="contained"
+          startIcon={<Plus size={16} />}
+          disabled={!canWrite}
+          onClick={() => setIsCreateOpen(true)}
+        >
+          Create Branch
+        </Button>
+      </Stack>
 
       <FilterBar>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>

@@ -1,23 +1,38 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, Clock, MinusCircle, XCircle } from "lucide-react";
-
-import { Card, CardHeader } from "../components/ui/Card";
-import { Drawer } from "../components/ui/Drawer";
-import { Pagination } from "../components/ui/Pagination";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Table,
-  TableBody,
+  AlertTriangle,
+  Bell,
+  CheckCircle2,
+  Clock,
+  RotateCcw,
+  Send,
+  XCircle,
+} from "lucide-react";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  MenuItem,
+  Stack,
   TableCell,
-  TableContainer,
-  TableHead,
-  TableHeadCell,
   TableRow,
-} from "../components/ui/Table";
+  TextField,
+  Typography,
+} from "@mui/material";
+import { useSearchParams } from "react-router-dom";
+
 import { getErrorMessage } from "../services/api";
-import { listAlertLogs, getAlertStats } from "../services/alerts";
+import { getAlertStats, listAlertLogs, triggerAlertJob } from "../services/alerts";
 import { listBranches } from "../services/branches";
-import { formatDateTime } from "../services/format";
+import { formatCurrency, formatDateTime } from "../services/format";
+import { DataTable } from "../shared/components/DataTable";
+import { DrawerPanel } from "../shared/components/DrawerPanel";
+import { EmptyState } from "../shared/components/EmptyState";
+import { FilterBar } from "../shared/components/FilterBar";
+import { StatCard } from "../shared/components/StatCard";
+import { useAuth } from "../hooks/useAuth";
 import type {
   AlertLog,
   AlertRuleType,
@@ -40,99 +55,54 @@ const STATUS_OPTIONS: { value: AlertSendStatus | ""; label: string }[] = [
   { value: "PENDING", label: "Pending" },
 ];
 
-function StatusBadge({ status }: { status: AlertSendStatus }) {
+function parsePage(value: string | null): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+}
+
+function statusColor(status: AlertSendStatus): "success" | "error" | "warning" | "default" {
   if (status === "SENT") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-        <CheckCircle2 className="h-3 w-3" />
-        Sent
-      </span>
-    );
+    return "success";
   }
   if (status === "FAILED") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-        <XCircle className="h-3 w-3" />
-        Failed
-      </span>
-    );
+    return "error";
   }
-  if (status === "SKIPPED") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-        <MinusCircle className="h-3 w-3" />
-        Skipped
-      </span>
-    );
+  if (status === "PENDING") {
+    return "warning";
   }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
-      <Clock className="h-3 w-3" />
-      Pending
-    </span>
-  );
+  return "default";
 }
 
-function RuleTypeBadge({ ruleType }: { ruleType: AlertRuleType }) {
-  if (ruleType === "DUE_REMINDER") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-        <AlertCircle className="h-3 w-3" />
-        Due Reminder
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
-      <AlertCircle className="h-3 w-3" />
-      Overdue
-    </span>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  icon,
-  color,
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  color: "green" | "red" | "blue" | "yellow";
-}) {
-  const colorClasses = {
-    green: "bg-green-50 text-green-600",
-    red: "bg-red-50 text-red-600",
-    blue: "bg-blue-50 text-blue-600",
-    yellow: "bg-yellow-50 text-yellow-600",
-  };
-
-  return (
-    <div className="rounded-lg bg-white p-4 shadow-sm border border-gray-200">
-      <div className="flex items-center gap-3">
-        <div className={`rounded-full p-2 ${colorClasses[color]}`}>{icon}</div>
-        <div>
-          <p className="text-sm text-gray-500">{title}</p>
-          <p className="text-2xl font-semibold text-gray-900">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
+function ruleLabel(ruleType: AlertRuleType): string {
+  return ruleType === "DUE_REMINDER" ? "Due Reminder" : "Overdue Escalation";
 }
 
 export default function AlertsPage() {
-  const [page, setPage] = useState(1);
-  const [branchId, setBranchId] = useState("");
-  const [ruleType, setRuleType] = useState<AlertRuleType | "">("");
-  const [status, setStatus] = useState<AlertSendStatus | "">("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-
+  const { canWrite } = useAuth();
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<AlertLog | null>(null);
 
-  // Queries
+  const page = parsePage(searchParams.get("page"));
+  const branchId = searchParams.get("branchId") ?? "";
+  const ruleType = (searchParams.get("ruleType") ?? "") as AlertRuleType | "";
+  const status = (searchParams.get("status") ?? "") as AlertSendStatus | "";
+  const dateFrom = searchParams.get("dateFrom") ?? "";
+  const dateTo = searchParams.get("dateTo") ?? "";
+
+  const updateParams = (updates: Record<string, string | undefined>) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (!value) {
+        next.delete(key);
+        return;
+      }
+      next.set(key, value);
+    });
+    setSearchParams(next, { replace: true });
+  };
+
   const statsQuery = useQuery({
     queryKey: ["alert-stats"],
     queryFn: getAlertStats,
@@ -157,361 +127,365 @@ export default function AlertsPage() {
       }),
   });
 
-  const branchMap = useMemo(() => {
-    return new Map(
-      (branchesQuery.data?.items ?? []).map((branch) => [branch.id, branch.displayName])
-    );
-  }, [branchesQuery.data?.items]);
+  const triggerMutation = useMutation({
+    mutationFn: triggerAlertJob,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["alert-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["alert-logs"] });
+    },
+  });
 
-  const combinedError = (() => {
-    if (branchesQuery.isError) return getErrorMessage(branchesQuery.error);
-    if (logsQuery.isError) return getErrorMessage(logsQuery.error);
-    if (statsQuery.isError) return getErrorMessage(statsQuery.error);
+  const errorMessage = useMemo(() => {
+    if (statsQuery.isError) {
+      return getErrorMessage(statsQuery.error);
+    }
+    if (branchesQuery.isError) {
+      return getErrorMessage(branchesQuery.error);
+    }
+    if (logsQuery.isError) {
+      return getErrorMessage(logsQuery.error);
+    }
+    if (triggerMutation.isError) {
+      return getErrorMessage(triggerMutation.error);
+    }
     return "";
-  })();
-
-  const openLogDetail = (log: AlertLog) => {
-    setSelectedLog(log);
-    setDrawerOpen(true);
-  };
-
-  const closeDrawer = () => {
-    setDrawerOpen(false);
-    setSelectedLog(null);
-  };
-
-  const resetFilters = () => {
-    setPage(1);
-    setBranchId("");
-    setRuleType("");
-    setStatus("");
-    setDateFrom("");
-    setDateTo("");
-  };
+  }, [
+    branchesQuery.error,
+    branchesQuery.isError,
+    logsQuery.error,
+    logsQuery.isError,
+    statsQuery.error,
+    statsQuery.isError,
+    triggerMutation.error,
+    triggerMutation.isError,
+  ]);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Alert Logs</h1>
-      </div>
+    <section className="space-y-5 motion-fade-up">
+      {canWrite ? (
+        <Stack direction="row" justifyContent="flex-end">
+          <Button
+            variant="contained"
+            startIcon={<RotateCcw size={15} />}
+            onClick={() => triggerMutation.mutate()}
+            disabled={triggerMutation.isPending}
+          >
+            {triggerMutation.isPending ? "Triggering..." : "Trigger Evaluator"}
+          </Button>
+        </Stack>
+      ) : null}
 
-      {/* Stats Cards */}
-      {statsQuery.data && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Sent"
-            value={statsQuery.data.totalSent}
-            icon={<CheckCircle2 className="h-5 w-5" />}
-            color="green"
+      {triggerMutation.isSuccess ? (
+        <Alert severity="success">
+          {triggerMutation.data.message}
+        </Alert>
+      ) : null}
+
+      {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
+
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: {
+            xs: "1fr",
+            md: "repeat(2, minmax(0, 1fr))",
+            xl: "repeat(4, minmax(0, 1fr))",
+          },
+        }}
+      >
+        <StatCard
+          label="Total Sent"
+          value={String(statsQuery.data?.totalSent ?? 0)}
+          icon={<CheckCircle2 size={18} />}
+        />
+        <StatCard
+          label="Total Failed"
+          value={String(statsQuery.data?.totalFailed ?? 0)}
+          icon={<XCircle size={18} />}
+        />
+        <StatCard
+          label="Sent Today"
+          value={String(statsQuery.data?.sentToday ?? 0)}
+          icon={<Clock size={18} />}
+        />
+        <StatCard
+          label="Sent This Week"
+          value={String(statsQuery.data?.sentThisWeek ?? 0)}
+          icon={<Bell size={18} />}
+        />
+      </Box>
+
+      <FilterBar>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.2}>
+          <TextField
+            select
+            label="Branch"
+            value={branchId}
+            onChange={(event) =>
+              updateParams({
+                branchId: event.target.value || undefined,
+                page: "1",
+              })
+            }
+            sx={{ minWidth: { xs: "100%", md: 220 } }}
+          >
+            <MenuItem value="">All branches</MenuItem>
+            {(branchesQuery.data?.items ?? []).map((branch) => (
+              <MenuItem key={branch.id} value={branch.id}>
+                {branch.displayName}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            select
+            label="Rule Type"
+            value={ruleType}
+            onChange={(event) =>
+              updateParams({
+                ruleType: event.target.value || undefined,
+                page: "1",
+              })
+            }
+            sx={{ minWidth: { xs: "100%", md: 190 } }}
+          >
+            {RULE_TYPES.map((item) => (
+              <MenuItem key={item.label} value={item.value}>
+                {item.label}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            select
+            label="Status"
+            value={status}
+            onChange={(event) =>
+              updateParams({
+                status: event.target.value || undefined,
+                page: "1",
+              })
+            }
+            sx={{ minWidth: { xs: "100%", md: 170 } }}
+          >
+            {STATUS_OPTIONS.map((item) => (
+              <MenuItem key={item.label} value={item.value}>
+                {item.label}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            type="date"
+            label="Date From"
+            value={dateFrom}
+            onChange={(event) =>
+              updateParams({
+                dateFrom: event.target.value || undefined,
+                page: "1",
+              })
+            }
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: { xs: "100%", md: 160 } }}
           />
-          <StatCard
-            title="Total Failed"
-            value={statsQuery.data.totalFailed}
-            icon={<XCircle className="h-5 w-5" />}
-            color="red"
+
+          <TextField
+            type="date"
+            label="Date To"
+            value={dateTo}
+            onChange={(event) =>
+              updateParams({
+                dateTo: event.target.value || undefined,
+                page: "1",
+              })
+            }
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: { xs: "100%", md: 160 } }}
           />
-          <StatCard
-            title="Sent Today"
-            value={statsQuery.data.sentToday}
-            icon={<Clock className="h-5 w-5" />}
-            color="blue"
-          />
-          <StatCard
-            title="Sent This Week"
-            value={statsQuery.data.sentThisWeek}
-            icon={<AlertCircle className="h-5 w-5" />}
-            color="yellow"
-          />
-        </div>
-      )}
 
-      {/* Error Display */}
-      {combinedError && (
-        <div className="rounded-md bg-red-50 p-4">
-          <p className="text-sm text-red-700">{combinedError}</p>
-        </div>
-      )}
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setSearchParams({}, { replace: true });
+            }}
+            sx={{ width: { xs: "100%", md: "auto" }, whiteSpace: "nowrap" }}
+          >
+            Reset Filters
+          </Button>
+        </Stack>
+      </FilterBar>
 
-      {/* Filters */}
-      <Card>
-        <CardHeader title="Filters" />
-        <div className="-mt-2">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
-            {/* Branch Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Branch
-              </label>
-              <select
-                value={branchId}
-                onChange={(e) => {
-                  setBranchId(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="">All Branches</option>
-                {branchesQuery.data?.items.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Rule Type Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Rule Type
-              </label>
-              <select
-                value={ruleType}
-                onChange={(e) => {
-                  setRuleType(e.target.value as AlertRuleType | "");
-                  setPage(1);
-                }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                {RULE_TYPES.map((rt) => (
-                  <option key={rt.value || "all"} value={rt.value}>
-                    {rt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Status
-              </label>
-              <select
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value as AlertSendStatus | "");
-                  setPage(1);
-                }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                {STATUS_OPTIONS.map((st) => (
-                  <option key={st.value || "all"} value={st.value}>
-                    {st.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Date From */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                From Date
-              </label>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => {
-                  setDateFrom(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Date To */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                To Date
-              </label>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => {
-                  setDateTo(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Reset Button */}
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Table */}
-      <Card>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <tr>
-                <TableHeadCell>Sent At</TableHeadCell>
-                <TableHeadCell>Branch</TableHeadCell>
-                <TableHeadCell>Expense</TableHeadCell>
-                <TableHeadCell>Rule</TableHeadCell>
-                <TableHeadCell>Sent To</TableHeadCell>
-                <TableHeadCell>Status</TableHeadCell>
-              </tr>
-            </TableHead>
-            <TableBody>
-              {logsQuery.isLoading ? (
-                <tr>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                    Loading...
+      <DataTable
+        head={
+          <TableRow>
+            <TableCell>Sent At</TableCell>
+            <TableCell>Branch</TableCell>
+            <TableCell>Rule</TableCell>
+            <TableCell>Expense</TableCell>
+            <TableCell>Recipients</TableCell>
+            <TableCell>Status</TableCell>
+          </TableRow>
+        }
+        body={
+          logsQuery.isLoading ? (
+            <TableRow>
+              <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                Loading alert logs...
+              </TableCell>
+            </TableRow>
+          ) : (logsQuery.data?.items.length ?? 0) === 0 ? (
+            <TableRow>
+              <TableCell colSpan={6} sx={{ py: 4 }}>
+                <EmptyState
+                  title="No alert logs found"
+                  description="Try adjusting filters or triggering evaluator."
+                  icon={<AlertTriangle size={16} />}
+                />
+              </TableCell>
+            </TableRow>
+          ) : (
+            <>
+              {logsQuery.data?.items.map((log) => (
+                <TableRow
+                  key={log.id}
+                  hover
+                  onClick={() => {
+                    setSelectedLog(log);
+                    setDrawerOpen(true);
+                  }}
+                  sx={{ cursor: "pointer" }}
+                >
+                  <TableCell>{formatDateTime(log.sentAt)}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{log.branch.displayName}</TableCell>
+                  <TableCell>{ruleLabel(log.rule.ruleType)}</TableCell>
+                  <TableCell>
+                    {log.expense.expenseType} ({log.expense.period})
                   </TableCell>
-                </tr>
-              ) : logsQuery.data?.items.length === 0 ? (
-                <tr>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                    No alert logs found.
-                  </TableCell>
-                </tr>
-              ) : (
-                logsQuery.data?.items.map((log) => (
-                  <TableRow
-                    key={log.id}
-                    onClick={() => openLogDetail(log)}
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    <TableCell className="text-sm text-gray-900">
-                      {formatDateTime(log.sentAt)}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-900">
-                      {log.branch.displayName}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-900">
-                      <div>
-                        <span className="font-medium">{log.expense.expenseType}</span>
-                        <span className="text-gray-500 ml-2">{log.expense.period}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <RuleTypeBadge ruleType={log.rule.ruleType} />
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-600 max-w-[200px] truncate">
+                  <TableCell sx={{ maxWidth: 260 }}>
+                    <Typography variant="body2" noWrap title={log.sentTo}>
                       {log.sentTo}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={log.status} />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      color={statusColor(log.status)}
+                      label={log.status}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+              {(logsQuery.data?.total ?? 0) > PAGE_SIZE ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="right">
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography variant="body2" color="text.secondary">
+                        Showing page {page} of {Math.ceil((logsQuery.data?.total ?? 0) / PAGE_SIZE)}
+                      </Typography>
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={page <= 1}
+                          onClick={() => updateParams({ page: String(Math.max(1, page - 1)) })}
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          disabled={page >= Math.ceil((logsQuery.data?.total ?? 0) / PAGE_SIZE)}
+                          onClick={() => updateParams({ page: String(page + 1) })}
+                        >
+                          Next
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </>
+          )
+        }
+      />
 
-        {logsQuery.data && logsQuery.data.total > PAGE_SIZE && (
-          <div className="border-t border-gray-200 px-4 py-3">
-            <Pagination
-              page={page}
-              pageSize={PAGE_SIZE}
-              total={logsQuery.data.total}
-              onPageChange={setPage}
-            />
-          </div>
-        )}
-      </Card>
-
-      {/* Detail Drawer */}
-      <Drawer open={drawerOpen} onClose={closeDrawer} title="Alert Log Details">
-        {selectedLog && (
-          <div className="space-y-6">
-            {/* Status & Timestamps */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Status</h3>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={selectedLog.status} />
-                <span className="text-sm text-gray-600">
+      <DrawerPanel
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedLog(null);
+        }}
+        title="Alert Details"
+        width={760}
+      >
+        {selectedLog ? (
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="overline" color="text.secondary">
+                Status
+              </Typography>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Chip size="small" color={statusColor(selectedLog.status)} label={selectedLog.status} />
+                <Typography variant="body2" color="text.secondary">
                   {formatDateTime(selectedLog.sentAt)}
-                </span>
-              </div>
-              {selectedLog.errorMessage && (
-                <div className="mt-2 rounded-md bg-red-50 p-3">
-                  <p className="text-sm text-red-700">{selectedLog.errorMessage}</p>
-                </div>
-              )}
-            </div>
+                </Typography>
+              </Stack>
+              {selectedLog.errorMessage ? (
+                <Alert severity="error" sx={{ mt: 1 }}>
+                  {selectedLog.errorMessage}
+                </Alert>
+              ) : null}
+            </Box>
 
-            {/* Branch Info */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Branch</h3>
-              <p className="text-gray-900">{selectedLog.branch.displayName}</p>
-            </div>
+            <Box>
+              <Typography variant="overline" color="text.secondary">
+                Branch
+              </Typography>
+              <Typography variant="body1" fontWeight={600}>
+                {selectedLog.branch.displayName}
+              </Typography>
+            </Box>
 
-            {/* Expense Info */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Expense</h3>
-              <div className="rounded-md border border-gray-200 p-3 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Type</span>
-                  <span className="font-medium">{selectedLog.expense.expenseType}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Period</span>
-                  <span>{selectedLog.expense.period}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Due Date</span>
-                  <span>{selectedLog.expense.dueDate}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Amount</span>
-                  <span className="font-medium">
-                    ${Number(selectedLog.expense.amount).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Balance</span>
-                  <span className="font-medium text-orange-600">
-                    ${Number(selectedLog.expense.balanceRemaining).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Status</span>
-                  <span>{selectedLog.expense.status}</span>
-                </div>
-              </div>
-            </div>
+            <Box>
+              <Typography variant="overline" color="text.secondary">
+                Expense
+              </Typography>
+              <Stack spacing={0.5} sx={{ mt: 0.6 }}>
+                <Typography variant="body2">
+                  Type: <strong>{selectedLog.expense.expenseType}</strong>
+                </Typography>
+                <Typography variant="body2">Period: {selectedLog.expense.period}</Typography>
+                <Typography variant="body2">Due Date: {selectedLog.expense.dueDate}</Typography>
+                <Typography variant="body2">
+                  Amount: {formatCurrency(Number(selectedLog.expense.amount))}
+                </Typography>
+                <Typography variant="body2">
+                  Balance: {formatCurrency(Number(selectedLog.expense.balanceRemaining))}
+                </Typography>
+              </Stack>
+            </Box>
 
-            {/* Rule Info */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Alert Rule</h3>
-              <div className="rounded-md border border-gray-200 p-3 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Type</span>
-                  <RuleTypeBadge ruleType={selectedLog.rule.ruleType} />
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Description</span>
-                  <span>{selectedLog.rule.description}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Day Offset</span>
-                  <span>{selectedLog.rule.dayOffset}</span>
-                </div>
-              </div>
-            </div>
+            <Box>
+              <Typography variant="overline" color="text.secondary">
+                Rule
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.6 }}>
+                {selectedLog.rule.description} ({selectedLog.rule.dayOffset})
+              </Typography>
+            </Box>
 
-            {/* Recipients */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-500 mb-2">Sent To</h3>
-              <div className="rounded-md bg-gray-50 p-3">
-                <p className="text-sm text-gray-900 break-all">{selectedLog.sentTo}</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </Drawer>
-    </div>
+            <Box>
+              <Typography variant="overline" color="text.secondary">
+                Recipients
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.6 }}>
+                {selectedLog.sentTo}
+              </Typography>
+            </Box>
+          </Stack>
+        ) : null}
+      </DrawerPanel>
+    </section>
   );
 }

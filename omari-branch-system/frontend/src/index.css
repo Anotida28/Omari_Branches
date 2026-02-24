@@ -24,6 +24,44 @@ body {
   min-height: 100vh;
 }
 
+@keyframes omari-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.motion-fade-up {
+  animation: omari-fade-up 260ms ease-out both;
+}
+
+.motion-stagger > * {
+  animation: omari-fade-up 300ms ease-out both;
+}
+
+.motion-stagger > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.motion-stagger > *:nth-child(2) {
+  animation-delay: 36ms;
+}
+.motion-stagger > *:nth-child(3) {
+  animation-delay: 72ms;
+}
+.motion-stagger > *:nth-child(4) {
+  animation-delay: 108ms;
+}
+.motion-stagger > *:nth-child(5) {
+  animation-delay: 144ms;
+}
+.motion-stagger > *:nth-child(6) {
+  animation-delay: 180ms;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.6;

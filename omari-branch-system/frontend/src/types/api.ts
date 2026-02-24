@@ -207,6 +207,21 @@ export type DashboardStats = {
   totalOutstandingBalance: number;
 };
 
+export type DashboardRankingItem = {
+  branchId: string;
+  branchName: string;
+  city: string;
+  performanceScore: number;
+  netCashValue: number;
+};
+
+export type DashboardOverview = DashboardStats & {
+  rankings: {
+    top: DashboardRankingItem[];
+    bottom: DashboardRankingItem[];
+  };
+};
+
 // ============================================================================
 // Recipients
 // ============================================================================

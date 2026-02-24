@@ -12,10 +12,16 @@ type StatCardProps = {
 
 export function StatCard({ label, value, hint, icon }: StatCardProps) {
   return (
-    <Paper sx={{ p: 2.2, ...glassPanelSx }}>
+    <Paper
+      sx={{
+        p: 2.2,
+        ...glassPanelSx,
+        borderColor: "rgba(22, 82, 55, 0.12)",
+      }}
+    >
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2}>
         <Box>
-          <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
+          <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, opacity: 0.86 }}>
             {label}
           </Typography>
           <Typography variant="h5" color="text.primary" sx={{ mt: 0.7 }}>
@@ -33,7 +39,7 @@ export function StatCard({ label, value, hint, icon }: StatCardProps) {
               p: 1.2,
               borderRadius: 2,
               color: "primary.main",
-              bgcolor: "rgba(31, 78, 152, 0.12)",
+              bgcolor: "rgba(12, 95, 63, 0.12)",
             }}
           >
             {icon}
@@ -43,4 +49,3 @@ export function StatCard({ label, value, hint, icon }: StatCardProps) {
     </Paper>
   );
 }
-

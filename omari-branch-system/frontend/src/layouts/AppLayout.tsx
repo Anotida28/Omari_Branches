@@ -18,6 +18,7 @@ import {
   useTheme,
 } from "@mui/material";
 import {
+  BarChart3,
   Bell,
   Building2,
   ChartColumn,
@@ -32,9 +33,10 @@ import {
   SidebarOpen,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { glassPanelSx } from "../app/theme";
+import logoImage from "../assets/logo.png";
 import { useAuth } from "../hooks/useAuth";
 import { ReadOnlyBanner } from "../shared/components/RoleGuardWrapper";
 
@@ -43,6 +45,7 @@ const navItems = [
   { to: "/branches", label: "Branches", icon: Building2 },
   { to: "/metrics", label: "Metrics", icon: ChartColumn },
   { to: "/trends", label: "Trends", icon: LineChart },
+  { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/expenses", label: "Expenses", icon: DollarSign },
   { to: "/alerts", label: "Alerts", icon: Bell },
   { to: "/settings", label: "Settings", icon: Settings },
@@ -58,8 +61,6 @@ function SidebarLinks({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const theme = useTheme();
-
   return (
     <List sx={{ px: 1, py: 1.2 }}>
       {navItems.map((item) => {
@@ -80,13 +81,13 @@ function SidebarLinks({
               "&.active": {
                 bgcolor: "primary.main",
                 color: "primary.contrastText",
-                boxShadow: "0 10px 20px rgba(31, 78, 152, 0.26)",
+                boxShadow: "0 10px 20px rgba(12, 95, 63, 0.26)",
                 "& .MuiListItemIcon-root": {
                   color: "primary.contrastText",
                 },
               },
               "&:not(.active):hover": {
-                bgcolor: "rgba(31, 78, 152, 0.12)",
+                bgcolor: "rgba(12, 95, 63, 0.11)",
                 color: "text.primary",
               },
             }}
@@ -116,16 +117,25 @@ function SidebarLinks({
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const canWrite = user?.role === "FULL_ACCESS";
+  const location = useLocation();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isSidebarCollapsed = collapsed && !isMobile;
 
   const drawerWidth = useMemo(
     () => (collapsed && !isMobile ? COLLAPSED_WIDTH : EXPANDED_WIDTH),
     [collapsed, isMobile],
   );
+  const currentPageLabel = useMemo(() => {
+    if (location.pathname === "/") {
+      return "Dashboard";
+    }
+    const match = navItems.find((item) => item.to !== "/" && location.pathname.startsWith(item.to));
+    return match?.label ?? "Dashboard";
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -134,40 +144,61 @@ export default function AppLayout() {
 
   const sidebarContent = (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <Box sx={{ px: collapsed && !isMobile ? 1.2 : 2.2, py: 2.2 }}>
-        <Stack direction="row" alignItems="center" spacing={1.4} justifyContent={collapsed ? "center" : "flex-start"}>
+      <Box sx={{ px: isSidebarCollapsed ? 1.2 : 2.2, py: 2.2 }}>
+        <Stack direction="row" alignItems="center" justifyContent="center">
           <Box
+            component="img"
+            src={logoImage}
+            alt="Omari Branch System"
             sx={{
-              p: 1,
-              borderRadius: 2.2,
-              bgcolor: "primary.main",
-              color: "primary.contrastText",
-              display: "inline-flex",
+              width: isSidebarCollapsed ? 56 : 82,
+              height: "auto",
+              borderRadius: 1.8,
+              objectFit: "contain",
             }}
-          >
-            <DollarSign size={18} />
-          </Box>
-          {!collapsed || isMobile ? (
-            <Box>
-              <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 700 }}>
-                Omari HQ
-              </Typography>
-              <Typography variant="subtitle1" sx={{ lineHeight: 1.2 }}>
-                Branch System
-              </Typography>
-            </Box>
-          ) : null}
+          />
         </Stack>
       </Box>
       <Divider />
       <SidebarLinks
-        collapsed={collapsed && !isMobile}
+        collapsed={isSidebarCollapsed}
         onNavigate={isMobile ? () => setMobileOpen(false) : undefined}
       />
-      <Box sx={{ mt: "auto", p: 2 }}>
-        <Typography variant="caption" color="text.secondary">
+      <Box sx={{ mt: "auto" }}>
+        <Divider />
+        <Box sx={{ p: 1.5 }}>
+          {isSidebarCollapsed ? (
+            <Tooltip title="Logout">
+              <IconButton
+                onClick={() => {
+                  void handleLogout();
+                }}
+                sx={{ mb: 1, mx: "auto", display: "flex" }}
+              >
+                <LogOut size={18} />
+              </IconButton>
+            </Tooltip>
+          ) : (
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<LogOut size={16} />}
+              onClick={() => {
+                void handleLogout();
+              }}
+              sx={{ mb: 1 }}
+            >
+              Logout
+            </Button>
+          )}
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: "block", textAlign: isSidebarCollapsed ? "center" : "left" }}
+          >
           Finance Operations Platform
-        </Typography>
+          </Typography>
+        </Box>
       </Box>
     </Box>
   );
@@ -183,7 +214,7 @@ export default function AppLayout() {
             width: drawerWidth,
             overflowX: "hidden",
             ...glassPanelSx,
-            borderRight: "1px solid rgba(255,255,255,0.4)",
+            borderRight: "1px solid rgba(255,255,255,0.56)",
             borderRadius: 0,
             transition: "width 0.2s ease",
           },
@@ -206,8 +237,8 @@ export default function AppLayout() {
           elevation={0}
           sx={{
             backdropFilter: "blur(12px)",
-            borderBottom: "1px solid rgba(255,255,255,0.45)",
-            bgcolor: "rgba(255,255,255,0.76)",
+            borderBottom: "1px solid rgba(255,255,255,0.6)",
+            bgcolor: "rgba(255,255,255,0.8)",
           }}
         >
           <Toolbar sx={{ justifyContent: "space-between", gap: 2 }}>
@@ -223,8 +254,8 @@ export default function AppLayout() {
                   </IconButton>
                 </Tooltip>
               )}
-              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                Omari Branch Management
+              <Typography variant="h6" fontWeight={700} sx={{ fontSize: { xs: 17, sm: 20 } }}>
+                {currentPageLabel}
               </Typography>
             </Stack>
 
@@ -246,27 +277,12 @@ export default function AppLayout() {
                 />
               )}
               <Chip label={user?.username ?? "unknown"} size="small" />
-              {canWrite ? (
-                <Button variant="outlined" size="small" onClick={() => navigate("/alerts")}>
-                  Alerts
-                </Button>
-              ) : null}
-              <Button
-                variant="text"
-                color="secondary"
-                startIcon={<LogOut size={16} />}
-                onClick={() => {
-                  void handleLogout();
-                }}
-              >
-                Logout
-              </Button>
             </Stack>
           </Toolbar>
         </AppBar>
 
         <Box component="main" sx={{ p: { xs: 2, sm: 3 }, minHeight: "calc(100vh - 64px)" }}>
-          <Stack spacing={2.5}>
+          <Stack spacing={3}>
             <ReadOnlyBanner canWrite={canWrite} />
             <Outlet />
           </Stack>

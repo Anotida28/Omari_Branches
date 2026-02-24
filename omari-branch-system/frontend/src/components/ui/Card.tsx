@@ -17,7 +17,7 @@ export function Card({ className, ...props }: CardProps) {
     <Paper
       elevation={0}
       className={cn(
-        "rounded-lg border border-slate-200 bg-white p-5",
+        "rounded-lg border border-emerald-900/10 bg-white p-5",
         className,
       )}
       sx={glassPanelSx}

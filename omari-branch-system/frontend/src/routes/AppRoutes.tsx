@@ -6,6 +6,7 @@ import BranchesPage from "../features/branches/BranchesPage";
 import DashboardPage from "../features/dashboard/DashboardPage";
 import ExpensesPage from "../features/expenses/ExpensesPage";
 import MetricsPage from "../features/metrics/MetricsPage";
+import ReportsPage from "../features/reports/ReportsPage";
 import SettingsPage from "../features/settings/SettingsPage";
 import { useAuth } from "../hooks/useAuth";
 import AppLayout from "../layout/AppShell";
@@ -19,7 +20,7 @@ export function AppRoutes() {
 
   if (!isReady) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-600">
+      <div className="flex min-h-screen items-center justify-center bg-[#eef5f0] text-sm text-[#55675d]">
         Loading...
       </div>
     );
@@ -47,7 +48,7 @@ export function AppRoutes() {
           element={
             <Suspense
               fallback={
-                <div className="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                <div className="rounded-md border border-emerald-900/10 bg-white p-4 text-sm text-[#55675d]">
                   Loading trends...
                 </div>
               }
@@ -56,6 +57,7 @@ export function AppRoutes() {
             </Suspense>
           }
         />
+        <Route path="/reports" element={<ReportsPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
