@@ -16,6 +16,7 @@ import { getErrorMessage } from "../services/api";
 import { listBranches } from "../services/branches";
 import { formatCurrency } from "../services/format";
 import { deleteMetric, listMetrics, upsertMetric } from "../services/metrics";
+import { useAuth } from "../hooks/useAuth";
 import type { UpsertMetricInput } from "../types/api";
 
 const PAGE_SIZE = 10;
@@ -34,6 +35,7 @@ const DEFAULT_UPSERT: UpsertMetricInput = {
 
 export default function MetricsPage() {
   const queryClient = useQueryClient();
+  const { canWrite } = useAuth();
 
   const [page, setPage] = useState(1);
   const [branchId, setBranchId] = useState("");
@@ -82,6 +84,10 @@ export default function MetricsPage() {
 
   const submitUpsert = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!canWrite) {
+      return;
+    }
 
     if (!upsertForm.branchId) {
       setFormError("Branch is required.");
@@ -201,6 +207,11 @@ export default function MetricsPage() {
         />
 
         <form onSubmit={submitUpsert} className="space-y-3">
+          {!canWrite ? (
+            <p className="text-sm text-slate-500">Read-only access: metric updates are disabled.</p>
+          ) : null}
+
+          <fieldset disabled={!canWrite} className="space-y-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Branch</label>
@@ -363,6 +374,7 @@ export default function MetricsPage() {
               {upsertMutation.isPending ? "Saving..." : "Upsert Metric"}
             </button>
           </div>
+          </fieldset>
         </form>
       </Card>
 
@@ -427,7 +439,7 @@ export default function MetricsPage() {
                     <button
                       type="button"
                       onClick={() => deleteMutation.mutate(metric.id)}
-                      disabled={deleteMutation.isPending}
+                      disabled={!canWrite || deleteMutation.isPending}
                       className="rounded-md border border-rose-300 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       {deleteMutation.isPending ? "Deleting..." : "Delete"}
@@ -449,3 +461,4 @@ export default function MetricsPage() {
     </section>
   );
 }
+

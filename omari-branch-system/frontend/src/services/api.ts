@@ -1,36 +1,39 @@
 import axios from "axios";
 
-export const API_KEY_STORAGE_KEY = "omari_branch_system_api_key";
+export const AUTH_TOKEN_STORAGE_KEY = "omari_branch_system_auth_token";
 export const API_UNAUTHORIZED_EVENT = "omari:unauthorized";
 
-export function getStoredApiKey(): string {
+export function getStoredAuthToken(): string {
   if (typeof window === "undefined") {
     return "";
   }
-  return window.localStorage.getItem(API_KEY_STORAGE_KEY)?.trim() ?? "";
+
+  return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)?.trim() ?? "";
 }
 
-export function setStoredApiKey(apiKey: string): void {
+export function setStoredAuthToken(token: string): void {
   if (typeof window === "undefined") {
     return;
   }
-  const normalized = apiKey.trim();
+
+  const normalized = token.trim();
   if (!normalized) {
-    window.localStorage.removeItem(API_KEY_STORAGE_KEY);
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
     return;
   }
-  window.localStorage.setItem(API_KEY_STORAGE_KEY, normalized);
+
+  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, normalized);
 }
 
-export function clearStoredApiKey(): void {
+export function clearStoredAuthToken(): void {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.removeItem(API_KEY_STORAGE_KEY);
+
+  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
 }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:4000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:4000";
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -38,11 +41,12 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const apiKey = getStoredApiKey();
-  if (apiKey) {
+  const token = getStoredAuthToken();
+  if (token) {
     config.headers = config.headers ?? {};
-    config.headers["x-api-key"] = apiKey;
+    config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
@@ -50,11 +54,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (axios.isAxiosError(error) && error.response?.status === 401) {
-      clearStoredApiKey();
+      clearStoredAuthToken();
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event(API_UNAUTHORIZED_EVENT));
       }
     }
+
     return Promise.reject(error);
   },
 );

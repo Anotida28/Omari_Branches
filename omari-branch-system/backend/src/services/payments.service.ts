@@ -1,11 +1,10 @@
-import { Prisma, type Payment } from "@prisma/client";
+import { ExpenseStatus, Prisma, type Payment } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
 import {
   ExpenseServiceError,
   type ExpenseResponse,
   buildExpenseResponse,
-  getTotalPaidForExpense,
   refreshExpenseStatus,
 } from "./expenses.service";
 
@@ -80,6 +79,30 @@ function mapForeignKeyError(error: unknown): never {
   throw error;
 }
 
+function startOfTodayUtc(): Date {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+}
+
+function computeExpenseStatusAfterPayment(
+  amount: Prisma.Decimal,
+  totalPaid: Prisma.Decimal,
+  dueDate: Date,
+): ExpenseStatus {
+  if (totalPaid.greaterThanOrEqualTo(amount)) {
+    return ExpenseStatus.PAID;
+  }
+
+  const today = startOfTodayUtc();
+  if (dueDate.getTime() < today.getTime()) {
+    return ExpenseStatus.OVERDUE;
+  }
+
+  return ExpenseStatus.PENDING;
+}
+
 export async function createPayment(
   expenseId: bigint,
   input: PaymentCreateInput,
@@ -87,43 +110,77 @@ export async function createPayment(
   if (input.amountPaid <= 0) {
     throw new PaymentServiceError("amountPaid must be greater than 0", 400);
   }
-
-  const expense = await prisma.expense.findUnique({
-    where: { id: expenseId },
-  });
-
-  if (!expense) {
-    throw new PaymentServiceError("Expense not found", 404);
-  }
-
-  const totalPaid = await getTotalPaidForExpense(expenseId);
-  const remaining = new Prisma.Decimal(expense.amount).minus(totalPaid);
   const requested = new Prisma.Decimal(input.amountPaid);
 
-  if (requested.greaterThan(remaining)) {
-    throw new PaymentServiceError("Overpayment not allowed", 400);
-  }
-
-  const data: Prisma.PaymentCreateInput = {
-    expense: { connect: { id: expenseId } },
-    paidDate: input.paidDate,
-    amountPaid: input.amountPaid,
-    currency: input.currency,
-    reference: input.reference,
-    notes: input.notes,
-    createdBy: input.createdBy,
-  };
-
   try {
-    const payment = await prisma.payment.create({ data });
-    const { expense, totalPaid } = await refreshExpenseStatus(expenseId);
-    return {
-      payment: toPaymentResponse(payment),
-      expense: buildExpenseResponse(expense, totalPaid),
-    };
+    return await prisma.$transaction(async (tx) => {
+      // Serialize all payments for the same expense row.
+      await tx.$queryRaw`
+        SELECT id
+        FROM Expense
+        WHERE id = ${expenseId}
+        FOR UPDATE
+      `;
+
+      const expense = await tx.expense.findUnique({
+        where: { id: expenseId },
+      });
+
+      if (!expense) {
+        throw new PaymentServiceError("Expense not found", 404);
+      }
+
+      const aggregate = await tx.payment.aggregate({
+        where: { expenseId },
+        _sum: { amountPaid: true },
+      });
+
+      const totalPaidBefore = aggregate._sum.amountPaid
+        ? new Prisma.Decimal(aggregate._sum.amountPaid)
+        : new Prisma.Decimal(0);
+      const totalPaidAfter = totalPaidBefore.plus(requested);
+
+      if (totalPaidAfter.greaterThan(expense.amount)) {
+        throw new PaymentServiceError("Overpayment not allowed", 400);
+      }
+
+      const payment = await tx.payment.create({
+        data: {
+          expense: { connect: { id: expenseId } },
+          paidDate: input.paidDate,
+          amountPaid: requested,
+          currency: input.currency,
+          reference: input.reference,
+          notes: input.notes,
+          createdBy: input.createdBy,
+        },
+      });
+
+      const nextStatus = computeExpenseStatusAfterPayment(
+        new Prisma.Decimal(expense.amount),
+        totalPaidAfter,
+        expense.dueDate,
+      );
+
+      const expenseForResponse =
+        expense.status === nextStatus
+          ? expense
+          : await tx.expense.update({
+              where: { id: expenseId },
+              data: { status: nextStatus },
+            });
+
+      return {
+        payment: toPaymentResponse(payment),
+        expense: buildExpenseResponse(expenseForResponse, totalPaidAfter),
+      };
+    });
   } catch (error) {
     if (error instanceof ExpenseServiceError) {
       throw new PaymentServiceError(error.message, error.status);
+    }
+    if (error instanceof PaymentServiceError) {
+      throw error;
     }
     mapForeignKeyError(error);
   }

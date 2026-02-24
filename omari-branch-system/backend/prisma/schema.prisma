@@ -34,8 +34,24 @@ enum AlertRuleType {
 enum AlertSendStatus {
   SENT
   FAILED
+  SKIPPED
+  PENDING
 }
 
+enum UserRole {
+  VIEWER
+  FULL_ACCESS
+}
+
+model User {
+  id           BigInt   @id @default(autoincrement())
+  username     String   @unique @db.VarChar(80)
+  passwordHash String   @db.VarChar(255)
+  role         UserRole @default(VIEWER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
 model Branch {
   id        BigInt   @id @default(autoincrement())
   city      String   @db.VarChar(80)
@@ -58,6 +74,7 @@ model BranchRecipient {
   id        BigInt   @id @default(autoincrement())
   branchId  BigInt
   email     String   @db.VarChar(190)
+  name      String?  @db.VarChar(120)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
@@ -176,6 +193,7 @@ model AlertRule {
   dayOffset Int
   isActive  Boolean       @default(true)
   createdAt DateTime      @default(now())
+  alertLogs AlertLog[]
 
   @@unique([ruleType, dayOffset], name: "uq_rule_type_offset")
 }
@@ -183,16 +201,29 @@ model AlertRule {
 model AlertLog {
   id           BigInt          @id @default(autoincrement())
   expenseId    BigInt
+  ruleId       BigInt
   ruleType     AlertRuleType
   dayOffset    Int
+  triggerLocalDate DateTime    @db.Date
   sentTo       String          @db.VarChar(190)
   sentAt       DateTime        @default(now())
   status       AlertSendStatus @default(SENT)
   errorMessage String?         @db.VarChar(500)
 
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  rule    AlertRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
 
-  @@unique([expenseId, ruleType, dayOffset, sentTo], name: "uq_alert_dedup")
   @@index([expenseId])
+  @@index([ruleId])
+  @@index([expenseId, ruleId, triggerLocalDate, status], name: "idx_alert_dedupe_lookup")
   @@index([sentAt])
 }
+
+model JobLock {
+  jobName     String   @id @db.VarChar(100)
+  lockedUntil DateTime
+  lockedBy    String   @db.VarChar(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+

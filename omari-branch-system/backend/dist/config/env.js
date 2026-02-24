@@ -11,7 +11,11 @@ const envSchema = zod_1.z.object({
     NODE_ENV: zod_1.z.enum(["development", "test", "production"]).optional(),
     PORT: zod_1.z.coerce.number().int().positive().default(4000),
     DATABASE_URL: zod_1.z.string().min(1, "DATABASE_URL is required"),
-    API_KEY: zod_1.z.string().min(1, "API_KEY is required"),
+    AUTH_TOKEN_SECRET: zod_1.z
+        .string()
+        .min(16, "AUTH_TOKEN_SECRET must be at least 16 characters")
+        .default("omari-dev-auth-token-secret-change-me"),
+    AUTH_TOKEN_TTL_HOURS: zod_1.z.coerce.number().int().min(1).max(24 * 30).default(24),
 });
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {

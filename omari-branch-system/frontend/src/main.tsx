@@ -5,7 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import App from "./App";
 import "./index.css";
-import { ApiKeyProvider } from "./hooks/useApiKey";
+import { AuthProvider } from "./hooks/useAuth";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,11 +19,11 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ApiKeyProvider>
+      <AuthProvider>
         <BrowserRouter>
           <App />
         </BrowserRouter>
-      </ApiKeyProvider>
+      </AuthProvider>
     </QueryClientProvider>
   </React.StrictMode>,
 );

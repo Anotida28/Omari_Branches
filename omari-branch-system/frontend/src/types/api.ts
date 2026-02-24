@@ -17,6 +17,19 @@ export type ExpenseType = "RENT" | "ZESA" | "WIFI" | "OTHER";
 export type ExpenseStatus = "PENDING" | "PAID" | "OVERDUE";
 export type DocumentType = "INVOICE" | "RECEIPT" | "OTHER";
 
+export type UserRole = "VIEWER" | "FULL_ACCESS";
+
+export type AuthUser = {
+  id: string;
+  username: string;
+  role: UserRole;
+};
+
+export type LoginResponse = {
+  token: string;
+  expiresAt: string;
+  user: AuthUser;
+};
 export type Branch = {
   id: string;
   city: string;
@@ -184,3 +197,89 @@ export type DashboardStats = {
   overdueExpenses: number;
   totalOutstandingBalance: number;
 };
+
+// ============================================================================
+// Recipients
+// ============================================================================
+
+export type Recipient = {
+  id: string;
+  branchId: string;
+  email: string;
+  name: string | null;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type CreateRecipientInput = {
+  email: string;
+  name?: string;
+  isActive?: boolean;
+};
+
+export type UpdateRecipientInput = {
+  email?: string;
+  name?: string;
+  isActive?: boolean;
+};
+
+// ============================================================================
+// Alert Logs
+// ============================================================================
+
+export type AlertRuleType = "DUE_REMINDER" | "OVERDUE_ESCALATION";
+export type AlertSendStatus = "PENDING" | "SENT" | "FAILED" | "SKIPPED";
+
+export type AlertLogBranchSummary = {
+  id: string;
+  displayName: string;
+  city: string;
+  label: string;
+};
+
+export type AlertLogExpenseSummary = {
+  id: string;
+  expenseType: string;
+  period: string;
+  dueDate: string;
+  amount: string;
+  balanceRemaining: string;
+  status: string;
+};
+
+export type AlertLogRuleSummary = {
+  ruleType: AlertRuleType;
+  dayOffset: number;
+  description: string;
+};
+
+export type AlertLog = {
+  id: string;
+  expenseId: string;
+  branch: AlertLogBranchSummary;
+  expense: AlertLogExpenseSummary;
+  rule: AlertLogRuleSummary;
+  sentTo: string;
+  sentAt: string;
+  status: AlertSendStatus;
+  errorMessage: string | null;
+};
+
+export type AlertLogsListParams = {
+  branchId?: string;
+  expenseId?: string;
+  ruleType?: AlertRuleType;
+  status?: AlertSendStatus;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type AlertStats = {
+  totalSent: number;
+  totalFailed: number;
+  sentToday: number;
+  sentThisWeek: number;
+};
+

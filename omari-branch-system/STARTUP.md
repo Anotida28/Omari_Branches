@@ -2,15 +2,13 @@
 
 ## Prerequisites
 
-1. **Node.js** (v18 or higher)
-2. **MySQL** server running locally or remotely
-3. **npm** package manager
+1. Node.js (v18 or higher)
+2. MySQL server running locally or remotely
+3. npm package manager
 
 ---
 
 ## Step 1: Create Database
-
-Open MySQL and create a new database:
 
 ```sql
 CREATE DATABASE omari_branch_db;
@@ -20,18 +18,17 @@ CREATE DATABASE omari_branch_db;
 
 ## Step 2: Configure Environment
 
-Copy the example environment file and update with your credentials:
-
 ```bash
 cd backend
 copy .env.example .env
 ```
 
-Edit `backend/.env` with your MySQL credentials:
+Edit `backend/.env`:
 
 ```env
 DATABASE_URL="mysql://root:YOUR_PASSWORD@localhost:3306/omari_branch_db"
-API_KEY="omari-secure-api-key-2026"
+AUTH_TOKEN_SECRET="change-this-in-production-12345"
+AUTH_TOKEN_TTL_HOURS=24
 PORT=4000
 ```
 
@@ -59,10 +56,10 @@ cd backend
 # Generate Prisma client
 npm run prisma:generate
 
-# Run migrations (creates tables)
+# Run migrations
 npm run prisma:migrate
 
-# Seed demo data (optional but recommended)
+# Seed demo data + default users
 npm run prisma:seed
 ```
 
@@ -82,15 +79,16 @@ Backend runs at: http://localhost:4000
 cd frontend
 npm run dev
 ```
-Frontend runs at: http://localhost:5173 (Vite default)
+Frontend runs at: http://localhost:5173
 
 ---
 
-## Step 6: Access the Application
+## Step 6: Login
 
-1. Open http://localhost:5173 in your browser
-2. Enter the API key: `omari-secure-api-key-2026` (or whatever you set in .env)
-3. You're in!
+1. Open http://localhost:5173
+2. Use one of the seeded users:
+   - `admin` / `admin123` (`FULL_ACCESS`)
+   - `viewer` / `viewer123` (`VIEWER`, read-only)
 
 ---
 
@@ -101,6 +99,7 @@ curl http://localhost:4000/health
 ```
 
 Expected response:
+
 ```json
 {"ok":true,"service":"omari-branch-system-backend"}
 ```
@@ -109,34 +108,13 @@ Expected response:
 
 ## Seeded Demo Data
 
-After running `npm run prisma:seed`, you'll have:
+After running `npm run prisma:seed`:
 
-| Data | Details |
-|------|---------|
-| Branches | Harare HQ, Bulawayo Central, Mutare East |
-| Metrics | Today's metrics for each branch |
-| Expenses | RENT expense for current month per branch |
-| Alert Rules | Due reminders (-7, -3, -1 days) and escalations (+1, +7, +14 days) |
-
----
-
-## Troubleshooting
-
-### "Access denied" MySQL error
-- Check your username/password in DATABASE_URL
-- Ensure MySQL user has permissions on the database
-
-### "ECONNREFUSED" error
-- Make sure MySQL is running
-- Check the port (default 3306)
-
-### Prisma migration fails
-- Ensure database exists: `CREATE DATABASE omari_branch_db;`
-- Check DATABASE_URL format
-
-### Frontend can't connect to backend
-- Ensure backend is running on port 4000
-- Check for CORS errors in browser console
+- Branches: Harare HQ, Bulawayo Central, Mutare East
+- Metrics: today entry for each branch
+- Expenses: RENT expense for current month per branch
+- Alert rules: due reminders (-7, -3, -1) and escalations (+1, +7, +14)
+- Users: `admin` (full access), `viewer` (read-only)
 
 ---
 
@@ -145,47 +123,62 @@ After running `npm run prisma:seed`, you'll have:
 | Endpoint | Methods | Description |
 |----------|---------|-------------|
 | `/health` | GET | Health check |
+| `/api/auth/login` | POST | Username/password login |
+| `/api/auth/me` | GET | Current authenticated user |
+| `/api/auth/logout` | POST | Logout (client token clear) |
 | `/api/branches` | GET, POST | List/create branches |
 | `/api/branches/:id` | GET, PATCH, DELETE | Branch CRUD |
-| `/api/metrics` | GET, POST | List/upsert metrics |
+| `/api/metrics` | GET | List metrics |
+| `/api/metrics/upsert` | POST | Upsert metric |
 | `/api/expenses` | GET, POST | List/create expenses |
 | `/api/expenses/:id` | GET, PATCH, DELETE | Expense CRUD |
 | `/api/expenses/:id/payments` | GET, POST | Payments for expense |
 | `/api/documents` | POST | Upload document reference |
 
-All `/api/*` routes require header: `x-api-key: YOUR_API_KEY`
+Auth rules:
+- `POST /api/auth/login` is public.
+- Other `/api/*` routes require `Authorization: Bearer <token>`.
+- `VIEWER` users are read-only (GET/HEAD/OPTIONS).
+- `FULL_ACCESS` users can create/update/delete.
+
+---
+
+## Troubleshooting
+
+### MySQL access denied
+- Check user/password in `DATABASE_URL`
+- Ensure the MySQL user has permissions on `omari_branch_db`
+
+### Connection refused
+- Ensure MySQL is running
+- Confirm MySQL port (default 3306)
+
+### Prisma migration fails
+- Ensure DB exists: `CREATE DATABASE omari_branch_db;`
+- Check `DATABASE_URL`
+
+### Frontend cannot connect to backend
+- Ensure backend is running on port 4000
+- Check `VITE_API_BASE_URL` if you changed backend host/port
 
 ---
 
 ## Project Structure
 
-```
+```text
 omari-branch-system/
-├── backend/
-│   ├── prisma/           # Database schema & migrations
-│   ├── src/
-│   │   ├── controllers/  # Request handlers
-│   │   ├── services/     # Business logic
-│   │   ├── routes/       # API routes
-│   │   └── middlewares/  # Auth, validation, errors
-│   └── .env              # Environment config (create this!)
-│
-└── frontend/
-    └── src/
-        ├── pages/        # Dashboard, Branches, Metrics, Expenses
-        ├── services/     # API client functions
-        ├── components/   # Reusable UI components
-        └── hooks/        # React hooks (useApiKey, etc.)
+|-- backend/
+|   |-- prisma/
+|   |-- src/
+|   |   |-- controllers/
+|   |   |-- services/
+|   |   |-- routes/
+|   |   `-- middlewares/
+|   `-- .env
+`-- frontend/
+    `-- src/
+        |-- pages/
+        |-- services/
+        |-- components/
+        `-- hooks/
 ```
-
----
-
-## Next Steps
-
-After successful startup:
-1. Create branches for your locations
-2. Add daily metrics for cash tracking
-3. Create expenses and track payments
-4. Set up email recipients for alerts (future feature)
-
-Happy tracking! 🚀

@@ -1,8 +1,9 @@
-import express from "express";
 import cors from "cors";
+import express from "express";
 
-import { requireApiKey, validateApiKeyHeader } from "./middlewares/auth";
+import { requireAuthenticatedUser, requireWriteAccess } from "./middlewares/auth";
 import { errorHandler, notFoundHandler } from "./middlewares/error";
+import authRoutes from "./routes/auth.routes";
 import routes from "./routes";
 
 const app = express();
@@ -15,8 +16,8 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "omari-branch-system-backend" });
 });
 
-// All API routes
-app.use("/api", validateApiKeyHeader, requireApiKey, routes);
+app.use("/api/auth", authRoutes);
+app.use("/api", requireAuthenticatedUser, requireWriteAccess, routes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -1,14 +1,25 @@
-import { Building2, ChartColumn, DollarSign, KeyRound, LayoutDashboard, LogOut } from "lucide-react";
+import {
+  Bell,
+  Building2,
+  ChartColumn,
+  DollarSign,
+  LayoutDashboard,
+  LineChart,
+  LogOut,
+  Shield,
+} from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
-import { useApiKey } from "../hooks/useApiKey";
 import { cn } from "../components/ui/cn";
+import { useAuth } from "../hooks/useAuth";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/branches", label: "Branches", icon: Building2 },
   { to: "/metrics", label: "Metrics", icon: ChartColumn },
+  { to: "/trends", label: "Trends", icon: LineChart },
   { to: "/expenses", label: "Expenses", icon: DollarSign },
+  { to: "/alerts", label: "Alerts", icon: Bell },
 ];
 
 function SidebarLinks() {
@@ -39,12 +50,12 @@ function SidebarLinks() {
 }
 
 export default function AppLayout() {
-  const { clearApiKey } = useApiKey();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    clearApiKey();
-    navigate("/api-key", { replace: true });
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -56,7 +67,9 @@ export default function AppLayout() {
               <DollarSign className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">HQ Finance</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                HQ Finance
+              </p>
               <h1 className="text-sm font-semibold text-slate-900">Omari Branch System</h1>
             </div>
           </div>
@@ -68,17 +81,22 @@ export default function AppLayout() {
           <header className="border-b border-slate-200 bg-white px-4 py-3 md:px-6">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm text-slate-600">
-                <KeyRound className="h-4 w-4" />
-                API Key Authenticated
+                <Shield className="h-4 w-4" />
+                <span className="font-medium text-slate-800">{user?.username ?? "Unknown"}</span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  {user?.role === "FULL_ACCESS" ? "Full Access" : "Viewer"}
+                </span>
               </div>
 
               <button
                 type="button"
-                onClick={handleLogout}
+                onClick={() => {
+                  void handleLogout();
+                }}
                 className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 <LogOut className="h-4 w-4" />
-                Clear Key
+                Logout
               </button>
             </div>
 

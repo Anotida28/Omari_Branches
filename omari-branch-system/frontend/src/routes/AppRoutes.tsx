@@ -1,16 +1,20 @@
+import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { useApiKey } from "../hooks/useApiKey";
+import { useAuth } from "../hooks/useAuth";
 import AppLayout from "../layouts/AppLayout";
-import ApiKeyPage from "../pages/ApiKeyPage";
+import AlertsPage from "../pages/AlertsPage";
 import BranchesPage from "../pages/BranchesPage";
 import DashboardPage from "../pages/DashboardPage";
 import ExpensesPage from "../pages/ExpensesPage";
+import LoginPage from "../pages/LoginPage";
 import MetricsPage from "../pages/MetricsPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
+const TrendsPage = lazy(() => import("../pages/TrendsPage"));
+
 export function AppRoutes() {
-  const { apiKey, isReady } = useApiKey();
+  const { isReady, isAuthenticated } = useAuth();
 
   if (!isReady) {
     return (
@@ -23,8 +27,8 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route
-        path="/api-key"
-        element={apiKey ? <Navigate to="/" replace /> : <ApiKeyPage />}
+        path="/login"
+        element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />}
       />
 
       <Route
@@ -37,10 +41,28 @@ export function AppRoutes() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/branches" element={<BranchesPage />} />
         <Route path="/metrics" element={<MetricsPage />} />
+        <Route
+          path="/trends"
+          element={
+            <Suspense
+              fallback={
+                <div className="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                  Loading trends...
+                </div>
+              }
+            >
+              <TrendsPage />
+            </Suspense>
+          }
+        />
         <Route path="/expenses" element={<ExpensesPage />} />
+        <Route path="/alerts" element={<AlertsPage />} />
       </Route>
 
-      <Route path="*" element={<Navigate to={apiKey ? "/" : "/api-key"} replace />} />
+      <Route
+        path="*"
+        element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />}
+      />
     </Routes>
   );
 }

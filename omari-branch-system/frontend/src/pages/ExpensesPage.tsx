@@ -26,6 +26,7 @@ import {
   listExpenses,
 } from "../services/expenses";
 import { formatCurrency, formatDate, formatDateTime, toMoneyNumber } from "../services/format";
+import { useAuth } from "../hooks/useAuth";
 import type {
   CreateDocumentInput,
   CreateExpenseInput,
@@ -70,6 +71,7 @@ const INITIAL_DOCUMENT_FORM: CreateDocumentInput = {
 
 export default function ExpensesPage() {
   const queryClient = useQueryClient();
+  const { canWrite } = useAuth();
 
   const [page, setPage] = useState(1);
   const [branchId, setBranchId] = useState("");
@@ -176,6 +178,10 @@ export default function ExpensesPage() {
   const onCreateExpenseSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (!canWrite) {
+      return;
+    }
+
     if (!expenseForm.branchId) {
       setExpenseFormError("Branch is required.");
       return;
@@ -198,6 +204,10 @@ export default function ExpensesPage() {
 
   const onPaymentSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!canWrite) {
+      return;
+    }
     if (!selectedExpenseId) {
       return;
     }
@@ -216,6 +226,10 @@ export default function ExpensesPage() {
 
   const onDocumentSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!canWrite) {
+      return;
+    }
     if (!selectedExpenseId) {
       return;
     }
@@ -252,7 +266,8 @@ export default function ExpensesPage() {
             <button
               type="button"
               onClick={() => setIsCreateOpen(true)}
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              disabled={!canWrite}
+              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus className="h-4 w-4" />
               Create Expense
@@ -424,7 +439,7 @@ export default function ExpensesPage() {
             <button
               type="submit"
               form="create-expense-form"
-              disabled={createExpenseMutation.isPending}
+              disabled={!canWrite || createExpenseMutation.isPending}
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
             >
               {createExpenseMutation.isPending ? "Saving..." : "Save Expense"}
@@ -702,7 +717,7 @@ export default function ExpensesPage() {
                 <div className="md:col-span-2 flex justify-end">
                   <button
                     type="submit"
-                    disabled={addPaymentMutation.isPending}
+                    disabled={!canWrite || addPaymentMutation.isPending}
                     className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                   >
                     {addPaymentMutation.isPending ? "Adding..." : "Add Payment"}
@@ -833,7 +848,7 @@ export default function ExpensesPage() {
                 <div className="md:col-span-2 flex justify-end">
                   <button
                     type="submit"
-                    disabled={addDocumentMutation.isPending}
+                    disabled={!canWrite || addDocumentMutation.isPending}
                     className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                   >
                     {addDocumentMutation.isPending ? "Adding..." : "Add Document"}
@@ -847,3 +862,4 @@ export default function ExpensesPage() {
     </section>
   );
 }
+
