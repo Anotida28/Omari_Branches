@@ -107,7 +107,7 @@ export default function LoginPage() {
         py: { xs: 3, md: 4 },
         position: "relative",
         background:
-          "radial-gradient(1200px 560px at -15% -22%, rgba(32, 130, 90, 0.24), transparent 55%), radial-gradient(900px 500px at 110% 10%, rgba(171, 208, 187, 0.45), transparent 60%), linear-gradient(180deg, #d9eadf 0%, #c7ddcf 100%)",
+          "radial-gradient(1200px 560px at -15% -22%, rgba(78, 105, 93, 0.3), transparent 55%), radial-gradient(900px 500px at 110% 10%, rgba(164, 178, 170, 0.45), transparent 60%), linear-gradient(180deg, #c4cbc6 0%, #aeb7b1 100%)",
       }}
     >
       <Box
@@ -171,15 +171,6 @@ export default function LoginPage() {
             minHeight: { md: 660 },
           }}
         >
-          <Stack direction="row" alignItems="center">
-            <Box
-              component="img"
-              src={logoImage}
-              alt="Omari Branch System"
-              sx={{ height: { xs: 56, sm: 64 }, width: "auto" }}
-            />
-          </Stack>
-
           <Box
             sx={{
               flex: 1,
@@ -191,25 +182,17 @@ export default function LoginPage() {
           >
             <Box sx={{ width: "100%", maxWidth: 460 }}>
               <Box sx={{ mb: 3.2, textAlign: "center" }}>
-                <Typography
-                  variant="overline"
+                <Box
+                  component="img"
+                  src={logoImage}
+                  alt="Omari Branch System"
                   sx={{
-                    color: "primary.main",
-                    letterSpacing: "0.08em",
-                    fontWeight: 700,
+                    height: { xs: 64, md: 78 },
+                    width: "auto",
+                    maxWidth: "100%",
+                    display: "inline-block",
                   }}
-                >
-                  Secure Login
-                </Typography>
-                <Typography
-                  variant="h3"
-                  sx={{
-                    fontSize: { xs: "2rem", md: "2.6rem" },
-                    mt: 0.4,
-                  }}
-                >
-                  Welcome Back
-                </Typography>
+                />
                 <Typography variant="body1" color="text.secondary" sx={{ mt: 1, fontSize: { xs: 15, md: 16 } }}>
                   Sign in to continue managing branch operations.
                 </Typography>
@@ -340,10 +323,6 @@ export default function LoginPage() {
                   >
                     {isSubmitting ? "Signing in..." : "Sign in"}
                   </Button>
-
-                  <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center", pt: 0.2 }}>
-                    Role-based access. Session secured by HQ authentication.
-                  </Typography>
                 </Stack>
               </form>
             </Box>
@@ -385,26 +364,6 @@ export default function LoginPage() {
                 "linear-gradient(180deg, rgba(25, 46, 34, 0.2) 0%, rgba(10, 16, 12, 0.58) 100%)",
             }}
           />
-          <Box
-            sx={{
-              position: "absolute",
-              top: 26,
-              left: 26,
-              px: 1.3,
-              py: 0.75,
-              borderRadius: 99,
-              bgcolor: "rgba(247, 251, 248, 0.18)",
-              border: "1px solid rgba(255,255,255,0.34)",
-              backdropFilter: "blur(6px)",
-            }}
-          >
-            <Typography
-              variant="caption"
-              sx={{ color: "rgba(246, 251, 248, 0.95)", fontWeight: 700, letterSpacing: "0.07em" }}
-            >
-              LIVE FINANCE OPERATIONS
-            </Typography>
-          </Box>
           <Paper
             sx={{
               position: "absolute",
@@ -422,35 +381,6 @@ export default function LoginPage() {
             <Typography variant="h6" sx={{ mb: 1, color: "inherit", maxWidth: 360 }}>
               Real-time branch visibility starts with one secure login.
             </Typography>
-            <Typography variant="body2" sx={{ color: "rgba(245, 250, 246, 0.9)", maxWidth: 360 }}>
-              Track expenses, monitor balances, and keep every branch aligned from HQ.
-            </Typography>
-            <Stack direction="row" spacing={2.2} sx={{ mt: 2.1, pt: 1.8, borderTop: "1px solid rgba(255,255,255,0.18)" }}>
-              <Box>
-                <Typography variant="subtitle2" sx={{ color: "white", fontWeight: 700 }}>
-                  Live
-                </Typography>
-                <Typography variant="caption" sx={{ color: "rgba(245, 250, 246, 0.76)" }}>
-                  Monitoring
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" sx={{ color: "white", fontWeight: 700 }}>
-                  Role-Based
-                </Typography>
-                <Typography variant="caption" sx={{ color: "rgba(245, 250, 246, 0.76)" }}>
-                  Access Control
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" sx={{ color: "white", fontWeight: 700 }}>
-                  HQ
-                </Typography>
-                <Typography variant="caption" sx={{ color: "rgba(245, 250, 246, 0.76)" }}>
-                  Branch Oversight
-                </Typography>
-              </Box>
-            </Stack>
           </Paper>
         </Box>
       </Paper>

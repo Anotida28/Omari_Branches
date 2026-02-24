@@ -33,7 +33,8 @@ export function clearStoredAuthToken(): void {
   window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:4000";
+const fallbackBaseUrl = import.meta.env.DEV ? "http://localhost:4000" : "";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || fallbackBaseUrl;
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

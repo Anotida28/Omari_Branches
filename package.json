@@ -1,0 +1,8 @@
+{
+  "name": "omari-branches",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix omari-branch-system install && npm --prefix omari-branch-system run build",
+    "start": "npm --prefix omari-branch-system run start"
+  }
+}
