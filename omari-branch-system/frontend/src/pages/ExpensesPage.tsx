@@ -19,16 +19,15 @@ import {
 import { getErrorMessage } from "../services/api";
 import { listBranches } from "../services/branches";
 import {
-  createDocument,
   createExpense,
   createPayment,
   getExpenseById,
   listExpenses,
+  uploadDocument,
 } from "../services/expenses";
 import { formatCurrency, formatDate, formatDateTime, toMoneyNumber } from "../services/format";
 import { useAuth } from "../hooks/useAuth";
 import type {
-  CreateDocumentInput,
   CreateExpenseInput,
   CreatePaymentInput,
   DocumentType,
@@ -40,6 +39,7 @@ const PAGE_SIZE = 10;
 const EXPENSE_TYPES: ExpenseType[] = ["RENT", "ZESA", "WIFI", "OTHER"];
 const EXPENSE_STATUSES: ExpenseStatus[] = ["PENDING", "PAID", "OVERDUE"];
 const DOCUMENT_TYPES: DocumentType[] = ["INVOICE", "RECEIPT", "OTHER"];
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:4000";
 
 const INITIAL_EXPENSE_FORM: CreateExpenseInput = {
   branchId: "",
@@ -60,18 +60,28 @@ const INITIAL_PAYMENT_FORM: CreatePaymentInput = {
   notes: "",
 };
 
-const INITIAL_DOCUMENT_FORM: CreateDocumentInput = {
-  fileName: "",
-  mimeType: "application/pdf",
-  sizeBytes: 0,
-  storageKey: "",
-  uploadedBy: "system",
-  docType: "INVOICE",
+type DocumentUploadForm = {
+  docType: DocumentType;
+  uploadedBy: string;
 };
+
+const INITIAL_DOCUMENT_FORM: DocumentUploadForm = {
+  docType: "INVOICE",
+  uploadedBy: "",
+};
+
+function resolveDocumentUrl(documentId: string, storageKey: string): string {
+  if (/^https?:\/\//i.test(storageKey)) {
+    return storageKey;
+  }
+
+  const base = API_BASE_URL.replace(/\/+$/, "");
+  return `${base}/api/documents/${documentId}/open`;
+}
 
 export default function ExpensesPage() {
   const queryClient = useQueryClient();
-  const { canWrite } = useAuth();
+  const { canWrite, user } = useAuth();
 
   const [page, setPage] = useState(1);
   const [branchId, setBranchId] = useState("");
@@ -86,15 +96,23 @@ export default function ExpensesPage() {
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
 
   const [paymentForm, setPaymentForm] = useState<CreatePaymentInput>(INITIAL_PAYMENT_FORM);
-  const [documentForm, setDocumentForm] = useState<CreateDocumentInput>(INITIAL_DOCUMENT_FORM);
+  const [documentForm, setDocumentForm] = useState<DocumentUploadForm>({
+    ...INITIAL_DOCUMENT_FORM,
+    uploadedBy: user?.username ?? "",
+  });
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentFormError, setDocumentFormError] = useState("");
 
   useEffect(() => {
     if (!selectedExpenseId) {
       setPaymentForm(INITIAL_PAYMENT_FORM);
-      setDocumentForm(INITIAL_DOCUMENT_FORM);
+      setDocumentForm({
+        ...INITIAL_DOCUMENT_FORM,
+        uploadedBy: user?.username ?? "",
+      });
+      setDocumentFile(null);
     }
-  }, [selectedExpenseId]);
+  }, [selectedExpenseId, user?.username]);
 
   const branchesQuery = useQuery({
     queryKey: ["branches", "all", "for-expenses"],
@@ -140,10 +158,16 @@ export default function ExpensesPage() {
   });
 
   const addDocumentMutation = useMutation({
-    mutationFn: createDocument,
-    onSuccess: (_, variables) => {
-      setDocumentForm(INITIAL_DOCUMENT_FORM);
-      queryClient.invalidateQueries({ queryKey: ["expense", variables.expenseId] });
+    mutationFn: uploadDocument,
+    onSuccess: () => {
+      setDocumentForm({
+        ...INITIAL_DOCUMENT_FORM,
+        uploadedBy: user?.username ?? "",
+      });
+      setDocumentFile(null);
+      if (selectedExpenseId) {
+        queryClient.invalidateQueries({ queryKey: ["expense", selectedExpenseId] });
+      }
     },
   });
 
@@ -234,23 +258,16 @@ export default function ExpensesPage() {
       return;
     }
 
-    const storageKey = documentForm.storageKey?.trim() ?? "";
-    const url = documentForm.url?.trim() ?? "";
-
-    if (!storageKey && !url) {
-      setDocumentFormError("Provide a storage key or URL.");
+    if (!documentFile) {
+      setDocumentFormError("Select a file to upload.");
       return;
     }
 
     setDocumentFormError("");
 
     addDocumentMutation.mutate({
+      file: documentFile,
       ...documentForm,
-      sizeBytes: Number(documentForm.sizeBytes),
-      storageKey: storageKey || url,
-      url: undefined,
-      fileName: documentForm.fileName.trim(),
-      mimeType: documentForm.mimeType.trim(),
       expenseId: selectedExpenseId,
       uploadedBy: documentForm.uploadedBy?.trim() || undefined,
     });
@@ -749,7 +766,16 @@ export default function ExpensesPage() {
                       detailQuery.data.documents.map((document) => (
                         <tr key={document.id}>
                           <td className="px-3 py-2 text-slate-700">{document.docType}</td>
-                          <td className="px-3 py-2 text-slate-700">{document.fileName}</td>
+                          <td className="px-3 py-2 text-slate-700">
+                            <a
+                              href={resolveDocumentUrl(document.id, document.storageKey)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-sky-700 hover:underline"
+                            >
+                              {document.fileName}
+                            </a>
+                          </td>
                           <td className="px-3 py-2 text-slate-700">{formatDateTime(document.uploadedAt)}</td>
                         </tr>
                       ))
@@ -780,66 +806,30 @@ export default function ExpensesPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">File Name</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Uploaded By</label>
                   <input
-                    value={documentForm.fileName || ""}
+                    value={documentForm.uploadedBy}
                     onChange={(event) =>
-                      setDocumentForm((prev) => ({ ...prev, fileName: event.target.value }))
-                    }
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Mime Type</label>
-                  <input
-                    value={documentForm.mimeType || ""}
-                    onChange={(event) =>
-                      setDocumentForm((prev) => ({ ...prev, mimeType: event.target.value }))
-                    }
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Size (bytes)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={documentForm.sizeBytes}
-                    onChange={(event) =>
-                      setDocumentForm((prev) => ({
-                        ...prev,
-                        sizeBytes: Number(event.target.value),
-                      }))
+                      setDocumentForm((prev) => ({ ...prev, uploadedBy: event.target.value }))
                     }
                     className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                   />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Storage Key</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Choose File</label>
                   <input
-                    value={documentForm.storageKey || ""}
+                    type="file"
                     onChange={(event) =>
-                      setDocumentForm((prev) => ({ ...prev, storageKey: event.target.value }))
+                      setDocumentFile(event.target.files?.[0] ?? null)
                     }
-                    placeholder="expenses/{id}/invoice.pdf"
                     className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                   />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Document URL</label>
-                  <input
-                    value={documentForm.url || ""}
-                    onChange={(event) =>
-                      setDocumentForm((prev) => ({ ...prev, url: event.target.value }))
-                    }
-                    placeholder="https://example.com/docs/invoice.pdf"
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  />
+                  {documentFile ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      {documentFile.name} ({documentFile.type || "unknown"}, {documentFile.size} bytes)
+                    </p>
+                  ) : null}
                   {documentFormError ? (
                     <p className="mt-1 text-sm text-rose-600">{documentFormError}</p>
                   ) : null}
@@ -851,7 +841,7 @@ export default function ExpensesPage() {
                     disabled={!canWrite || addDocumentMutation.isPending}
                     className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                   >
-                    {addDocumentMutation.isPending ? "Adding..." : "Add Document"}
+                    {addDocumentMutation.isPending ? "Uploading..." : "Upload Document"}
                   </button>
                 </div>
               </form>

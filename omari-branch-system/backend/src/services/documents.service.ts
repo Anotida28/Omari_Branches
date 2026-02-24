@@ -1,3 +1,6 @@
+import fs from "fs/promises";
+import path from "path";
+
 import { DocumentType, Prisma, type Document } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
@@ -38,6 +41,12 @@ export type DocumentResponse = {
   uploadedAt: string;
 };
 
+export type DocumentFileInfo = {
+  fileName: string;
+  mimeType: string | null;
+  storageKey: string;
+};
+
 function formatDateTime(date: Date): string {
   return date.toISOString();
 }
@@ -68,6 +77,28 @@ function mapForeignKeyError(error: unknown): never {
     }
   }
   throw error;
+}
+
+async function removeManagedLocalFile(storageKey: string): Promise<void> {
+  const normalizedStorageKey = storageKey.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalizedStorageKey.startsWith("uploads/")) {
+    return;
+  }
+
+  const uploadsRoot = path.resolve(process.cwd(), "uploads");
+  const absolutePath = path.resolve(process.cwd(), normalizedStorageKey);
+  if (!absolutePath.startsWith(uploadsRoot)) {
+    return;
+  }
+
+  try {
+    await fs.unlink(absolutePath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      console.warn(`[Documents] Failed to remove local file: ${absolutePath}`);
+    }
+  }
 }
 
 export async function createDocument(
@@ -166,7 +197,17 @@ export async function listDocumentsForMetric(
 
 export async function deleteDocument(id: bigint): Promise<boolean> {
   try {
+    const existing = await prisma.document.findUnique({
+      where: { id },
+      select: { id: true, filePath: true },
+    });
+
+    if (!existing) {
+      return false;
+    }
+
     await prisma.document.delete({ where: { id } });
+    await removeManagedLocalFile(existing.filePath);
     return true;
   } catch (error) {
     if (
@@ -177,4 +218,27 @@ export async function deleteDocument(id: bigint): Promise<boolean> {
     }
     throw error;
   }
+}
+
+export async function getDocumentFileInfo(
+  id: bigint,
+): Promise<DocumentFileInfo | null> {
+  const document = await prisma.document.findUnique({
+    where: { id },
+    select: {
+      fileName: true,
+      mimeType: true,
+      filePath: true,
+    },
+  });
+
+  if (!document) {
+    return null;
+  }
+
+  return {
+    fileName: document.fileName,
+    mimeType: document.mimeType,
+    storageKey: document.filePath,
+  };
 }

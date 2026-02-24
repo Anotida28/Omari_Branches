@@ -10,6 +10,7 @@ import type {
   ExpenseDetail,
   ExpensesListParams,
   PaginatedResponse,
+  UploadDocumentInput,
 } from "../types/api";
 
 export async function listExpenses(
@@ -50,6 +51,33 @@ export async function createDocument(
   const { data } = await api.post<ApiDataResponse<DocumentRecord>>(
     "/api/documents",
     input,
+  );
+  return data.data;
+}
+
+export async function uploadDocument(input: UploadDocumentInput): Promise<DocumentRecord> {
+  const formData = new FormData();
+  formData.append("file", input.file);
+
+  if (input.docType) {
+    formData.append("docType", input.docType);
+  }
+  if (input.uploadedBy) {
+    formData.append("uploadedBy", input.uploadedBy);
+  }
+  if (input.expenseId) {
+    formData.append("expenseId", input.expenseId);
+  }
+  if (input.paymentId) {
+    formData.append("paymentId", input.paymentId);
+  }
+  if (input.metricId) {
+    formData.append("metricId", input.metricId);
+  }
+
+  const { data } = await api.post<ApiDataResponse<DocumentRecord>>(
+    "/api/documents/upload",
+    formData,
   );
   return data.data;
 }

@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { MulterError } from "multer";
 import type { ErrorRequestHandler, RequestHandler } from "express";
 import { ZodError } from "zod";
 
@@ -21,6 +22,18 @@ export const notFoundHandler: RequestHandler = (_req, res) => {
 
 export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   if (res.headersSent) {
+    return;
+  }
+
+  if (error instanceof MulterError) {
+    const details =
+      error.code === "LIMIT_FILE_SIZE"
+        ? "File exceeds maximum size of 10MB"
+        : error.message;
+    res.status(400).json({
+      error: "Upload error",
+      details,
+    });
     return;
   }
 

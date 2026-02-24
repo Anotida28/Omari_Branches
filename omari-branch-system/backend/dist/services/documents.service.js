@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DocumentServiceError = void 0;
 exports.createDocument = createDocument;
@@ -6,6 +9,9 @@ exports.listDocumentsForExpense = listDocumentsForExpense;
 exports.listDocumentsForPayment = listDocumentsForPayment;
 exports.listDocumentsForMetric = listDocumentsForMetric;
 exports.deleteDocument = deleteDocument;
+exports.getDocumentFileInfo = getDocumentFileInfo;
+const promises_1 = __importDefault(require("fs/promises"));
+const path_1 = __importDefault(require("path"));
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../db/prisma");
 class DocumentServiceError extends Error {
@@ -43,6 +49,26 @@ function mapForeignKeyError(error) {
         }
     }
     throw error;
+}
+async function removeManagedLocalFile(storageKey) {
+    const normalizedStorageKey = storageKey.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!normalizedStorageKey.startsWith("uploads/")) {
+        return;
+    }
+    const uploadsRoot = path_1.default.resolve(process.cwd(), "uploads");
+    const absolutePath = path_1.default.resolve(process.cwd(), normalizedStorageKey);
+    if (!absolutePath.startsWith(uploadsRoot)) {
+        return;
+    }
+    try {
+        await promises_1.default.unlink(absolutePath);
+    }
+    catch (error) {
+        const code = error.code;
+        if (code !== "ENOENT") {
+            console.warn(`[Documents] Failed to remove local file: ${absolutePath}`);
+        }
+    }
 }
 async function createDocument(input) {
     const relationCount = [input.expenseId, input.paymentId, input.metricId].filter((value) => value !== undefined).length;
@@ -112,7 +138,15 @@ async function listDocumentsForMetric(metricId) {
 }
 async function deleteDocument(id) {
     try {
+        const existing = await prisma_1.prisma.document.findUnique({
+            where: { id },
+            select: { id: true, filePath: true },
+        });
+        if (!existing) {
+            return false;
+        }
         await prisma_1.prisma.document.delete({ where: { id } });
+        await removeManagedLocalFile(existing.filePath);
         return true;
     }
     catch (error) {
@@ -122,4 +156,22 @@ async function deleteDocument(id) {
         }
         throw error;
     }
+}
+async function getDocumentFileInfo(id) {
+    const document = await prisma_1.prisma.document.findUnique({
+        where: { id },
+        select: {
+            fileName: true,
+            mimeType: true,
+            filePath: true,
+        },
+    });
+    if (!document) {
+        return null;
+    }
+    return {
+        fileName: document.fileName,
+        mimeType: document.mimeType,
+        storageKey: document.filePath,
+    };
 }

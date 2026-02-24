@@ -2,7 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const documents_controller_1 = require("../controllers/documents.controller");
+const document_upload_1 = require("../middlewares/document-upload");
 const router = (0, express_1.Router)();
+router.post("/upload", document_upload_1.documentUpload.single("file"), documents_controller_1.uploadDocumentHandler);
 router.post("/", documents_controller_1.createDocumentHandler);
+router.get("/:id/open", documents_controller_1.openDocumentHandler);
 router.delete("/:id", documents_controller_1.deleteDocumentHandler);
 exports.default = router;

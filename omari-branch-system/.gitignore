@@ -4,6 +4,7 @@ node_modules/
 # Build outputs
 frontend/dist/
 backend/dist/
+backend/uploads/
 
 # Logs
 npm-debug.log*

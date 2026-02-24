@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.errorHandler = exports.notFoundHandler = void 0;
 const client_1 = require("@prisma/client");
+const multer_1 = require("multer");
 const zod_1 = require("zod");
 function getErrorStatus(error) {
     const status = error.status;
@@ -16,6 +17,16 @@ const notFoundHandler = (_req, res) => {
 exports.notFoundHandler = notFoundHandler;
 const errorHandler = (error, _req, res, _next) => {
     if (res.headersSent) {
+        return;
+    }
+    if (error instanceof multer_1.MulterError) {
+        const details = error.code === "LIMIT_FILE_SIZE"
+            ? "File exceeds maximum size of 10MB"
+            : error.message;
+        res.status(400).json({
+            error: "Upload error",
+            details,
+        });
         return;
     }
     if (error instanceof zod_1.ZodError) {

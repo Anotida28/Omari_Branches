@@ -141,7 +141,9 @@ After running `npm run prisma:seed`:
 | `/api/expenses` | GET, POST | List/create expenses |
 | `/api/expenses/:id` | GET, PATCH, DELETE | Expense CRUD |
 | `/api/expenses/:id/payments` | GET, POST | Payments for expense |
-| `/api/documents` | POST | Upload document reference |
+| `/api/documents` | POST | Create document metadata record |
+| `/api/documents/upload` | POST | Upload file + create document record |
+| `/api/documents/:id/open` | GET | Open/download document file |
 | `/api/admin/test-email` | POST | Send admin SMTP test email |
 
 Auth rules:

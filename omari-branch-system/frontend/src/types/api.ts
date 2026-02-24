@@ -186,6 +186,15 @@ export type CreateDocumentInput = {
   metricId?: string;
 };
 
+export type UploadDocumentInput = {
+  file: File;
+  uploadedBy?: string;
+  docType?: DocumentType;
+  expenseId?: string;
+  paymentId?: string;
+  metricId?: string;
+};
+
 export type CreatePaymentResponse = {
   data: Payment;
   expense: Expense;
