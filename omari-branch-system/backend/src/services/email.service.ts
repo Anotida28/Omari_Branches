@@ -40,6 +40,26 @@ export type SendEmailOptions = {
 
 let transporter: Transporter | null = null;
 
+function normalizeEmailError(error: unknown): Error {
+  const err = error as {
+    code?: string;
+    responseCode?: number;
+    message?: string;
+  };
+
+  if (err?.code === "EAUTH" || err?.responseCode === 535) {
+    return new Error(
+      "Google SMTP auth failed (535). Verify EMAIL_USER is the real mailbox login, EMAIL_APP_PASSWORD is a current app password, and 2-Step Verification + App Passwords are enabled for that account."
+    );
+  }
+
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error(String(error));
+}
+
 function getTransporter(): Transporter {
   if (!transporter) {
     if (env.EMAIL_PROVIDER !== "gmail") {
@@ -77,15 +97,19 @@ export async function sendEmail(opts: SendEmailOptions): Promise<string> {
     throw new Error("sendEmail requires at least one recipient");
   }
 
-  const info = await getTransporter().sendMail({
-    from: emailFrom,
-    to: to.join(","),
-    subject,
-    text,
-    html,
-  });
+  try {
+    const info = await getTransporter().sendMail({
+      from: emailFrom,
+      to: to.join(","),
+      subject,
+      text,
+      html,
+    });
 
-  return info.messageId;
+    return info.messageId;
+  } catch (error) {
+    throw normalizeEmailError(error);
+  }
 }
 
 /**
@@ -148,9 +172,10 @@ export async function sendAlertEmail(payload: AlertEmailPayload): Promise<EmailS
     });
     return { success: true };
   } catch (error) {
+    const normalizedError = normalizeEmailError(error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: normalizedError.message,
     };
   }
 }

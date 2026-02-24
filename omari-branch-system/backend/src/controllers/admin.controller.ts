@@ -58,6 +58,10 @@ export async function sendTestEmailHandler(
       to,
     });
   } catch (error) {
-    next(error);
+    const details = error instanceof Error ? error.message : String(error);
+    res.status(502).json({
+      error: "Email delivery failed",
+      details,
+    });
   }
 }
