@@ -30,7 +30,15 @@ DATABASE_URL="mysql://root:YOUR_PASSWORD@localhost:3306/omari_branch_db"
 AUTH_TOKEN_SECRET="change-this-in-production-12345"
 AUTH_TOKEN_TTL_HOURS=24
 PORT=4000
+EMAIL_PROVIDER=gmail
+EMAIL_FROM="helpdesk@yourdomain.com"
+EMAIL_USER="helpdesk@yourdomain.com"
+EMAIL_APP_PASSWORD="your-16-char-app-password"
 ```
+
+Notes:
+- Gmail/Google Workspace requires a Google App Password for SMTP auth.
+- Enable 2-Step Verification for the mailbox before creating the app password.
 
 ---
 
@@ -134,6 +142,7 @@ After running `npm run prisma:seed`:
 | `/api/expenses/:id` | GET, PATCH, DELETE | Expense CRUD |
 | `/api/expenses/:id/payments` | GET, POST | Payments for expense |
 | `/api/documents` | POST | Upload document reference |
+| `/api/admin/test-email` | POST | Send admin SMTP test email |
 
 Auth rules:
 - `POST /api/auth/login` is public.

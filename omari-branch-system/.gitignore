@@ -11,9 +11,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Env files
+# Env files (keep .env.example)
 .env
-.env.*
+.env.local
+.env.development
+.env.production
+!.env.example
 
 # OS
 .DS_Store
@@ -26,3 +29,12 @@ backend/prisma/dev.db-shm
 
 # Vite
 frontend/.vite/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Compiled config files (keep .ts source)
+frontend/tailwind.config.js
+frontend/tailwind.config.d.ts
+frontend/vite.config.js
+frontend/vite.config.d.ts

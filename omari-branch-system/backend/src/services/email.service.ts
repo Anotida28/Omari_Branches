@@ -1,8 +1,18 @@
 /**
- * Email service for sending alert notifications.
- * Currently a mock implementation that logs emails.
- * Can be replaced with actual email provider (SendGrid, SES, etc.) later.
+ * Email service for sending alert notifications via Gmail App Password.
  */
+
+import nodemailer, { type Transporter } from "nodemailer";
+
+import { env } from "../config/env";
+
+const emailUser = env.EMAIL_USER;
+const emailAppPassword = env.EMAIL_APP_PASSWORD.replace(/\s+/g, "");
+const emailFrom = env.EMAIL_FROM;
+
+if (!emailUser || !emailAppPassword || !emailFrom) {
+  throw new Error("Missing EMAIL_USER / EMAIL_APP_PASSWORD / EMAIL_FROM in env");
+}
 
 export type AlertEmailPayload = {
   to: string;
@@ -20,6 +30,63 @@ export type EmailSendResult = {
   success: boolean;
   error?: string;
 };
+
+export type SendEmailOptions = {
+  to: string[];
+  subject: string;
+  html: string;
+  text?: string;
+};
+
+let transporter: Transporter | null = null;
+
+function getTransporter(): Transporter {
+  if (!transporter) {
+    if (env.EMAIL_PROVIDER !== "gmail") {
+      throw new Error(`Unsupported email provider: ${env.EMAIL_PROVIDER}`);
+    }
+
+    transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: emailUser,
+        pass: emailAppPassword,
+      },
+    });
+  }
+
+  return transporter;
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function textToHtml(text: string): string {
+  return `<pre style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.4;">${escapeHtml(text)}</pre>`;
+}
+
+export async function sendEmail(opts: SendEmailOptions): Promise<string> {
+  const { to, subject, html, text } = opts;
+  if (!to.length) {
+    throw new Error("sendEmail requires at least one recipient");
+  }
+
+  const info = await getTransporter().sendMail({
+    from: emailFrom,
+    to: to.join(","),
+    subject,
+    text,
+    html,
+  });
+
+  return info.messageId;
+}
 
 /**
  * Format the email subject based on alert type.
@@ -66,33 +133,26 @@ Omari Branch System - Automated Alert
 }
 
 /**
- * Send an alert email (mock implementation).
- * In production, replace with actual email provider.
+ * Send an alert email through Gmail SMTP.
  */
 export async function sendAlertEmail(payload: AlertEmailPayload): Promise<EmailSendResult> {
   const subject = formatSubject(payload);
-  const body = formatBody(payload);
+  const textBody = formatBody(payload);
 
-  // Mock implementation - just log the email
-  console.log(`\n========== EMAIL SENT ==========`);
-  console.log(`To: ${payload.to}`);
-  console.log(`Subject: ${subject}`);
-  console.log(`Body:\n${body}`);
-  console.log(`================================\n`);
-
-  // Simulate async email send with small delay
-  await new Promise(resolve => setTimeout(resolve, 50));
-
-  // For testing, you can make certain emails "fail"
-  // e.g., if email contains "fail" for testing error handling
-  if (payload.to.includes("fail@")) {
+  try {
+    await sendEmail({
+      to: [payload.to],
+      subject,
+      text: textBody,
+      html: textToHtml(textBody),
+    });
+    return { success: true };
+  } catch (error) {
     return {
       success: false,
-      error: "Simulated email failure for testing",
+      error: error instanceof Error ? error.message : String(error),
     };
   }
-
-  return { success: true };
 }
 
 /**
