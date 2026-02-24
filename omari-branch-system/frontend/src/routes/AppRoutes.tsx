@@ -1,17 +1,18 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import AlertsPage from "../features/alerts/AlertsPage";
+import BranchesPage from "../features/branches/BranchesPage";
+import DashboardPage from "../features/dashboard/DashboardPage";
+import ExpensesPage from "../features/expenses/ExpensesPage";
+import MetricsPage from "../features/metrics/MetricsPage";
+import SettingsPage from "../features/settings/SettingsPage";
 import { useAuth } from "../hooks/useAuth";
-import AppLayout from "../layouts/AppLayout";
-import AlertsPage from "../pages/AlertsPage";
-import BranchesPage from "../pages/BranchesPage";
-import DashboardPage from "../pages/DashboardPage";
-import ExpensesPage from "../pages/ExpensesPage";
+import AppLayout from "../layout/AppShell";
 import LoginPage from "../pages/LoginPage";
-import MetricsPage from "../pages/MetricsPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
-const TrendsPage = lazy(() => import("../pages/TrendsPage"));
+const TrendsPage = lazy(() => import("../features/trends/TrendsPage"));
 
 export function AppRoutes() {
   const { isReady, isAuthenticated } = useAuth();
@@ -57,6 +58,7 @@ export function AppRoutes() {
         />
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
 
       <Route

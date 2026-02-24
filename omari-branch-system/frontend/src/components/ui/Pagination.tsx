@@ -1,4 +1,6 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Pagination as MuiPagination, Paper, Stack, Typography } from "@mui/material";
+
+import { glassPanelSx } from "../../app/theme";
 
 type PaginationProps = {
   page: number;
@@ -13,38 +15,33 @@ export function Pagination({ page, pageSize, total, onPageChange }: PaginationPr
   const end = Math.min(page * pageSize, total);
 
   return (
-    <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
-      <p className="text-sm text-slate-600">
-        Showing <span className="font-semibold text-slate-900">{start}</span>-
-        <span className="font-semibold text-slate-900">{end}</span> of {" "}
-        <span className="font-semibold text-slate-900">{total}</span>
-      </p>
+    <Paper
+      sx={{
+        mt: 2,
+        px: 2,
+        py: 1.4,
+        ...glassPanelSx,
+      }}
+    >
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        alignItems={{ xs: "flex-start", md: "center" }}
+        justifyContent="space-between"
+        gap={1.5}
+      >
+        <Typography variant="body2" color="text.secondary">
+          Showing <strong>{start}</strong>-<strong>{end}</strong> of <strong>{total}</strong>
+        </Typography>
 
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onPageChange(page - 1)}
-          disabled={page <= 1}
-          className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Prev
-        </button>
-
-        <span className="text-sm font-medium text-slate-700">
-          Page {page} / {totalPages}
-        </span>
-
-        <button
-          type="button"
-          onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages}
-          className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          Next
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
+        <MuiPagination
+          page={Math.min(page, totalPages)}
+          count={totalPages}
+          onChange={(_event, value) => onPageChange(value)}
+          color="primary"
+          shape="rounded"
+          size="small"
+        />
+      </Stack>
+    </Paper>
   );
 }

@@ -1,8 +1,9 @@
 import { FormEvent, useState } from "react";
-import { LockKeyhole, User } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
+import { Alert, Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { Card } from "../components/ui/Card";
+import { glassPanelSx } from "../app/theme";
 import { useAuth } from "../hooks/useAuth";
 import { getErrorMessage } from "../services/api";
 
@@ -43,50 +44,56 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <Card className="w-full max-w-md p-6">
-        <div className="mb-5 flex items-center gap-2">
-          <div className="rounded-md bg-slate-900 p-2 text-white">
-            <LockKeyhole className="h-4 w-4" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        px: 2,
+      }}
+    >
+      <Paper sx={{ width: "100%", maxWidth: 430, p: 3, ...glassPanelSx }}>
+        <Stack direction="row" alignItems="center" spacing={1.3} sx={{ mb: 2.5 }}>
+          <Box
+            sx={{
+              p: 1,
+              borderRadius: 2,
+              bgcolor: "primary.main",
+              color: "primary.contrastText",
+              display: "inline-flex",
+            }}
+          >
+            <LockKeyhole size={16} />
+          </Box>
+          <Box>
+            <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
               Omari Branch System
-            </p>
-            <h1 className="text-lg font-semibold text-slate-900">Sign in</h1>
-          </div>
-        </div>
+            </Typography>
+            <Typography variant="h6">Sign in</Typography>
+          </Box>
+        </Stack>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="username" className="mb-1 block text-sm font-medium text-slate-700">
-              Username
-            </label>
-            <div className="relative">
-              <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                id="username"
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(event) => {
-                  setUsername(event.target.value);
-                  if (error) {
-                    setError("");
-                  }
-                }}
-                className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
-                placeholder="admin"
-              />
-            </div>
-          </div>
+        <form onSubmit={onSubmit}>
+          <Stack spacing={2}>
+            <TextField
+              id="username"
+              label="Username"
+              type="text"
+              autoComplete="username"
+              value={username}
+              onChange={(event) => {
+                setUsername(event.target.value);
+                if (error) {
+                  setError("");
+                }
+              }}
+              size="small"
+              placeholder="admin"
+            />
 
-          <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700">
-              Password
-            </label>
-            <input
+            <TextField
               id="password"
+              label="Password"
               type="password"
               autoComplete="current-password"
               value={password}
@@ -96,22 +103,18 @@ export default function LoginPage() {
                   setError("");
                 }
               }}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+              size="small"
               placeholder="Enter password"
             />
-          </div>
 
-          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+            {error ? <Alert severity="error">{error}</Alert> : null}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isSubmitting ? "Signing in..." : "Sign in"}
-          </button>
+            <Button type="submit" variant="contained" size="large" disabled={isSubmitting}>
+              {isSubmitting ? "Signing in..." : "Sign in"}
+            </Button>
+          </Stack>
         </form>
-      </Card>
-    </div>
+      </Paper>
+    </Box>
   );
 }

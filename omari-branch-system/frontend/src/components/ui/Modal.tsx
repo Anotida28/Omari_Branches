@@ -1,8 +1,17 @@
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import {
+  Box,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Typography,
+} from "@mui/material";
 
 import { X } from "lucide-react";
 
-import { cn } from "./cn";
+import { glassPanelSx } from "../../app/theme";
 
 type ModalProps = {
   open: boolean;
@@ -13,6 +22,16 @@ type ModalProps = {
   maxWidthClassName?: string;
 };
 
+function toDialogMaxWidth(maxWidthClassName: string): "sm" | "md" | "lg" {
+  if (maxWidthClassName.includes("max-w-2xl")) {
+    return "md";
+  }
+  if (maxWidthClassName.includes("max-w-3xl")) {
+    return "lg";
+  }
+  return "sm";
+}
+
 export function Modal({
   open,
   title,
@@ -21,47 +40,24 @@ export function Modal({
   footer,
   maxWidthClassName = "max-w-2xl",
 }: ModalProps) {
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open, onClose]);
-
-  if (!open) {
-    return null;
-  }
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4">
-      <div className={cn("w-full rounded-lg border border-slate-200 bg-white shadow-xl", maxWidthClassName)}>
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
-        {footer ? <div className="border-t border-slate-200 px-5 py-4">{footer}</div> : null}
-      </div>
-    </div>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth={toDialogMaxWidth(maxWidthClassName)}
+      PaperProps={{ sx: { borderRadius: 3 } }}
+    >
+      <DialogTitle sx={{ ...glassPanelSx, borderRadius: 0 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Typography variant="h6">{title}</Typography>
+          <IconButton onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </IconButton>
+        </Box>
+      </DialogTitle>
+      <DialogContent sx={{ maxHeight: "70vh", pt: 2.2 }}>{children}</DialogContent>
+      {footer ? <DialogActions sx={{ px: 3, pb: 2 }}>{footer}</DialogActions> : null}
+    </Dialog>
   );
 }

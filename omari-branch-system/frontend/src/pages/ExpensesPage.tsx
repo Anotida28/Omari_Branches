@@ -1,32 +1,46 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+﻿import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
-
-import { ExpenseStatusBadge } from "../components/ui/Badge";
-import { Card, CardHeader } from "../components/ui/Card";
-import { Drawer } from "../components/ui/Drawer";
-import { Modal } from "../components/ui/Modal";
-import { Pagination } from "../components/ui/Pagination";
+import { FileText, Plus, Trash2, Upload } from "lucide-react";
 import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Divider,
+  IconButton,
+  MenuItem,
+  Paper,
+  Stack,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TableHeadCell,
   TableRow,
-} from "../components/ui/Table";
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+
+import { Modal } from "../components/ui/Modal";
+import { Pagination } from "../components/ui/Pagination";
+import { useAuth } from "../hooks/useAuth";
 import { getErrorMessage } from "../services/api";
 import { listBranches } from "../services/branches";
 import {
   createExpense,
   createPayment,
+  deleteDocumentById,
   getExpenseById,
   listExpenses,
   uploadDocument,
 } from "../services/expenses";
 import { formatCurrency, formatDate, formatDateTime, toMoneyNumber } from "../services/format";
-import { useAuth } from "../hooks/useAuth";
+import { ConfirmDialog } from "../shared/components/ConfirmDialog";
+import { DrawerPanel } from "../shared/components/DrawerPanel";
+import { EmptyState } from "../shared/components/EmptyState";
+import { FilterBar } from "../shared/components/FilterBar";
+import { PageHeader } from "../shared/components/PageHeader";
 import type {
   CreateExpenseInput,
   CreatePaymentInput,
@@ -36,6 +50,7 @@ import type {
 } from "../types/api";
 
 const PAGE_SIZE = 10;
+const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 const EXPENSE_TYPES: ExpenseType[] = ["RENT", "ZESA", "WIFI", "OTHER"];
 const EXPENSE_STATUSES: ExpenseStatus[] = ["PENDING", "PAID", "OVERDUE"];
 const DOCUMENT_TYPES: DocumentType[] = ["INVOICE", "RECEIPT", "OTHER"];
@@ -79,6 +94,26 @@ function resolveDocumentUrl(documentId: string, storageKey: string): string {
   return `${base}/api/documents/${documentId}/open`;
 }
 
+function formatBytes(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function statusColor(status: ExpenseStatus): "warning" | "success" | "error" {
+  if (status === "PAID") {
+    return "success";
+  }
+  if (status === "OVERDUE") {
+    return "error";
+  }
+  return "warning";
+}
+
 export default function ExpensesPage() {
   const queryClient = useQueryClient();
   const { canWrite, user } = useAuth();
@@ -102,6 +137,9 @@ export default function ExpensesPage() {
   });
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentFormError, setDocumentFormError] = useState("");
+  const [documentToDelete, setDocumentToDelete] = useState<{ id: string; fileName: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!selectedExpenseId) {
@@ -111,6 +149,7 @@ export default function ExpensesPage() {
         uploadedBy: user?.username ?? "",
       });
       setDocumentFile(null);
+      setDocumentFormError("");
     }
   }, [selectedExpenseId, user?.username]);
 
@@ -165,6 +204,17 @@ export default function ExpensesPage() {
         uploadedBy: user?.username ?? "",
       });
       setDocumentFile(null);
+      setDocumentFormError("");
+      if (selectedExpenseId) {
+        queryClient.invalidateQueries({ queryKey: ["expense", selectedExpenseId] });
+      }
+    },
+  });
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: deleteDocumentById,
+    onSuccess: () => {
+      setDocumentToDelete(null);
       if (selectedExpenseId) {
         queryClient.invalidateQueries({ queryKey: ["expense", selectedExpenseId] });
       }
@@ -172,9 +222,7 @@ export default function ExpensesPage() {
   });
 
   const branchMap = useMemo(() => {
-    return new Map(
-      (branchesQuery.data?.items ?? []).map((branch) => [branch.id, branch.displayName]),
-    );
+    return new Map((branchesQuery.data?.items ?? []).map((branch) => [branch.id, branch.displayName]));
   }, [branchesQuery.data?.items]);
 
   const combinedError = (() => {
@@ -195,6 +243,9 @@ export default function ExpensesPage() {
     }
     if (addDocumentMutation.isError) {
       return getErrorMessage(addDocumentMutation.error);
+    }
+    if (deleteDocumentMutation.isError) {
+      return getErrorMessage(deleteDocumentMutation.error);
     }
     return "";
   })();
@@ -229,10 +280,7 @@ export default function ExpensesPage() {
   const onPaymentSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!canWrite) {
-      return;
-    }
-    if (!selectedExpenseId) {
+    if (!canWrite || !selectedExpenseId) {
       return;
     }
 
@@ -251,15 +299,19 @@ export default function ExpensesPage() {
   const onDocumentSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!canWrite) {
-      return;
-    }
-    if (!selectedExpenseId) {
+    if (!canWrite || !selectedExpenseId) {
       return;
     }
 
     if (!documentFile) {
       setDocumentFormError("Select a file to upload.");
+      return;
+    }
+
+    if (documentFile.size > MAX_FILE_SIZE_BYTES) {
+      setDocumentFormError(
+        `File is too large. Maximum allowed size is ${formatBytes(MAX_FILE_SIZE_BYTES)}.`,
+      );
       return;
     }
 
@@ -273,162 +325,190 @@ export default function ExpensesPage() {
     });
   };
 
+  const closeCreateModal = () => {
+    setIsCreateOpen(false);
+    setExpenseFormError("");
+  };
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setSelectedExpenseId(null);
+    setDocumentToDelete(null);
+  };
+
+  const rows = expensesQuery.data?.items ?? [];
+
   return (
     <section className="space-y-4">
-      <Card>
-        <CardHeader
-          title="Expenses"
-          subtitle="Track expense lifecycle, balances, and payment activity"
-          actions={
-            <button
-              type="button"
-              onClick={() => setIsCreateOpen(true)}
-              disabled={!canWrite}
-              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Plus className="h-4 w-4" />
-              Create Expense
-            </button>
-          }
-        />
+      <PageHeader
+        title="Expenses"
+        subtitle="Track expense lifecycle, balances, payments, and supporting documents"
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Plus size={16} />}
+            disabled={!canWrite}
+            onClick={() => setIsCreateOpen(true)}
+          >
+            Create Expense
+          </Button>
+        }
+      />
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Branch</label>
-            <select
-              value={branchId}
-              onChange={(event) => {
-                setBranchId(event.target.value);
-                setPage(1);
-              }}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="">All branches</option>
-              {(branchesQuery.data?.items ?? []).map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.displayName}
-                </option>
-              ))}
-            </select>
-          </div>
+      <FilterBar>
+        <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5}>
+          <TextField
+            select
+            size="small"
+            label="Branch"
+            value={branchId}
+            onChange={(event) => {
+              setBranchId(event.target.value);
+              setPage(1);
+            }}
+            sx={{ minWidth: { xs: "100%", lg: 220 } }}
+          >
+            <MenuItem value="">All branches</MenuItem>
+            {(branchesQuery.data?.items ?? []).map((branch) => (
+              <MenuItem key={branch.id} value={branch.id}>
+                {branch.displayName}
+              </MenuItem>
+            ))}
+          </TextField>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
-            <select
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
-                setPage(1);
-              }}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="">All statuses</option>
-              {EXPENSE_STATUSES.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
+          <TextField
+            select
+            size="small"
+            label="Status"
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value);
+              setPage(1);
+            }}
+            sx={{ minWidth: { xs: "100%", lg: 180 } }}
+          >
+            <MenuItem value="">All statuses</MenuItem>
+            {EXPENSE_STATUSES.map((item) => (
+              <MenuItem key={item} value={item}>
+                {item}
+              </MenuItem>
+            ))}
+          </TextField>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Period</label>
-            <input
-              type="month"
-              value={period}
-              onChange={(event) => {
-                setPeriod(event.target.value);
-                setPage(1);
-              }}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
+          <TextField
+            size="small"
+            label="Period"
+            type="month"
+            value={period}
+            onChange={(event) => {
+              setPeriod(event.target.value);
+              setPage(1);
+            }}
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: { xs: "100%", lg: 170 } }}
+          />
 
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={() => {
-                setBranchId("");
-                setStatus("");
-                setPeriod("");
-                setPage(1);
-              }}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Reset Filters
-            </button>
-          </div>
-        </div>
-      </Card>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setBranchId("");
+              setStatus("");
+              setPeriod("");
+              setPage(1);
+            }}
+            sx={{ whiteSpace: "nowrap", width: { xs: "100%", lg: "auto" } }}
+          >
+            Reset Filters
+          </Button>
+        </Stack>
+      </FilterBar>
 
-      {combinedError ? (
-        <Card>
-          <p className="text-sm text-rose-600">{combinedError}</p>
-        </Card>
-      ) : null}
+      {combinedError ? <Alert severity="error">{combinedError}</Alert> : null}
 
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableHeadCell>Branch</TableHeadCell>
-              <TableHeadCell>Expense Type</TableHeadCell>
-              <TableHeadCell>Period</TableHeadCell>
-              <TableHeadCell>Due Date</TableHeadCell>
-              <TableHeadCell className="text-right">Amount</TableHeadCell>
-              <TableHeadCell className="text-right">Paid</TableHeadCell>
-              <TableHeadCell className="text-right">Balance</TableHeadCell>
-              <TableHeadCell>Status</TableHeadCell>
-            </TableRow>
-          </TableHead>
-
-          <TableBody>
-            {expensesQuery.isLoading ? (
+      <Paper sx={{ borderRadius: 3, border: "1px solid rgba(15, 23, 42, 0.1)", overflow: "hidden" }}>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-slate-500">
-                  Loading expenses...
-                </TableCell>
+                <TableCell>Branch</TableCell>
+                <TableCell>Type</TableCell>
+                <TableCell>Period</TableCell>
+                <TableCell>Due Date</TableCell>
+                <TableCell align="right">Amount</TableCell>
+                <TableCell align="right">Paid</TableCell>
+                <TableCell align="right">Balance</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
-            ) : (expensesQuery.data?.items.length ?? 0) === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center text-slate-500">
-                  No expenses found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              expensesQuery.data?.items.map((expense) => (
-                <TableRow
-                  key={expense.id}
-                  className="cursor-pointer hover:bg-slate-50"
-                  onClick={() => {
-                    setSelectedExpenseId(expense.id);
-                    setDrawerOpen(true);
-                  }}
-                >
-                  <TableCell className="font-medium text-slate-900">
-                    {branchMap.get(expense.branchId) ?? expense.branchId}
-                  </TableCell>
-                  <TableCell>{expense.expenseType}</TableCell>
-                  <TableCell>{expense.period}</TableCell>
-                  <TableCell>{formatDate(expense.dueDate)}</TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(toMoneyNumber(expense.amount), expense.currency)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(toMoneyNumber(expense.totalPaid), expense.currency)}
-                  </TableCell>
-                  <TableCell className="text-right font-medium text-slate-900">
-                    {formatCurrency(toMoneyNumber(expense.balanceRemaining), expense.currency)}
-                  </TableCell>
-                  <TableCell>
-                    <ExpenseStatusBadge status={expense.status} />
+            </TableHead>
+            <TableBody>
+              {expensesQuery.isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={9} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                    Loading expenses...
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              ) : rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} sx={{ py: 5 }}>
+                    <EmptyState
+                      icon={<FileText size={18} />}
+                      title="No expenses found"
+                      description="Adjust filters or create an expense record."
+                      actionLabel={canWrite ? "Create Expense" : undefined}
+                      onAction={canWrite ? () => setIsCreateOpen(true) : undefined}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rows.map((expense) => (
+                  <TableRow
+                    hover
+                    key={expense.id}
+                    onClick={() => {
+                      setSelectedExpenseId(expense.id);
+                      setDrawerOpen(true);
+                    }}
+                    sx={{ cursor: "pointer" }}
+                  >
+                    <TableCell sx={{ fontWeight: 600 }}>
+                      {branchMap.get(expense.branchId) ?? expense.branchId}
+                    </TableCell>
+                    <TableCell>{expense.expenseType}</TableCell>
+                    <TableCell>{expense.period}</TableCell>
+                    <TableCell>{formatDate(expense.dueDate)}</TableCell>
+                    <TableCell align="right">
+                      {formatCurrency(toMoneyNumber(expense.amount), expense.currency)}
+                    </TableCell>
+                    <TableCell align="right">
+                      {formatCurrency(toMoneyNumber(expense.totalPaid), expense.currency)}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600 }}>
+                      {formatCurrency(toMoneyNumber(expense.balanceRemaining), expense.currency)}
+                    </TableCell>
+                    <TableCell>
+                      <Chip size="small" color={statusColor(expense.status)} label={expense.status} />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedExpenseId(expense.id);
+                          setDrawerOpen(true);
+                        }}
+                      >
+                        Details
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
 
       <Pagination
         page={expensesQuery.data?.page ?? page}
@@ -440,416 +520,514 @@ export default function ExpensesPage() {
       <Modal
         open={isCreateOpen}
         title="Create Expense"
-        onClose={() => {
-          setIsCreateOpen(false);
-          setExpenseFormError("");
-        }}
+        onClose={closeCreateModal}
         footer={
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsCreateOpen(false)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
+          <>
+            <Button variant="text" color="secondary" onClick={closeCreateModal}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               form="create-expense-form"
+              variant="contained"
               disabled={!canWrite || createExpenseMutation.isPending}
-              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
             >
               {createExpenseMutation.isPending ? "Saving..." : "Save Expense"}
-            </button>
-          </div>
+            </Button>
+          </>
         }
       >
-        <form id="create-expense-form" className="space-y-4" onSubmit={onCreateExpenseSubmit}>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Branch</label>
-              <select
-                value={expenseForm.branchId}
-                onChange={(event) =>
-                  setExpenseForm((prev) => ({ ...prev, branchId: event.target.value }))
-                }
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="">Select branch</option>
-                {(branchesQuery.data?.items ?? []).map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <Box
+          component="form"
+          id="create-expense-form"
+          sx={{ mt: 1, display: "grid", gap: 1.6 }}
+          onSubmit={onCreateExpenseSubmit}
+        >
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.6}>
+            <TextField
+              select
+              size="small"
+              label="Branch"
+              value={expenseForm.branchId}
+              onChange={(event) =>
+                setExpenseForm((prev) => ({ ...prev, branchId: event.target.value }))
+              }
+              fullWidth
+              required
+            >
+              <MenuItem value="">Select branch</MenuItem>
+              {(branchesQuery.data?.items ?? []).map((branch) => (
+                <MenuItem key={branch.id} value={branch.id}>
+                  {branch.displayName}
+                </MenuItem>
+              ))}
+            </TextField>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Expense Type</label>
-              <select
-                value={expenseForm.expenseType}
-                onChange={(event) =>
-                  setExpenseForm((prev) => ({
-                    ...prev,
-                    expenseType: event.target.value as ExpenseType,
-                  }))
-                }
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              >
-                {EXPENSE_TYPES.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <TextField
+              select
+              size="small"
+              label="Expense Type"
+              value={expenseForm.expenseType}
+              onChange={(event) =>
+                setExpenseForm((prev) => ({
+                  ...prev,
+                  expenseType: event.target.value as ExpenseType,
+                }))
+              }
+              fullWidth
+            >
+              {EXPENSE_TYPES.map((item) => (
+                <MenuItem key={item} value={item}>
+                  {item}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Period</label>
-              <input
-                type="month"
-                value={expenseForm.period}
-                onChange={(event) =>
-                  setExpenseForm((prev) => ({ ...prev, period: event.target.value }))
-                }
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.6}>
+            <TextField
+              size="small"
+              label="Period"
+              type="month"
+              value={expenseForm.period}
+              onChange={(event) =>
+                setExpenseForm((prev) => ({ ...prev, period: event.target.value }))
+              }
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Due Date</label>
-              <input
-                type="date"
-                value={expenseForm.dueDate}
-                onChange={(event) =>
-                  setExpenseForm((prev) => ({ ...prev, dueDate: event.target.value }))
-                }
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
+            <TextField
+              size="small"
+              label="Due Date"
+              type="date"
+              value={expenseForm.dueDate}
+              onChange={(event) =>
+                setExpenseForm((prev) => ({ ...prev, dueDate: event.target.value }))
+              }
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Stack>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Amount</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={expenseForm.amount}
-                onChange={(event) =>
-                  setExpenseForm((prev) => ({
-                    ...prev,
-                    amount: Number(event.target.value),
-                  }))
-                }
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.6}>
+            <TextField
+              size="small"
+              label="Amount"
+              type="number"
+              value={expenseForm.amount}
+              onChange={(event) =>
+                setExpenseForm((prev) => ({
+                  ...prev,
+                  amount: Number(event.target.value),
+                }))
+              }
+              inputProps={{ min: 0, step: "0.01" }}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Currency"
+              value={expenseForm.currency || "USD"}
+              onChange={(event) =>
+                setExpenseForm((prev) => ({ ...prev, currency: event.target.value }))
+              }
+              inputProps={{ maxLength: 3 }}
+              fullWidth
+            />
+          </Stack>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Currency</label>
-              <input
-                value={expenseForm.currency || "USD"}
-                onChange={(event) =>
-                  setExpenseForm((prev) => ({ ...prev, currency: event.target.value }))
-                }
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                maxLength={3}
-              />
-            </div>
+          <TextField
+            size="small"
+            label="Vendor"
+            value={expenseForm.vendor || ""}
+            onChange={(event) =>
+              setExpenseForm((prev) => ({ ...prev, vendor: event.target.value }))
+            }
+            fullWidth
+          />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Vendor</label>
-              <input
-                value={expenseForm.vendor || ""}
-                onChange={(event) =>
-                  setExpenseForm((prev) => ({ ...prev, vendor: event.target.value }))
-                }
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
+          <TextField
+            size="small"
+            label="Notes"
+            value={expenseForm.notes || ""}
+            onChange={(event) =>
+              setExpenseForm((prev) => ({ ...prev, notes: event.target.value }))
+            }
+            fullWidth
+            multiline
+            minRows={2}
+          />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Notes</label>
-              <input
-                value={expenseForm.notes || ""}
-                onChange={(event) =>
-                  setExpenseForm((prev) => ({ ...prev, notes: event.target.value }))
-                }
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-
-          {expenseFormError ? <p className="text-sm text-rose-600">{expenseFormError}</p> : null}
-        </form>
+          {expenseFormError ? <Alert severity="warning">{expenseFormError}</Alert> : null}
+        </Box>
       </Modal>
 
-      <Drawer
+      <DrawerPanel
         open={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-          setSelectedExpenseId(null);
-        }}
-        title="Expense Detail"
+        onClose={closeDrawer}
+        title={detailQuery.data ? `Expense ${detailQuery.data.period}` : "Expense Detail"}
+        width={920}
       >
         {detailQuery.isLoading ? (
-          <p className="text-sm text-slate-600">Loading expense detail...</p>
+          <Typography variant="body2" color="text.secondary">
+            Loading expense detail...
+          </Typography>
         ) : !detailQuery.data ? (
-          <p className="text-sm text-slate-600">Select an expense to view details.</p>
+          <EmptyState title="No expense selected" description="Select an expense to view details." />
         ) : (
-          <div className="space-y-5">
-            <Card>
-              <CardHeader title="Summary" />
-              <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3">
-                <div>
-                  <p className="text-slate-500">Expense Type</p>
-                  <p className="font-medium text-slate-900">{detailQuery.data.expenseType}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Period</p>
-                  <p className="font-medium text-slate-900">{detailQuery.data.period}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Due Date</p>
-                  <p className="font-medium text-slate-900">{formatDate(detailQuery.data.dueDate)}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Amount</p>
-                  <p className="font-medium text-slate-900">
+          <Stack spacing={2.2}>
+            <Paper sx={{ p: 2, border: "1px solid rgba(15, 23, 42, 0.1)" }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.4 }}>
+                Summary
+              </Typography>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" },
+                  gap: 1.2,
+                }}
+              >
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Type
+                  </Typography>
+                  <Typography variant="body2">{detailQuery.data.expenseType}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Period
+                  </Typography>
+                  <Typography variant="body2">{detailQuery.data.period}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Due Date
+                  </Typography>
+                  <Typography variant="body2">{formatDate(detailQuery.data.dueDate)}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Status
+                  </Typography>
+                  <Box sx={{ mt: 0.4 }}>
+                    <Chip size="small" color={statusColor(detailQuery.data.status)} label={detailQuery.data.status} />
+                  </Box>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Amount
+                  </Typography>
+                  <Typography variant="body2">
                     {formatCurrency(toMoneyNumber(detailQuery.data.amount), detailQuery.data.currency)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Total Paid</p>
-                  <p className="font-medium text-slate-900">
-                    {formatCurrency(
-                      toMoneyNumber(detailQuery.data.totalPaid),
-                      detailQuery.data.currency,
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Balance</p>
-                  <p className="font-medium text-slate-900">
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Paid
+                  </Typography>
+                  <Typography variant="body2">
+                    {formatCurrency(toMoneyNumber(detailQuery.data.totalPaid), detailQuery.data.currency)}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Balance
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
                     {formatCurrency(
                       toMoneyNumber(detailQuery.data.balanceRemaining),
                       detailQuery.data.currency,
                     )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Status</p>
-                  <ExpenseStatusBadge status={detailQuery.data.status} />
-                </div>
-              </div>
-            </Card>
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Vendor
+                  </Typography>
+                  <Typography variant="body2">{detailQuery.data.vendor || "-"}</Typography>
+                </Box>
+              </Box>
+              {detailQuery.data.notes ? (
+                <>
+                  <Divider sx={{ my: 1.3 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    {detailQuery.data.notes}
+                  </Typography>
+                </>
+              ) : null}
+            </Paper>
 
-            <Card>
-              <CardHeader title="Payments" subtitle="Payment history for this expense" />
+            <Paper sx={{ p: 2, border: "1px solid rgba(15, 23, 42, 0.1)" }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.4 }}>
+                Payments
+              </Typography>
 
-              <div className="mb-4 overflow-x-auto rounded-md border border-slate-200">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Date</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-slate-500">Amount</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Reference</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
+              <TableContainer sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", borderRadius: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Paid Date</TableCell>
+                      <TableCell align="right">Amount</TableCell>
+                      <TableCell>Reference</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {detailQuery.data.payments.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="px-3 py-3 text-center text-slate-500">
-                          No payments yet.
-                        </td>
-                      </tr>
+                      <TableRow>
+                        <TableCell colSpan={3} align="center" sx={{ py: 3, color: "text.secondary" }}>
+                          No payments added yet.
+                        </TableCell>
+                      </TableRow>
                     ) : (
                       detailQuery.data.payments.map((payment) => (
-                        <tr key={payment.id}>
-                          <td className="px-3 py-2 text-slate-700">{formatDate(payment.paidDate)}</td>
-                          <td className="px-3 py-2 text-right text-slate-700">
+                        <TableRow key={payment.id}>
+                          <TableCell>{formatDate(payment.paidDate)}</TableCell>
+                          <TableCell align="right">
                             {formatCurrency(toMoneyNumber(payment.amountPaid), payment.currency)}
-                          </td>
-                          <td className="px-3 py-2 text-slate-700">{payment.reference || "-"}</td>
-                        </tr>
+                          </TableCell>
+                          <TableCell>{payment.reference || "-"}</TableCell>
+                        </TableRow>
                       ))
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </TableBody>
+                </Table>
+              </TableContainer>
 
-              <form onSubmit={onPaymentSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Paid Date</label>
-                  <input
-                    type="date"
-                    value={paymentForm.paidDate}
+              {canWrite ? (
+                <Box
+                  component="form"
+                  onSubmit={onPaymentSubmit}
+                  sx={{ mt: 1.6, display: "grid", gap: 1.2 }}
+                >
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
+                    <TextField
+                      size="small"
+                      type="date"
+                      label="Paid Date"
+                      value={paymentForm.paidDate}
+                      onChange={(event) =>
+                        setPaymentForm((prev) => ({ ...prev, paidDate: event.target.value }))
+                      }
+                      InputLabelProps={{ shrink: true }}
+                      fullWidth
+                    />
+                    <TextField
+                      size="small"
+                      type="number"
+                      label="Amount Paid"
+                      value={paymentForm.amountPaid}
+                      onChange={(event) =>
+                        setPaymentForm((prev) => ({
+                          ...prev,
+                          amountPaid: Number(event.target.value),
+                        }))
+                      }
+                      inputProps={{ min: 0, step: "0.01" }}
+                      fullWidth
+                    />
+                  </Stack>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
+                    <TextField
+                      size="small"
+                      label="Currency"
+                      value={paymentForm.currency || "USD"}
+                      onChange={(event) =>
+                        setPaymentForm((prev) => ({ ...prev, currency: event.target.value }))
+                      }
+                      inputProps={{ maxLength: 3 }}
+                      fullWidth
+                    />
+                    <TextField
+                      size="small"
+                      label="Reference"
+                      value={paymentForm.reference || ""}
+                      onChange={(event) =>
+                        setPaymentForm((prev) => ({ ...prev, reference: event.target.value }))
+                      }
+                      fullWidth
+                    />
+                  </Stack>
+                  <TextField
+                    size="small"
+                    label="Notes"
+                    value={paymentForm.notes || ""}
                     onChange={(event) =>
-                      setPaymentForm((prev) => ({ ...prev, paidDate: event.target.value }))
+                      setPaymentForm((prev) => ({ ...prev, notes: event.target.value }))
                     }
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    fullWidth
                   />
-                </div>
+                  <Stack direction="row" justifyContent="flex-end">
+                    <Button type="submit" variant="contained" disabled={addPaymentMutation.isPending}>
+                      {addPaymentMutation.isPending ? "Adding..." : "Add Payment"}
+                    </Button>
+                  </Stack>
+                </Box>
+              ) : null}
+            </Paper>
 
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Amount Paid</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={paymentForm.amountPaid}
-                    onChange={(event) =>
-                      setPaymentForm((prev) => ({
-                        ...prev,
-                        amountPaid: Number(event.target.value),
-                      }))
-                    }
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
+            <Paper sx={{ p: 2, border: "1px solid rgba(15, 23, 42, 0.1)" }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.4 }}>
+                Documents
+              </Typography>
 
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Currency</label>
-                  <input
-                    value={paymentForm.currency || "USD"}
-                    onChange={(event) =>
-                      setPaymentForm((prev) => ({ ...prev, currency: event.target.value }))
-                    }
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    maxLength={3}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Reference</label>
-                  <input
-                    value={paymentForm.reference || ""}
-                    onChange={(event) =>
-                      setPaymentForm((prev) => ({ ...prev, reference: event.target.value }))
-                    }
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div className="md:col-span-2 flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={!canWrite || addPaymentMutation.isPending}
-                    className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                  >
-                    {addPaymentMutation.isPending ? "Adding..." : "Add Payment"}
-                  </button>
-                </div>
-              </form>
-            </Card>
-
-            <Card>
-              <CardHeader title="Documents" subtitle="Expense attachments" />
-
-              <div className="mb-4 overflow-x-auto rounded-md border border-slate-200">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Type</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">File</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">Uploaded</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
+              <TableContainer sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", borderRadius: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Type</TableCell>
+                      <TableCell>File</TableCell>
+                      <TableCell>Size</TableCell>
+                      <TableCell>Uploaded</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {detailQuery.data.documents.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="px-3 py-3 text-center text-slate-500">
-                          No documents yet.
-                        </td>
-                      </tr>
+                      <TableRow>
+                        <TableCell colSpan={5} align="center" sx={{ py: 3, color: "text.secondary" }}>
+                          No documents uploaded.
+                        </TableCell>
+                      </TableRow>
                     ) : (
                       detailQuery.data.documents.map((document) => (
-                        <tr key={document.id}>
-                          <td className="px-3 py-2 text-slate-700">{document.docType}</td>
-                          <td className="px-3 py-2 text-slate-700">
-                            <a
-                              href={resolveDocumentUrl(document.id, document.storageKey)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-sky-700 hover:underline"
-                            >
-                              {document.fileName}
-                            </a>
-                          </td>
-                          <td className="px-3 py-2 text-slate-700">{formatDateTime(document.uploadedAt)}</td>
-                        </tr>
+                        <TableRow key={document.id}>
+                          <TableCell>{document.docType}</TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={0.8} alignItems="center">
+                              <FileText size={15} />
+                              <a
+                                href={resolveDocumentUrl(document.id, document.storageKey)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sky-700 hover:underline"
+                              >
+                                {document.fileName}
+                              </a>
+                            </Stack>
+                          </TableCell>
+                          <TableCell>
+                            {document.sizeBytes ? formatBytes(Number(document.sizeBytes) || 0) : "-"}
+                          </TableCell>
+                          <TableCell>{formatDateTime(document.uploadedAt)}</TableCell>
+                          <TableCell align="right">
+                            {canWrite ? (
+                              <Tooltip title="Delete document">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    disabled={deleteDocumentMutation.isPending}
+                                    onClick={() =>
+                                      setDocumentToDelete({
+                                        id: document.id,
+                                        fileName: document.fileName,
+                                      })
+                                    }
+                                  >
+                                    <Trash2 size={14} />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
                       ))
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </TableBody>
+                </Table>
+              </TableContainer>
 
-              <form onSubmit={onDocumentSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Document Type</label>
-                  <select
-                    value={documentForm.docType || "INVOICE"}
-                    onChange={(event) =>
-                      setDocumentForm((prev) => ({
-                        ...prev,
-                        docType: event.target.value as DocumentType,
-                      }))
-                    }
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    {DOCUMENT_TYPES.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {canWrite ? (
+                <Box
+                  component="form"
+                  onSubmit={onDocumentSubmit}
+                  sx={{ mt: 1.6, display: "grid", gap: 1.2 }}
+                >
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2}>
+                    <TextField
+                      select
+                      size="small"
+                      label="Document Type"
+                      value={documentForm.docType}
+                      onChange={(event) =>
+                        setDocumentForm((prev) => ({
+                          ...prev,
+                          docType: event.target.value as DocumentType,
+                        }))
+                      }
+                      fullWidth
+                    >
+                      {DOCUMENT_TYPES.map((item) => (
+                        <MenuItem key={item} value={item}>
+                          {item}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField
+                      size="small"
+                      label="Uploaded By"
+                      value={documentForm.uploadedBy}
+                      onChange={(event) =>
+                        setDocumentForm((prev) => ({
+                          ...prev,
+                          uploadedBy: event.target.value,
+                        }))
+                      }
+                      fullWidth
+                    />
+                  </Stack>
 
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Uploaded By</label>
-                  <input
-                    value={documentForm.uploadedBy}
-                    onChange={(event) =>
-                      setDocumentForm((prev) => ({ ...prev, uploadedBy: event.target.value }))
-                    }
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2} alignItems="center">
+                    <Button component="label" variant="outlined" startIcon={<Upload size={16} />}>
+                      Choose File
+                      <input
+                        hidden
+                        type="file"
+                        onChange={(event) => {
+                          setDocumentFile(event.target.files?.[0] ?? null);
+                          setDocumentFormError("");
+                        }}
+                      />
+                    </Button>
+                    <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-all" }}>
+                      {documentFile
+                        ? `${documentFile.name} (${formatBytes(documentFile.size)})`
+                        : "No file selected"}
+                    </Typography>
+                  </Stack>
 
-                <div className="md:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Choose File</label>
-                  <input
-                    type="file"
-                    onChange={(event) =>
-                      setDocumentFile(event.target.files?.[0] ?? null)
-                    }
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  />
-                  {documentFile ? (
-                    <p className="mt-1 text-xs text-slate-500">
-                      {documentFile.name} ({documentFile.type || "unknown"}, {documentFile.size} bytes)
-                    </p>
-                  ) : null}
-                  {documentFormError ? (
-                    <p className="mt-1 text-sm text-rose-600">{documentFormError}</p>
-                  ) : null}
-                </div>
+                  {documentFormError ? <Alert severity="warning">{documentFormError}</Alert> : null}
 
-                <div className="md:col-span-2 flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={!canWrite || addDocumentMutation.isPending}
-                    className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                  >
-                    {addDocumentMutation.isPending ? "Uploading..." : "Upload Document"}
-                  </button>
-                </div>
-              </form>
-            </Card>
-          </div>
+                  <Stack direction="row" justifyContent="flex-end">
+                    <Button type="submit" variant="contained" disabled={addDocumentMutation.isPending}>
+                      {addDocumentMutation.isPending ? "Uploading..." : "Upload Document"}
+                    </Button>
+                  </Stack>
+                </Box>
+              ) : null}
+            </Paper>
+          </Stack>
         )}
-      </Drawer>
+      </DrawerPanel>
+
+      <ConfirmDialog
+        open={Boolean(documentToDelete)}
+        title="Delete Document"
+        message={
+          documentToDelete
+            ? `Delete "${documentToDelete.fileName}"? This action cannot be undone.`
+            : "Delete this document?"
+        }
+        confirmLabel="Delete"
+        onConfirm={() => {
+          if (documentToDelete) {
+            deleteDocumentMutation.mutate(documentToDelete.id);
+          }
+        }}
+        onClose={() => setDocumentToDelete(null)}
+        loading={deleteDocumentMutation.isPending}
+      />
     </section>
   );
 }
-

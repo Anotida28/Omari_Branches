@@ -81,3 +81,7 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<Docume
   );
   return data.data;
 }
+
+export async function deleteDocumentById(documentId: string): Promise<void> {
+  await api.delete(`/api/documents/${documentId}`);
+}
