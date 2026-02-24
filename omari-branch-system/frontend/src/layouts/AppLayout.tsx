@@ -41,14 +41,54 @@ import { useAuth } from "../hooks/useAuth";
 import { ReadOnlyBanner } from "../shared/components/RoleGuardWrapper";
 
 const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/branches", label: "Branches", icon: Building2 },
-  { to: "/metrics", label: "Metrics", icon: ChartColumn },
-  { to: "/trends", label: "Trends", icon: LineChart },
-  { to: "/reports", label: "Reports", icon: BarChart3 },
-  { to: "/expenses", label: "Expenses", icon: DollarSign },
-  { to: "/alerts", label: "Alerts", icon: Bell },
-  { to: "/settings", label: "Settings", icon: Settings },
+  {
+    to: "/",
+    label: "Dashboard",
+    subtitle: "Executive finance visibility across branches",
+    icon: LayoutDashboard,
+  },
+  {
+    to: "/branches",
+    label: "Branches",
+    subtitle: "Manage branch locations, active status, and alert recipients",
+    icon: Building2,
+  },
+  {
+    to: "/metrics",
+    label: "Metrics",
+    subtitle: "Track branch cash movement and operational balances",
+    icon: ChartColumn,
+  },
+  {
+    to: "/trends",
+    label: "Trends",
+    subtitle: "Cash movement, exposure, and alerts health analytics",
+    icon: LineChart,
+  },
+  {
+    to: "/reports",
+    label: "Reports",
+    subtitle: "Generate summary snapshots and export branch-level finance data",
+    icon: BarChart3,
+  },
+  {
+    to: "/expenses",
+    label: "Expenses",
+    subtitle: "Track expense lifecycle, balances, payments, and supporting documents",
+    icon: DollarSign,
+  },
+  {
+    to: "/alerts",
+    label: "Alerts",
+    subtitle: "Monitor notification reliability and rule outcomes across branches",
+    icon: Bell,
+  },
+  {
+    to: "/settings",
+    label: "Settings",
+    subtitle: "System settings, operational checks, and role visibility",
+    icon: Settings,
+  },
 ];
 
 const EXPANDED_WIDTH = 280;
@@ -129,12 +169,11 @@ export default function AppLayout() {
     () => (collapsed && !isMobile ? COLLAPSED_WIDTH : EXPANDED_WIDTH),
     [collapsed, isMobile],
   );
-  const currentPageLabel = useMemo(() => {
+  const currentPage = useMemo(() => {
     if (location.pathname === "/") {
-      return "Dashboard";
+      return navItems[0];
     }
-    const match = navItems.find((item) => item.to !== "/" && location.pathname.startsWith(item.to));
-    return match?.label ?? "Dashboard";
+    return navItems.find((item) => item.to !== "/" && location.pathname.startsWith(item.to)) ?? navItems[0];
   }, [location.pathname]);
 
   const handleLogout = async () => {
@@ -151,7 +190,7 @@ export default function AppLayout() {
             src={logoImage}
             alt="Omari Branch System"
             sx={{
-              width: isSidebarCollapsed ? 56 : 82,
+              width: isSidebarCollapsed ? 72 : 112,
               height: "auto",
               borderRadius: 1.8,
               objectFit: "contain",
@@ -254,9 +293,24 @@ export default function AppLayout() {
                   </IconButton>
                 </Tooltip>
               )}
-              <Typography variant="h6" fontWeight={700} sx={{ fontSize: { xs: 17, sm: 20 } }}>
-                {currentPageLabel}
-              </Typography>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="h6" fontWeight={700} sx={{ fontSize: { xs: 17, sm: 20 }, lineHeight: 1.2 }}>
+                  {currentPage.label}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{
+                    display: { xs: "none", md: "block" },
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: { md: 340, lg: 520 },
+                  }}
+                >
+                  {currentPage.subtitle}
+                </Typography>
+              </Box>
             </Stack>
 
             <Stack direction="row" alignItems="center" spacing={1}>

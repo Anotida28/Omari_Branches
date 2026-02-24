@@ -107,7 +107,7 @@ export default function LoginPage() {
         py: { xs: 3, md: 4 },
         position: "relative",
         background:
-          "radial-gradient(1200px 560px at -15% -22%, rgba(32, 130, 90, 0.22), transparent 55%), radial-gradient(900px 460px at 110% 10%, rgba(171, 208, 187, 0.42), transparent 60%), linear-gradient(180deg, #d8eadf 0%, #cae0d2 100%)",
+          "radial-gradient(1200px 560px at -15% -22%, rgba(32, 130, 90, 0.24), transparent 55%), radial-gradient(900px 500px at 110% 10%, rgba(171, 208, 187, 0.45), transparent 60%), linear-gradient(180deg, #d9eadf 0%, #c7ddcf 100%)",
       }}
     >
       <Box
@@ -118,51 +118,57 @@ export default function LoginPage() {
           "&::before, &::after": {
             content: '""',
             position: "absolute",
-            borderRadius: 3,
-            bgcolor: "rgba(255,255,255,0.22)",
+            borderRadius: 4,
+            bgcolor: "rgba(255,255,255,0.2)",
             transform: "rotate(-14deg)",
           },
           "&::before": {
-            width: 170,
-            height: 170,
-            top: 30,
-            left: { xs: 8, md: 40 },
+            width: 184,
+            height: 184,
+            top: 28,
+            left: { xs: 4, md: 36 },
           },
           "&::after": {
-            width: 130,
-            height: 130,
-            right: { xs: 10, md: 56 },
-            bottom: 40,
+            width: 146,
+            height: 146,
+            right: { xs: 8, md: 50 },
+            bottom: 34,
           },
         }}
       />
 
       <Paper
+        className="motion-fade-up"
         sx={{
           width: "100%",
-          maxWidth: 1120,
+          maxWidth: 1160,
           mx: "auto",
-          borderRadius: { xs: 4, md: 5 },
+          borderRadius: { xs: 4, md: 5.5 },
           overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.6)",
-          boxShadow: "0 25px 50px rgba(18, 39, 23, 0.12)",
+          border: "1px solid rgba(255,255,255,0.62)",
+          boxShadow: "0 30px 60px rgba(18, 39, 23, 0.14)",
           display: "grid",
           gridTemplateColumns: {
             xs: "1fr",
-            md: "minmax(380px, 0.95fr) minmax(420px, 1.05fr)",
+            md: "minmax(430px, 1fr) minmax(420px, 1fr)",
           },
+          "@keyframes login-card-rise": {
+            from: { opacity: 0, transform: "translateY(10px)" },
+            to: { opacity: 1, transform: "translateY(0)" },
+          },
+          animation: "login-card-rise 420ms ease-out both",
           position: "relative",
           zIndex: 1,
         }}
       >
         <Box
           sx={{
-            px: { xs: 2.6, sm: 4 },
-            py: { xs: 3, md: 4 },
+            px: { xs: 2.8, sm: 4.6, md: 5.2 },
+            py: { xs: 3.2, md: 4.4 },
             bgcolor: "rgba(255, 255, 255, 0.96)",
             display: "flex",
             flexDirection: "column",
-            minHeight: { md: 640 },
+            minHeight: { md: 660 },
           }}
         >
           <Stack direction="row" alignItems="center">
@@ -170,7 +176,7 @@ export default function LoginPage() {
               component="img"
               src={logoImage}
               alt="Omari Branch System"
-              sx={{ height: 44, width: "auto" }}
+              sx={{ height: { xs: 56, sm: 64 }, width: "auto" }}
             />
           </Stack>
 
@@ -180,23 +186,39 @@ export default function LoginPage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              py: { xs: 4, md: 5 },
+              py: { xs: 4, md: 5.2 },
             }}
           >
-            <Box sx={{ width: "100%", maxWidth: 440 }}>
+            <Box sx={{ width: "100%", maxWidth: 460 }}>
               <Box sx={{ mb: 3.2, textAlign: "center" }}>
-                <Typography variant="h4" sx={{ fontSize: { xs: "2rem", md: "2.35rem" } }}>
+                <Typography
+                  variant="overline"
+                  sx={{
+                    color: "primary.main",
+                    letterSpacing: "0.08em",
+                    fontWeight: 700,
+                  }}
+                >
+                  Secure Login
+                </Typography>
+                <Typography
+                  variant="h3"
+                  sx={{
+                    fontSize: { xs: "2rem", md: "2.6rem" },
+                    mt: 0.4,
+                  }}
+                >
                   Welcome Back
                 </Typography>
-                <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+                <Typography variant="body1" color="text.secondary" sx={{ mt: 1, fontSize: { xs: 15, md: 16 } }}>
                   Sign in to continue managing branch operations.
                 </Typography>
               </Box>
 
               <form onSubmit={onSubmit} noValidate>
-                <Stack spacing={2}>
+                <Stack spacing={2.1} className="motion-stagger">
                   <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.7 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.7 }}>
                       Username
                     </Typography>
                     <TextField
@@ -219,9 +241,13 @@ export default function LoginPage() {
                       helperText={fieldErrors.username || " "}
                       InputProps={{
                         sx: {
-                          bgcolor: "#f3f5f6",
-                          "& fieldset": { borderColor: "transparent" },
-                          "&:hover fieldset": { borderColor: "#cad5cb" },
+                          bgcolor: "rgba(243, 247, 244, 0.94)",
+                          borderRadius: 2.2,
+                          "& input": {
+                            py: 1.6,
+                          },
+                          "& fieldset": { borderColor: "rgba(0,0,0,0)" },
+                          "&:hover fieldset": { borderColor: "#b9c8be" },
                           "&.Mui-focused fieldset": { borderColor: "#2f8c68" },
                         },
                       }}
@@ -229,7 +255,7 @@ export default function LoginPage() {
                   </Box>
 
                   <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.7 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.7 }}>
                       Password
                     </Typography>
                     <TextField
@@ -255,9 +281,13 @@ export default function LoginPage() {
                       helperText={fieldErrors.password || " "}
                       InputProps={{
                         sx: {
-                          bgcolor: "#f3f5f6",
-                          "& fieldset": { borderColor: "transparent" },
-                          "&:hover fieldset": { borderColor: "#cad5cb" },
+                          bgcolor: "rgba(243, 247, 244, 0.94)",
+                          borderRadius: 2.2,
+                          "& input": {
+                            py: 1.6,
+                          },
+                          "& fieldset": { borderColor: "rgba(0,0,0,0)" },
+                          "&:hover fieldset": { borderColor: "#b9c8be" },
                           "&.Mui-focused fieldset": { borderColor: "#2f8c68" },
                         },
                         endAdornment: (
@@ -299,15 +329,21 @@ export default function LoginPage() {
                     size="large"
                     disabled={isSubmitting}
                     sx={{
-                      mt: 0.8,
-                      py: 1.35,
+                      mt: 0.6,
+                      py: 1.45,
                       fontSize: "1rem",
                       bgcolor: "#0c5f3f",
-                      "&:hover": { bgcolor: "#0a4a31" },
+                      borderRadius: 2.3,
+                      boxShadow: "0 10px 22px rgba(12, 95, 63, 0.24)",
+                      "&:hover": { bgcolor: "#0a4a31", boxShadow: "0 12px 24px rgba(10, 74, 49, 0.28)" },
                     }}
                   >
                     {isSubmitting ? "Signing in..." : "Sign in"}
                   </Button>
+
+                  <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center", pt: 0.2 }}>
+                    Role-based access. Session secured by HQ authentication.
+                  </Typography>
                 </Stack>
               </form>
             </Box>
@@ -318,30 +354,68 @@ export default function LoginPage() {
           sx={{
             display: { xs: "none", md: "block" },
             position: "relative",
-            minHeight: 640,
-            backgroundImage: `url(${loginHero})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
+            minHeight: 660,
+            overflow: "hidden",
           }}
         >
+          <Box
+            component="img"
+            src={loginHero}
+            alt=""
+            aria-hidden
+            sx={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              transform: "scale(1.05)",
+              "@keyframes hero-drift": {
+                from: { transform: "scale(1.05) translate(0, 0)" },
+                to: { transform: "scale(1.1) translate(-10px, 8px)" },
+              },
+              animation: "hero-drift 16s ease-in-out infinite alternate",
+            }}
+          />
           <Box
             sx={{
               position: "absolute",
               inset: 0,
-              background: "linear-gradient(180deg, rgba(35,55,42,0.2) 0%, rgba(13,20,16,0.42) 100%)",
+              background:
+                "linear-gradient(180deg, rgba(25, 46, 34, 0.2) 0%, rgba(10, 16, 12, 0.58) 100%)",
             }}
           />
+          <Box
+            sx={{
+              position: "absolute",
+              top: 26,
+              left: 26,
+              px: 1.3,
+              py: 0.75,
+              borderRadius: 99,
+              bgcolor: "rgba(247, 251, 248, 0.18)",
+              border: "1px solid rgba(255,255,255,0.34)",
+              backdropFilter: "blur(6px)",
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{ color: "rgba(246, 251, 248, 0.95)", fontWeight: 700, letterSpacing: "0.07em" }}
+            >
+              LIVE FINANCE OPERATIONS
+            </Typography>
+          </Box>
           <Paper
             sx={{
               position: "absolute",
               left: 36,
               right: 36,
               bottom: 34,
-              p: 2.6,
+              p: 2.7,
               borderRadius: 3,
               bgcolor: "rgba(248, 250, 248, 0.2)",
               border: "1px solid rgba(255,255,255,0.38)",
-              backdropFilter: "blur(8px)",
+              backdropFilter: "blur(10px)",
               color: "white",
             }}
           >
@@ -351,6 +425,32 @@ export default function LoginPage() {
             <Typography variant="body2" sx={{ color: "rgba(245, 250, 246, 0.9)", maxWidth: 360 }}>
               Track expenses, monitor balances, and keep every branch aligned from HQ.
             </Typography>
+            <Stack direction="row" spacing={2.2} sx={{ mt: 2.1, pt: 1.8, borderTop: "1px solid rgba(255,255,255,0.18)" }}>
+              <Box>
+                <Typography variant="subtitle2" sx={{ color: "white", fontWeight: 700 }}>
+                  Live
+                </Typography>
+                <Typography variant="caption" sx={{ color: "rgba(245, 250, 246, 0.76)" }}>
+                  Monitoring
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" sx={{ color: "white", fontWeight: 700 }}>
+                  Role-Based
+                </Typography>
+                <Typography variant="caption" sx={{ color: "rgba(245, 250, 246, 0.76)" }}>
+                  Access Control
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="subtitle2" sx={{ color: "white", fontWeight: 700 }}>
+                  HQ
+                </Typography>
+                <Typography variant="caption" sx={{ color: "rgba(245, 250, 246, 0.76)" }}>
+                  Branch Oversight
+                </Typography>
+              </Box>
+            </Stack>
           </Paper>
         </Box>
       </Paper>
