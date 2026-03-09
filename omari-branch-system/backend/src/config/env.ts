@@ -3,6 +3,33 @@ import { z } from "zod";
 
 dotenv.config();
 
+function normalizeOptionalString(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeOptionalBoolean(value: unknown): unknown {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+
+  return value;
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).optional(),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -16,6 +43,15 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().email("EMAIL_FROM must be a valid email address").default("noreply@example.com"),
   EMAIL_USER: z.string().email("EMAIL_USER must be a valid email address").default("noreply@example.com"),
   EMAIL_APP_PASSWORD: z.string().min(1).default("disabled"),
+  SHARED_AUTH_URL: z.preprocess(
+    normalizeOptionalString,
+    z.string().url("SHARED_AUTH_URL must be a valid URL").optional(),
+  ),
+  SHARED_AUTH_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(8000),
+  SHARED_AUTH_ENABLED: z.preprocess(
+    normalizeOptionalBoolean,
+    z.boolean().default(true),
+  ),
 });
 
 const parsed = envSchema.safeParse(process.env);
