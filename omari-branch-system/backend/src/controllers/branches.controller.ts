@@ -18,6 +18,7 @@ const createBranchSchema = z
     label: z.string().min(2),
     address: z.string().optional(),
     isActive: z.boolean().optional(),
+    agentLineNumbers: z.array(z.string().min(1)).min(1),
   })
   .strict();
 
@@ -27,6 +28,7 @@ const updateBranchSchema = z
     label: z.string().min(2).optional(),
     address: z.string().optional(),
     isActive: z.boolean().optional(),
+    agentLineNumbers: z.array(z.string().min(1)).optional(),
   })
   .strict()
   .refine((data) => Object.keys(data).length > 0, {

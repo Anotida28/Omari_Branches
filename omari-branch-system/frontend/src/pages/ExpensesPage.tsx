@@ -1,6 +1,6 @@
 ﻿import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Plus, Trash2, Upload } from "lucide-react";
+import { FileText, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import {
   Alert,
   Box,
@@ -26,14 +26,17 @@ import { useSearchParams } from "react-router-dom";
 import { Modal } from "../components/ui/Modal";
 import { Pagination } from "../components/ui/Pagination";
 import { useAuth } from "../hooks/useAuth";
-import { getErrorMessage } from "../services/api";
+import { getErrorMessage, resolveApiUrl } from "../services/api";
 import { listBranches } from "../services/branches";
 import {
   createExpense,
   createPayment,
+  deleteExpense,
   deleteDocumentById,
+  deletePayment,
   getExpenseById,
   listExpenses,
+  updateExpense,
   uploadDocument,
 } from "../services/expenses";
 import { formatCurrency, formatDate, formatDateTime, toMoneyNumber } from "../services/format";
@@ -47,17 +50,27 @@ import type {
   DocumentType,
   ExpenseStatus,
   ExpenseType,
+  UpdateExpenseInput,
 } from "../types/api";
 
 const PAGE_SIZE = 10;
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const EXPENSE_TYPES: ExpenseType[] = ["RENT", "ZESA", "WIFI", "OTHER"];
 const EXPENSE_STATUSES: ExpenseStatus[] = ["PENDING", "PAID", "OVERDUE"];
 const DOCUMENT_TYPES: DocumentType[] = ["INVOICE", "RECEIPT", "OTHER"];
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:4000";
 
 const INITIAL_EXPENSE_FORM: CreateExpenseInput = {
   branchId: "",
+  expenseType: "RENT",
+  period: new Date().toISOString().slice(0, 7),
+  dueDate: new Date().toISOString().slice(0, 10),
+  amount: 0,
+  currency: "USD",
+  vendor: "",
+  notes: "",
+};
+
+const INITIAL_EDIT_EXPENSE_FORM: UpdateExpenseInput = {
   expenseType: "RENT",
   period: new Date().toISOString().slice(0, 7),
   dueDate: new Date().toISOString().slice(0, 10),
@@ -90,8 +103,7 @@ function resolveDocumentUrl(documentId: string, storageKey: string): string {
     return storageKey;
   }
 
-  const base = API_BASE_URL.replace(/\/+$/, "");
-  return `${base}/api/documents/${documentId}/open`;
+  return resolveApiUrl(`/api/documents/${documentId}/open`);
 }
 
 function formatBytes(sizeBytes: number): string {
@@ -130,9 +142,14 @@ export default function ExpensesPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [expenseForm, setExpenseForm] = useState<CreateExpenseInput>(INITIAL_EXPENSE_FORM);
   const [expenseFormError, setExpenseFormError] = useState("");
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editExpenseForm, setEditExpenseForm] = useState<UpdateExpenseInput>(INITIAL_EDIT_EXPENSE_FORM);
+  const [editExpenseFormError, setEditExpenseFormError] = useState("");
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<{ id: string; label: string } | null>(null);
+  const [paymentToDelete, setPaymentToDelete] = useState<{ id: string; label: string } | null>(null);
 
   const [paymentForm, setPaymentForm] = useState<CreatePaymentInput>(INITIAL_PAYMENT_FORM);
   const [documentForm, setDocumentForm] = useState<DocumentUploadForm>({
@@ -148,12 +165,17 @@ export default function ExpensesPage() {
   useEffect(() => {
     if (!selectedExpenseId) {
       setPaymentForm(INITIAL_PAYMENT_FORM);
+      setIsEditOpen(false);
+      setEditExpenseForm(INITIAL_EDIT_EXPENSE_FORM);
+      setEditExpenseFormError("");
       setDocumentForm({
         ...INITIAL_DOCUMENT_FORM,
         uploadedBy: user?.username ?? "",
       });
       setDocumentFile(null);
       setDocumentFormError("");
+      setExpenseToDelete(null);
+      setPaymentToDelete(null);
     }
   }, [selectedExpenseId, user?.username]);
 
@@ -207,6 +229,27 @@ export default function ExpensesPage() {
     },
   });
 
+  const updateExpenseMutation = useMutation({
+    mutationFn: ({ expenseId, payload }: { expenseId: string; payload: UpdateExpenseInput }) =>
+      updateExpense(expenseId, payload),
+    onSuccess: (_, variables) => {
+      setIsEditOpen(false);
+      setEditExpenseForm(INITIAL_EDIT_EXPENSE_FORM);
+      setEditExpenseFormError("");
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["expense", variables.expenseId] });
+    },
+  });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: deleteExpense,
+    onSuccess: () => {
+      setExpenseToDelete(null);
+      closeDrawer();
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    },
+  });
+
   const addPaymentMutation = useMutation({
     mutationFn: ({ expenseId, payload }: { expenseId: string; payload: CreatePaymentInput }) =>
       createPayment(expenseId, payload),
@@ -214,6 +257,17 @@ export default function ExpensesPage() {
       setPaymentForm(INITIAL_PAYMENT_FORM);
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["expense", variables.expenseId] });
+    },
+  });
+
+  const deletePaymentMutation = useMutation({
+    mutationFn: deletePayment,
+    onSuccess: () => {
+      setPaymentToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      if (selectedExpenseId) {
+        queryClient.invalidateQueries({ queryKey: ["expense", selectedExpenseId] });
+      }
     },
   });
 
@@ -259,8 +313,17 @@ export default function ExpensesPage() {
     if (createExpenseMutation.isError) {
       return getErrorMessage(createExpenseMutation.error);
     }
+    if (updateExpenseMutation.isError) {
+      return getErrorMessage(updateExpenseMutation.error);
+    }
+    if (deleteExpenseMutation.isError) {
+      return getErrorMessage(deleteExpenseMutation.error);
+    }
     if (addPaymentMutation.isError) {
       return getErrorMessage(addPaymentMutation.error);
+    }
+    if (deletePaymentMutation.isError) {
+      return getErrorMessage(deletePaymentMutation.error);
     }
     if (addDocumentMutation.isError) {
       return getErrorMessage(addDocumentMutation.error);
@@ -295,6 +358,7 @@ export default function ExpensesPage() {
       currency: (expenseForm.currency || "USD").toUpperCase(),
       vendor: expenseForm.vendor?.trim() || undefined,
       notes: expenseForm.notes?.trim() || undefined,
+      createdBy: user?.username ?? undefined,
     });
   };
 
@@ -313,6 +377,7 @@ export default function ExpensesPage() {
         currency: (paymentForm.currency || "USD").toUpperCase(),
         reference: paymentForm.reference?.trim() || undefined,
         notes: paymentForm.notes?.trim() || undefined,
+        createdBy: user?.username ?? undefined,
       },
     });
   };
@@ -346,15 +411,72 @@ export default function ExpensesPage() {
     });
   };
 
+  const openEditExpenseModal = () => {
+    if (!detailQuery.data) {
+      return;
+    }
+
+    setEditExpenseForm({
+      expenseType: detailQuery.data.expenseType,
+      period: detailQuery.data.period,
+      dueDate: detailQuery.data.dueDate,
+      amount: toMoneyNumber(detailQuery.data.amount),
+      currency: detailQuery.data.currency,
+      vendor: detailQuery.data.vendor ?? "",
+      notes: detailQuery.data.notes ?? "",
+    });
+    setEditExpenseFormError("");
+    setIsEditOpen(true);
+  };
+
+  const onEditExpenseSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!canWrite || !selectedExpenseId) {
+      return;
+    }
+
+    if (!editExpenseForm.period || !editExpenseForm.dueDate) {
+      setEditExpenseFormError("Period and due date are required.");
+      return;
+    }
+
+    if (editExpenseForm.amount === undefined || Number(editExpenseForm.amount) < 0) {
+      setEditExpenseFormError("Amount must be zero or greater.");
+      return;
+    }
+
+    setEditExpenseFormError("");
+    updateExpenseMutation.mutate({
+      expenseId: selectedExpenseId,
+      payload: {
+        expenseType: editExpenseForm.expenseType,
+        period: editExpenseForm.period,
+        dueDate: editExpenseForm.dueDate,
+        amount: Number(editExpenseForm.amount),
+        currency: (editExpenseForm.currency || "USD").toUpperCase(),
+        vendor: editExpenseForm.vendor?.trim() || undefined,
+        notes: editExpenseForm.notes?.trim() || undefined,
+      },
+    });
+  };
+
   const closeCreateModal = () => {
     setIsCreateOpen(false);
     setExpenseFormError("");
+  };
+
+  const closeEditModal = () => {
+    setIsEditOpen(false);
+    setEditExpenseFormError("");
   };
 
   const closeDrawer = () => {
     setDrawerOpen(false);
     setSelectedExpenseId(null);
     setDocumentToDelete(null);
+    setPaymentToDelete(null);
+    setExpenseToDelete(null);
   };
 
   const rows = expensesQuery.data?.items ?? [];
@@ -680,6 +802,134 @@ export default function ExpensesPage() {
         </Box>
       </Modal>
 
+      <Modal
+        open={isEditOpen}
+        title="Edit Expense"
+        onClose={closeEditModal}
+        footer={
+          <>
+            <Button variant="text" color="secondary" onClick={closeEditModal}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="edit-expense-form"
+              variant="contained"
+              disabled={!canWrite || updateExpenseMutation.isPending}
+            >
+              {updateExpenseMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </>
+        }
+      >
+        <Box
+          component="form"
+          id="edit-expense-form"
+          sx={{ mt: 1, display: "grid", gap: 1.6 }}
+          onSubmit={onEditExpenseSubmit}
+        >
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.6}>
+            <TextField
+              select
+              size="small"
+              label="Expense Type"
+              value={editExpenseForm.expenseType || "RENT"}
+              onChange={(event) =>
+                setEditExpenseForm((prev) => ({
+                  ...prev,
+                  expenseType: event.target.value as ExpenseType,
+                }))
+              }
+              fullWidth
+            >
+              {EXPENSE_TYPES.map((item) => (
+                <MenuItem key={item} value={item}>
+                  {item}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              size="small"
+              label="Period"
+              type="month"
+              value={editExpenseForm.period || ""}
+              onChange={(event) =>
+                setEditExpenseForm((prev) => ({ ...prev, period: event.target.value }))
+              }
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Stack>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.6}>
+            <TextField
+              size="small"
+              label="Due Date"
+              type="date"
+              value={editExpenseForm.dueDate || ""}
+              onChange={(event) =>
+                setEditExpenseForm((prev) => ({ ...prev, dueDate: event.target.value }))
+              }
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+
+            <TextField
+              size="small"
+              label="Amount"
+              type="number"
+              value={editExpenseForm.amount ?? 0}
+              onChange={(event) =>
+                setEditExpenseForm((prev) => ({
+                  ...prev,
+                  amount: Number(event.target.value),
+                }))
+              }
+              inputProps={{ min: 0, step: "0.01" }}
+              fullWidth
+            />
+          </Stack>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.6}>
+            <TextField
+              size="small"
+              label="Currency"
+              value={editExpenseForm.currency || "USD"}
+              onChange={(event) =>
+                setEditExpenseForm((prev) => ({ ...prev, currency: event.target.value }))
+              }
+              inputProps={{ maxLength: 3 }}
+              fullWidth
+            />
+
+            <TextField
+              size="small"
+              label="Vendor"
+              value={editExpenseForm.vendor || ""}
+              onChange={(event) =>
+                setEditExpenseForm((prev) => ({ ...prev, vendor: event.target.value }))
+              }
+              fullWidth
+            />
+          </Stack>
+
+          <TextField
+            size="small"
+            label="Notes"
+            value={editExpenseForm.notes || ""}
+            onChange={(event) =>
+              setEditExpenseForm((prev) => ({ ...prev, notes: event.target.value }))
+            }
+            fullWidth
+            multiline
+            minRows={2}
+          />
+
+          {editExpenseFormError ? <Alert severity="warning">{editExpenseFormError}</Alert> : null}
+        </Box>
+      </Modal>
+
       <DrawerPanel
         open={drawerOpen}
         onClose={closeDrawer}
@@ -695,9 +945,41 @@ export default function ExpensesPage() {
         ) : (
           <Stack spacing={2.2}>
             <Paper sx={{ p: 2, border: "1px solid rgba(15, 23, 42, 0.1)" }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.4 }}>
-                Summary
-              </Typography>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                justifyContent="space-between"
+                alignItems={{ sm: "center" }}
+                spacing={1}
+                sx={{ mb: 1.4 }}
+              >
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  Summary
+                </Typography>
+                {canWrite ? (
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<Pencil size={14} />}
+                      onClick={openEditExpenseModal}
+                    >
+                      Edit Expense
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<Trash2 size={14} />}
+                      onClick={() =>
+                        setExpenseToDelete({
+                          id: detailQuery.data.id,
+                          label: `${detailQuery.data.expenseType} (${detailQuery.data.period})`,
+                        })
+                      }
+                    >
+                      Delete Expense
+                    </Button>
+                  </Stack>
+                ) : null}
+              </Stack>
               <Box
                 sx={{
                   display: "grid",
@@ -787,12 +1069,13 @@ export default function ExpensesPage() {
                       <TableCell>Paid Date</TableCell>
                       <TableCell align="right">Amount</TableCell>
                       <TableCell>Reference</TableCell>
+                      <TableCell align="right">Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {detailQuery.data.payments.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={3} align="center" sx={{ py: 3, color: "text.secondary" }}>
+                        <TableCell colSpan={4} align="center" sx={{ py: 3, color: "text.secondary" }}>
                           No payments added yet.
                         </TableCell>
                       </TableRow>
@@ -804,6 +1087,30 @@ export default function ExpensesPage() {
                             {formatCurrency(toMoneyNumber(payment.amountPaid), payment.currency)}
                           </TableCell>
                           <TableCell>{payment.reference || "-"}</TableCell>
+                          <TableCell align="right">
+                            {canWrite ? (
+                              <Tooltip title="Delete payment">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    disabled={deletePaymentMutation.isPending}
+                                    onClick={() =>
+                                      setPaymentToDelete({
+                                        id: payment.id,
+                                        label: `${formatDate(payment.paidDate)} - ${formatCurrency(
+                                          toMoneyNumber(payment.amountPaid),
+                                          payment.currency,
+                                        )}`,
+                                      })
+                                    }
+                                  >
+                                    <Trash2 size={14} />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            ) : null}
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -1027,6 +1334,42 @@ export default function ExpensesPage() {
           </Stack>
         )}
       </DrawerPanel>
+
+      <ConfirmDialog
+        open={Boolean(expenseToDelete)}
+        title="Delete Expense"
+        message={
+          expenseToDelete
+            ? `Delete ${expenseToDelete.label}? This will also remove related payments, documents, and alert logs.`
+            : "Delete this expense?"
+        }
+        confirmLabel="Delete"
+        onConfirm={() => {
+          if (expenseToDelete) {
+            deleteExpenseMutation.mutate(expenseToDelete.id);
+          }
+        }}
+        onClose={() => setExpenseToDelete(null)}
+        loading={deleteExpenseMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={Boolean(paymentToDelete)}
+        title="Delete Payment"
+        message={
+          paymentToDelete
+            ? `Delete payment ${paymentToDelete.label}? The expense balance and status will be recalculated.`
+            : "Delete this payment?"
+        }
+        confirmLabel="Delete"
+        onConfirm={() => {
+          if (paymentToDelete) {
+            deletePaymentMutation.mutate(paymentToDelete.id);
+          }
+        }}
+        onClose={() => setPaymentToDelete(null)}
+        loading={deletePaymentMutation.isPending}
+      />
 
       <ConfirmDialog
         open={Boolean(documentToDelete)}

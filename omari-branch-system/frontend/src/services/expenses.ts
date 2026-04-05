@@ -10,6 +10,7 @@ import type {
   ExpenseDetail,
   ExpensesListParams,
   PaginatedResponse,
+  UpdateExpenseInput,
   UploadDocumentInput,
 } from "../types/api";
 
@@ -32,6 +33,21 @@ export async function getExpenseById(expenseId: string): Promise<ExpenseDetail> 
 export async function createExpense(input: CreateExpenseInput): Promise<Expense> {
   const { data } = await api.post<ApiDataResponse<Expense>>("/api/expenses", input);
   return data.data;
+}
+
+export async function updateExpense(
+  expenseId: string,
+  input: UpdateExpenseInput,
+): Promise<Expense> {
+  const { data } = await api.patch<ApiDataResponse<Expense>>(
+    `/api/expenses/${expenseId}`,
+    input,
+  );
+  return data.data;
+}
+
+export async function deleteExpense(expenseId: string): Promise<void> {
+  await api.delete(`/api/expenses/${expenseId}`);
 }
 
 export async function createPayment(
@@ -84,4 +100,8 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<Docume
 
 export async function deleteDocumentById(documentId: string): Promise<void> {
   await api.delete(`/api/documents/${documentId}`);
+}
+
+export async function deletePayment(paymentId: string): Promise<void> {
+  await api.delete(`/api/payments/${paymentId}`);
 }

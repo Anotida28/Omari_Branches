@@ -1,0 +1,10 @@
+
+> omari-branch-system-backend@0.1.0 dev
+> ts-node-dev --respawn --transpile-only src/server.ts
+
+[INFO] 13:01:55 ts-node-dev ver. 2.0.0 (using ts-node ver. 10.9.2, typescript ver. 5.9.3)
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *

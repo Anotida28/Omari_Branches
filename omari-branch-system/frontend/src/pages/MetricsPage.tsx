@@ -29,7 +29,7 @@ import type { UpsertMetricInput } from "../types/api";
 const PAGE_SIZE = 10;
 
 const DEFAULT_UPSERT: UpsertMetricInput = {
-  branchId: "",
+  agentLineId: "",
   date: new Date().toISOString().slice(0, 10),
   cashBalance: 0,
   eFloatBalance: 0,
@@ -52,6 +52,7 @@ export default function MetricsPage() {
 
   const [isUpsertOpen, setIsUpsertOpen] = useState(false);
   const [upsertForm, setUpsertForm] = useState<UpsertMetricInput>(DEFAULT_UPSERT);
+  const [upsertBranchId, setUpsertBranchId] = useState("");
   const [formError, setFormError] = useState("");
 
   const page = parsePage(searchParams.get("page"));
@@ -94,6 +95,7 @@ export default function MetricsPage() {
       setFormError("");
       setIsUpsertOpen(false);
       setUpsertForm(DEFAULT_UPSERT);
+      setUpsertBranchId("");
       queryClient.invalidateQueries({ queryKey: ["metrics"] });
     },
   });
@@ -120,8 +122,8 @@ export default function MetricsPage() {
       return;
     }
 
-    if (!upsertForm.branchId) {
-      setFormError("Branch is required.");
+    if (!upsertForm.agentLineId) {
+      setFormError("Agent line is required.");
       return;
     }
 
@@ -137,6 +139,13 @@ export default function MetricsPage() {
       cashOutValue: Number(upsertForm.cashOutValue),
     });
   };
+
+  const selectedUpsertBranch = useMemo(
+    () =>
+      (branchesQuery.data?.items ?? []).find((branch) => branch.id === upsertBranchId) ??
+      null,
+    [branchesQuery.data?.items, upsertBranchId],
+  );
 
   const errorMessage = (() => {
     if (branchesQuery.isError) {
@@ -247,19 +256,20 @@ export default function MetricsPage() {
             <TableCell align="right">Cash on Branch</TableCell>
             <TableCell align="right">Cash In / Out</TableCell>
             <TableCell align="right">Net Cash</TableCell>
+            <TableCell align="right">Source Lines</TableCell>
             <TableCell align="right">Actions</TableCell>
           </TableRow>
         }
         body={
           metricsQuery.isLoading ? (
             <TableRow>
-              <TableCell colSpan={9} align="center" sx={{ py: 4, color: "text.secondary" }}>
+              <TableCell colSpan={10} align="center" sx={{ py: 4, color: "text.secondary" }}>
                 Loading metrics...
               </TableCell>
             </TableRow>
           ) : (metricsQuery.data?.items.length ?? 0) === 0 ? (
             <TableRow>
-              <TableCell colSpan={9} sx={{ py: 5 }}>
+              <TableCell colSpan={10} sx={{ py: 5 }}>
                 <EmptyState
                   title="No metrics found"
                   description="Adjust filters or create the first metric entry."
@@ -282,6 +292,7 @@ export default function MetricsPage() {
                     {metric.cashInVolume}/{metric.cashOutVolume}
                   </TableCell>
                   <TableCell align="right">{formatCurrency(toMoneyNumber(metric.netCashValue))}</TableCell>
+                  <TableCell align="right">{metric.sourceLineCount}</TableCell>
                   <TableCell align="right">
                     <Button
                       variant="outlined"
@@ -323,6 +334,7 @@ export default function MetricsPage() {
               onClick={() => {
                 setIsUpsertOpen(false);
                 setFormError("");
+                setUpsertBranchId("");
               }}
             >
               Cancel
@@ -343,16 +355,34 @@ export default function MetricsPage() {
             <TextField
               select
               label="Branch"
-              value={upsertForm.branchId}
-              onChange={(event) =>
-                setUpsertForm((prev) => ({ ...prev, branchId: event.target.value }))
-              }
+              value={upsertBranchId}
+              onChange={(event) => {
+                setUpsertBranchId(event.target.value);
+                setUpsertForm((prev) => ({ ...prev, agentLineId: "" }));
+              }}
               fullWidth
             >
               <MenuItem value="">Select branch</MenuItem>
               {(branchesQuery.data?.items ?? []).map((branch) => (
                 <MenuItem key={branch.id} value={branch.id}>
                   {branch.displayName}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Agent Line"
+              value={upsertForm.agentLineId}
+              onChange={(event) =>
+                setUpsertForm((prev) => ({ ...prev, agentLineId: event.target.value }))
+              }
+              disabled={!upsertBranchId}
+              fullWidth
+            >
+              <MenuItem value="">Select agent line</MenuItem>
+              {(selectedUpsertBranch?.agentLines ?? []).map((line) => (
+                <MenuItem key={line.id} value={line.id}>
+                  {line.lineNumber}
                 </MenuItem>
               ))}
             </TextField>

@@ -62,12 +62,29 @@ model Branch {
   updatedAt DateTime @updatedAt
 
   recipients BranchRecipient[]
+  agentLines BranchAgentLine[]
   metrics    BranchMetric[]
   expenses   Expense[]
 
   @@unique([city, label])
   @@index([city])
   @@index([label])
+}
+
+model BranchAgentLine {
+  id         BigInt   @id @default(autoincrement())
+  branchId   BigInt
+  lineNumber String   @db.VarChar(60)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  branch  Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  metrics AgentLineMetric[]
+
+  @@unique([branchId, lineNumber], name: "uq_branch_line_number")
+  @@index([lineNumber])
+  @@index([branchId, isActive])
 }
 
 model BranchRecipient {
@@ -108,6 +125,31 @@ model BranchMetric {
   @@unique([branchId, metricDate], name: "uq_branch_date")
   @@index([metricDate])
   @@index([branchId, metricDate])
+}
+
+model AgentLineMetric {
+  id          BigInt   @id @default(autoincrement())
+  agentLineId BigInt
+  metricDate  DateTime @db.Date
+
+  cashBalance   Decimal @default(0.00) @db.Decimal(18, 2)
+  eFloatBalance Decimal @default(0.00) @db.Decimal(18, 2)
+  cashInVault   Decimal @default(0.00) @db.Decimal(18, 2)
+  cashInVolume  Int     @default(0) @db.UnsignedInt
+  cashInValue   Decimal @default(0.00) @db.Decimal(18, 2)
+  cashOutVolume Int     @default(0) @db.UnsignedInt
+  cashOutValue  Decimal @default(0.00) @db.Decimal(18, 2)
+
+  notes     String?  @db.VarChar(500)
+  createdBy String?  @db.VarChar(120)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agentLine BranchAgentLine @relation(fields: [agentLineId], references: [id], onDelete: Cascade)
+
+  @@unique([agentLineId, metricDate], name: "uq_agent_line_date")
+  @@index([metricDate])
+  @@index([agentLineId, metricDate])
 }
 
 model Expense {

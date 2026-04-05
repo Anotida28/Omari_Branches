@@ -49,6 +49,7 @@ const INITIAL_FORM: CreateBranchInput = {
   label: "",
   address: "",
   isActive: true,
+  agentLineNumbers: [],
 };
 
 const INITIAL_RECIPIENT_FORM: CreateRecipientInput = {
@@ -72,6 +73,7 @@ export default function BranchesPage() {
   const [page, setPage] = useState(initialPage);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<CreateBranchInput>(INITIAL_FORM);
+  const [agentLinesText, setAgentLinesText] = useState("");
   const [formError, setFormError] = useState("");
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -116,6 +118,7 @@ export default function BranchesPage() {
     onSuccess: () => {
       setIsCreateOpen(false);
       setForm(INITIAL_FORM);
+      setAgentLinesText("");
       setFormError("");
       queryClient.invalidateQueries({ queryKey: ["branches"] });
     },
@@ -219,12 +222,27 @@ export default function BranchesPage() {
       return;
     }
 
+    const parsedAgentLines = Array.from(
+      new Set(
+        agentLinesText
+          .split(",")
+          .map((lineNumber) => lineNumber.trim())
+          .filter((lineNumber) => lineNumber.length > 0),
+      ),
+    );
+
+    if (parsedAgentLines.length === 0) {
+      setFormError("At least one agent line number is required.");
+      return;
+    }
+
     setFormError("");
     createMutation.mutate({
       city: form.city.trim(),
       label: form.label.trim(),
       address: form.address?.trim() || undefined,
       isActive: form.isActive,
+      agentLineNumbers: parsedAgentLines,
     });
   };
 
@@ -313,6 +331,7 @@ export default function BranchesPage() {
               <TableRow>
                 <TableCell>City</TableCell>
                 <TableCell>Label</TableCell>
+                <TableCell>Agent Lines</TableCell>
                 <TableCell>Address</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Actions</TableCell>
@@ -321,13 +340,13 @@ export default function BranchesPage() {
             <TableBody>
               {branchesQuery.isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
                     Loading branches...
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 5 }}>
                     <EmptyState
                       title="No branches found"
                       description="Try a different search term or create the first branch."
@@ -339,6 +358,11 @@ export default function BranchesPage() {
                   <TableRow hover key={branch.id}>
                     <TableCell sx={{ fontWeight: 600 }}>{branch.city}</TableCell>
                     <TableCell>{branch.label}</TableCell>
+                    <TableCell>
+                      {branch.agentLines.length > 0
+                        ? branch.agentLines.map((line) => line.lineNumber).join(", ")
+                        : "-"}
+                    </TableCell>
                     <TableCell>{branch.address || "-"}</TableCell>
                     <TableCell>
                       <Chip
@@ -408,11 +432,20 @@ export default function BranchesPage() {
         title="Create Branch"
         onClose={() => {
           setIsCreateOpen(false);
+          setAgentLinesText("");
           setFormError("");
         }}
         footer={
           <>
-            <Button variant="text" color="secondary" onClick={() => setIsCreateOpen(false)}>
+            <Button
+              variant="text"
+              color="secondary"
+              onClick={() => {
+                setIsCreateOpen(false);
+                setAgentLinesText("");
+                setFormError("");
+              }}
+            >
               Cancel
             </Button>
             <Button
@@ -451,6 +484,17 @@ export default function BranchesPage() {
             value={form.address || ""}
             disabled={!canWrite}
             onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
+            fullWidth
+            size="small"
+          />
+
+          <TextField
+            label="Agent Line Numbers"
+            placeholder="e.g. 263771001, 263771002"
+            value={agentLinesText}
+            disabled={!canWrite}
+            onChange={(event) => setAgentLinesText(event.target.value)}
+            helperText="Comma-separated. A branch can have multiple agent lines."
             fullWidth
             size="small"
           />

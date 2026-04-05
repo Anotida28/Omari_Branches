@@ -36,6 +36,11 @@ export type Branch = {
   label: string;
   address: string | null;
   isActive: boolean;
+  agentLines: Array<{
+    id: string;
+    lineNumber: string;
+    isActive: boolean;
+  }>;
   createdAt: string;
   updatedAt: string;
   displayName: string;
@@ -52,6 +57,7 @@ export type CreateBranchInput = {
   label: string;
   address?: string;
   isActive?: boolean;
+  agentLineNumbers?: string[];
 };
 
 export type UpdateBranchInput = Partial<CreateBranchInput>;
@@ -70,6 +76,7 @@ export type BranchMetric = {
   cashOutValue: string;
   netCashValue: string;
   netCashVolume: number;
+  sourceLineCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -83,7 +90,7 @@ export type MetricsListParams = {
 };
 
 export type UpsertMetricInput = {
-  branchId: string;
+  agentLineId: string;
   date: string;
   cashBalance: number;
   eFloatBalance: number;
@@ -134,7 +141,7 @@ export type DocumentRecord = {
   storageKey: string;
   expenseId: string | null;
   paymentId: string | null;
-  metricId?: string | null;
+  metricId: string | null;
   uploadedBy: string | null;
   uploadedAt: string;
 };
@@ -147,7 +154,10 @@ export type ExpenseDetail = Expense & {
 export type ExpensesListParams = {
   branchId?: string;
   status?: ExpenseStatus;
+  expenseType?: ExpenseType;
   period?: string;
+  dueFrom?: string;
+  dueTo?: string;
   page?: number;
   pageSize?: number;
 };
@@ -162,6 +172,16 @@ export type CreateExpenseInput = {
   vendor?: string;
   notes?: string;
   createdBy?: string;
+};
+
+export type UpdateExpenseInput = {
+  expenseType?: ExpenseType;
+  period?: string;
+  dueDate?: string;
+  amount?: number;
+  currency?: string;
+  vendor?: string;
+  notes?: string;
 };
 
 export type CreatePaymentInput = {

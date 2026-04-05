@@ -79,7 +79,7 @@ const dateSchema = z.string().transform((value, ctx) => {
 
 const upsertMetricSchema = z
   .object({
-    branchId: branchIdSchema,
+    agentLineId: branchIdSchema,
     date: dateSchema,
     cashBalance: z.coerce.number().min(0),
     eFloatBalance: z.coerce.number().min(0),

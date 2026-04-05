@@ -30,10 +30,13 @@ type TriggerAlertJobResponse = {
   message: string;
   executed: boolean;
   result?: {
-    alertsCreated?: number;
-    alertsSent?: number;
-    alertsFailed?: number;
-    alertsSkipped?: number;
+    evaluationDate: string;
+    totalCandidates: number;
+    skippedAlreadySent: number;
+    skippedNoRecipients: number;
+    sentCount: number;
+    failedCount: number;
+    errors: string[];
   };
   error?: string;
 };

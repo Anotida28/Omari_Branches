@@ -56,7 +56,7 @@ const dateSchema = zod_1.z.string().transform((value, ctx) => {
 });
 const upsertMetricSchema = zod_1.z
     .object({
-    branchId: branchIdSchema,
+    agentLineId: branchIdSchema,
     date: dateSchema,
     cashBalance: zod_1.z.coerce.number().min(0),
     eFloatBalance: zod_1.z.coerce.number().min(0),

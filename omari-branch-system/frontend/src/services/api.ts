@@ -36,6 +36,24 @@ export function clearStoredAuthToken(): void {
 const fallbackBaseUrl = import.meta.env.DEV ? "http://localhost:4000" : "";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || fallbackBaseUrl;
 
+export function getApiBaseUrl(): string {
+  if (API_BASE_URL) {
+    return API_BASE_URL.replace(/\/+$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return window.location.origin.replace(/\/+$/, "");
+  }
+
+  return "";
+}
+
+export function resolveApiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const baseUrl = getApiBaseUrl();
+  return baseUrl ? `${baseUrl}${normalizedPath}` : normalizedPath;
+}
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 20000,

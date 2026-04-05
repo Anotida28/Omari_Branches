@@ -1,4 +1,4 @@
-import { Prisma, type Branch } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
 
@@ -17,6 +17,7 @@ export type BranchCreateInput = {
   label: string;
   address?: string;
   isActive?: boolean;
+  agentLineNumbers?: string[];
 };
 
 export type BranchUpdateInput = {
@@ -24,7 +25,14 @@ export type BranchUpdateInput = {
   label?: string;
   address?: string;
   isActive?: boolean;
+  agentLineNumbers?: string[];
 };
+
+type BranchWithAgentLines = Prisma.BranchGetPayload<{
+  include: {
+    agentLines: true;
+  };
+}>;
 
 export type BranchResponse = {
   id: string;
@@ -32,6 +40,11 @@ export type BranchResponse = {
   label: string;
   address: string | null;
   isActive: boolean;
+  agentLines: Array<{
+    id: string;
+    lineNumber: string;
+    isActive: boolean;
+  }>;
   createdAt: Date;
   updatedAt: Date;
   displayName: string;
@@ -50,13 +63,34 @@ export type BranchListResult = {
   total: number;
 };
 
-function toBranchResponse(branch: Branch): BranchResponse {
+function normalizeAgentLineNumbers(
+  agentLineNumbers: string[] | undefined,
+): string[] {
+  if (!agentLineNumbers) {
+    return [];
+  }
+
+  const normalized = agentLineNumbers
+    .map((lineNumber) => lineNumber.trim())
+    .filter((lineNumber) => lineNumber.length > 0);
+
+  return Array.from(new Set(normalized));
+}
+
+function toBranchResponse(branch: BranchWithAgentLines): BranchResponse {
   return {
     id: branch.id.toString(),
     city: branch.city,
     label: branch.label,
     address: branch.address,
     isActive: branch.isActive,
+    agentLines: branch.agentLines
+      .map((line) => ({
+        id: line.id.toString(),
+        lineNumber: line.lineNumber,
+        isActive: line.isActive,
+      }))
+      .sort((a, b) => a.lineNumber.localeCompare(b.lineNumber)),
     createdAt: branch.createdAt,
     updatedAt: branch.updatedAt,
     displayName: `${branch.city} - ${branch.label}`,
@@ -93,6 +127,12 @@ export async function listBranches(
       where,
       skip,
       take: pageSize,
+      include: {
+        agentLines: {
+          where: { isActive: true },
+          orderBy: { lineNumber: "asc" },
+        },
+      },
       orderBy: [{ city: "asc" }, { label: "asc" }],
     }),
   ]);
@@ -110,6 +150,12 @@ export async function getBranchById(
 ): Promise<BranchResponse | null> {
   const branch = await prisma.branch.findUnique({
     where: { id },
+    include: {
+      agentLines: {
+        where: { isActive: true },
+        orderBy: { lineNumber: "asc" },
+      },
+    },
   });
 
   return branch ? toBranchResponse(branch) : null;
@@ -118,9 +164,17 @@ export async function getBranchById(
 export async function createBranch(
   input: BranchCreateInput,
 ): Promise<BranchResponse> {
+  const normalizedAgentLines = normalizeAgentLineNumbers(input.agentLineNumbers);
+
   const data: Prisma.BranchCreateInput = {
     city: input.city,
     label: input.label,
+    agentLines:
+      normalizedAgentLines.length > 0
+        ? {
+            create: normalizedAgentLines.map((lineNumber) => ({ lineNumber })),
+          }
+        : undefined,
   };
 
   if (input.address !== undefined) {
@@ -132,7 +186,15 @@ export async function createBranch(
   }
 
   try {
-    const branch = await prisma.branch.create({ data });
+    const branch = await prisma.branch.create({
+      data,
+      include: {
+        agentLines: {
+          where: { isActive: true },
+          orderBy: { lineNumber: "asc" },
+        },
+      },
+    });
     return toBranchResponse(branch);
   } catch (error) {
     mapUniqueConstraintError(error);
@@ -143,6 +205,11 @@ export async function updateBranch(
   id: bigint,
   input: BranchUpdateInput,
 ): Promise<BranchResponse | null> {
+  const normalizedAgentLines =
+    input.agentLineNumbers !== undefined
+      ? normalizeAgentLineNumbers(input.agentLineNumbers)
+      : undefined;
+
   const data: Prisma.BranchUpdateInput = {};
 
   if (input.city !== undefined) {
@@ -161,10 +228,23 @@ export async function updateBranch(
     data.isActive = input.isActive;
   }
 
+  if (normalizedAgentLines !== undefined) {
+    data.agentLines = {
+      deleteMany: {},
+      create: normalizedAgentLines.map((lineNumber) => ({ lineNumber })),
+    };
+  }
+
   try {
     const branch = await prisma.branch.update({
       where: { id },
       data,
+      include: {
+        agentLines: {
+          where: { isActive: true },
+          orderBy: { lineNumber: "asc" },
+        },
+      },
     });
     return toBranchResponse(branch);
   } catch (error) {

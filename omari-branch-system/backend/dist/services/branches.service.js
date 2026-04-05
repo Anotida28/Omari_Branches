@@ -16,6 +16,15 @@ class BranchServiceError extends Error {
     }
 }
 exports.BranchServiceError = BranchServiceError;
+function normalizeAgentLineNumbers(agentLineNumbers) {
+    if (!agentLineNumbers) {
+        return [];
+    }
+    const normalized = agentLineNumbers
+        .map((lineNumber) => lineNumber.trim())
+        .filter((lineNumber) => lineNumber.length > 0);
+    return Array.from(new Set(normalized));
+}
 function toBranchResponse(branch) {
     return {
         id: branch.id.toString(),
@@ -23,6 +32,13 @@ function toBranchResponse(branch) {
         label: branch.label,
         address: branch.address,
         isActive: branch.isActive,
+        agentLines: branch.agentLines
+            .map((line) => ({
+            id: line.id.toString(),
+            lineNumber: line.lineNumber,
+            isActive: line.isActive,
+        }))
+            .sort((a, b) => a.lineNumber.localeCompare(b.lineNumber)),
         createdAt: branch.createdAt,
         updatedAt: branch.updatedAt,
         displayName: `${branch.city} - ${branch.label}`,
@@ -51,6 +67,12 @@ async function listBranches(params) {
             where,
             skip,
             take: pageSize,
+            include: {
+                agentLines: {
+                    where: { isActive: true },
+                    orderBy: { lineNumber: "asc" },
+                },
+            },
             orderBy: [{ city: "asc" }, { label: "asc" }],
         }),
     ]);
@@ -64,13 +86,25 @@ async function listBranches(params) {
 async function getBranchById(id) {
     const branch = await prisma_1.prisma.branch.findUnique({
         where: { id },
+        include: {
+            agentLines: {
+                where: { isActive: true },
+                orderBy: { lineNumber: "asc" },
+            },
+        },
     });
     return branch ? toBranchResponse(branch) : null;
 }
 async function createBranch(input) {
+    const normalizedAgentLines = normalizeAgentLineNumbers(input.agentLineNumbers);
     const data = {
         city: input.city,
         label: input.label,
+        agentLines: normalizedAgentLines.length > 0
+            ? {
+                create: normalizedAgentLines.map((lineNumber) => ({ lineNumber })),
+            }
+            : undefined,
     };
     if (input.address !== undefined) {
         data.address = input.address;
@@ -79,7 +113,15 @@ async function createBranch(input) {
         data.isActive = input.isActive;
     }
     try {
-        const branch = await prisma_1.prisma.branch.create({ data });
+        const branch = await prisma_1.prisma.branch.create({
+            data,
+            include: {
+                agentLines: {
+                    where: { isActive: true },
+                    orderBy: { lineNumber: "asc" },
+                },
+            },
+        });
         return toBranchResponse(branch);
     }
     catch (error) {
@@ -87,6 +129,9 @@ async function createBranch(input) {
     }
 }
 async function updateBranch(id, input) {
+    const normalizedAgentLines = input.agentLineNumbers !== undefined
+        ? normalizeAgentLineNumbers(input.agentLineNumbers)
+        : undefined;
     const data = {};
     if (input.city !== undefined) {
         data.city = input.city;
@@ -100,10 +145,22 @@ async function updateBranch(id, input) {
     if (input.isActive !== undefined) {
         data.isActive = input.isActive;
     }
+    if (normalizedAgentLines !== undefined) {
+        data.agentLines = {
+            deleteMany: {},
+            create: normalizedAgentLines.map((lineNumber) => ({ lineNumber })),
+        };
+    }
     try {
         const branch = await prisma_1.prisma.branch.update({
             where: { id },
             data,
+            include: {
+                agentLines: {
+                    where: { isActive: true },
+                    orderBy: { lineNumber: "asc" },
+                },
+            },
         });
         return toBranchResponse(branch);
     }

@@ -43,9 +43,73 @@ function toMetricResponse(metric) {
         cashOutValue: decimalToString(metric.cashOutValue),
         netCashValue: netCashValue.toString(),
         netCashVolume: metric.cashInVolume - metric.cashOutVolume,
+        sourceLineCount: 0,
         createdAt: metric.createdAt,
         updatedAt: metric.updatedAt,
     };
+}
+function withSourceLineCount(metric, sourceLineCount) {
+    return {
+        ...metric,
+        sourceLineCount,
+    };
+}
+async function getSourceLineCount(branchId, metricDate) {
+    return prisma_1.prisma.agentLineMetric.count({
+        where: {
+            metricDate,
+            agentLine: {
+                branchId,
+            },
+        },
+    });
+}
+async function recomputeBranchMetricForDate(branchId, metricDate) {
+    const aggregate = await prisma_1.prisma.agentLineMetric.aggregate({
+        where: {
+            metricDate,
+            agentLine: {
+                branchId,
+            },
+        },
+        _sum: {
+            cashBalance: true,
+            eFloatBalance: true,
+            cashInVault: true,
+            cashInVolume: true,
+            cashInValue: true,
+            cashOutVolume: true,
+            cashOutValue: true,
+        },
+    });
+    return prisma_1.prisma.branchMetric.upsert({
+        where: {
+            uq_branch_date: {
+                branchId,
+                metricDate,
+            },
+        },
+        update: {
+            cashBalance: aggregate._sum.cashBalance ?? 0,
+            eFloatBalance: aggregate._sum.eFloatBalance ?? 0,
+            cashInVault: aggregate._sum.cashInVault ?? 0,
+            cashInVolume: aggregate._sum.cashInVolume ?? 0,
+            cashInValue: aggregate._sum.cashInValue ?? 0,
+            cashOutVolume: aggregate._sum.cashOutVolume ?? 0,
+            cashOutValue: aggregate._sum.cashOutValue ?? 0,
+        },
+        create: {
+            branchId,
+            metricDate,
+            cashBalance: aggregate._sum.cashBalance ?? 0,
+            eFloatBalance: aggregate._sum.eFloatBalance ?? 0,
+            cashInVault: aggregate._sum.cashInVault ?? 0,
+            cashInVolume: aggregate._sum.cashInVolume ?? 0,
+            cashInValue: aggregate._sum.cashInValue ?? 0,
+            cashOutVolume: aggregate._sum.cashOutVolume ?? 0,
+            cashOutValue: aggregate._sum.cashOutValue ?? 0,
+        },
+    });
 }
 function mapForeignKeyError(error) {
     if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
@@ -56,38 +120,54 @@ function mapForeignKeyError(error) {
     throw error;
 }
 async function upsertMetric(input) {
-    const updateData = {
-        cashBalance: input.cashBalance,
-        eFloatBalance: input.eFloatBalance,
-        cashInVault: input.cashInVault,
-        cashInVolume: input.cashInVolume,
-        cashInValue: input.cashInValue,
-        cashOutVolume: input.cashOutVolume,
-        cashOutValue: input.cashOutValue,
-    };
-    const createData = {
-        branchId: input.branchId,
-        metricDate: input.date,
-        cashBalance: input.cashBalance,
-        eFloatBalance: input.eFloatBalance,
-        cashInVault: input.cashInVault,
-        cashInVolume: input.cashInVolume,
-        cashInValue: input.cashInValue,
-        cashOutVolume: input.cashOutVolume,
-        cashOutValue: input.cashOutValue,
-    };
     try {
-        const metric = await prisma_1.prisma.branchMetric.upsert({
+        const agentLine = await prisma_1.prisma.branchAgentLine.findUnique({
             where: {
-                uq_branch_date: {
-                    branchId: input.branchId,
+                id: input.agentLineId,
+            },
+            select: {
+                id: true,
+                branchId: true,
+                isActive: true,
+            },
+        });
+        if (!agentLine) {
+            throw new MetricServiceError("Agent line not found", 404);
+        }
+        if (!agentLine.isActive) {
+            throw new MetricServiceError("Agent line is inactive", 400);
+        }
+        await prisma_1.prisma.agentLineMetric.upsert({
+            where: {
+                uq_agent_line_date: {
+                    agentLineId: input.agentLineId,
                     metricDate: input.date,
                 },
             },
-            update: updateData,
-            create: createData,
+            update: {
+                cashBalance: input.cashBalance,
+                eFloatBalance: input.eFloatBalance,
+                cashInVault: input.cashInVault,
+                cashInVolume: input.cashInVolume,
+                cashInValue: input.cashInValue,
+                cashOutVolume: input.cashOutVolume,
+                cashOutValue: input.cashOutValue,
+            },
+            create: {
+                agentLineId: input.agentLineId,
+                metricDate: input.date,
+                cashBalance: input.cashBalance,
+                eFloatBalance: input.eFloatBalance,
+                cashInVault: input.cashInVault,
+                cashInVolume: input.cashInVolume,
+                cashInValue: input.cashInValue,
+                cashOutVolume: input.cashOutVolume,
+                cashOutValue: input.cashOutValue,
+            },
         });
-        return toMetricResponse(metric);
+        const metric = await recomputeBranchMetricForDate(agentLine.branchId, input.date);
+        const sourceLineCount = await getSourceLineCount(metric.branchId, metric.metricDate);
+        return withSourceLineCount(toMetricResponse(metric), sourceLineCount);
     }
     catch (error) {
         mapForeignKeyError(error);
@@ -114,8 +194,9 @@ async function listMetrics(params) {
             orderBy: [{ metricDate: "desc" }, { createdAt: "desc" }],
         }),
     ]);
+    const sourceLineCounts = await Promise.all(items.map((metric) => getSourceLineCount(metric.branchId, metric.metricDate)));
     return {
-        items: items.map(toMetricResponse),
+        items: items.map((metric, index) => withSourceLineCount(toMetricResponse(metric), sourceLineCounts[index])),
         page,
         pageSize,
         total,
@@ -125,7 +206,11 @@ async function getMetricById(id) {
     const metric = await prisma_1.prisma.branchMetric.findUnique({
         where: { id },
     });
-    return metric ? toMetricResponse(metric) : null;
+    if (!metric) {
+        return null;
+    }
+    const sourceLineCount = await getSourceLineCount(metric.branchId, metric.metricDate);
+    return withSourceLineCount(toMetricResponse(metric), sourceLineCount);
 }
 async function getMetricByBranchDate(branchId, date) {
     const metric = await prisma_1.prisma.branchMetric.findUnique({
@@ -136,18 +221,33 @@ async function getMetricByBranchDate(branchId, date) {
             },
         },
     });
-    return metric ? toMetricResponse(metric) : null;
+    if (!metric) {
+        return null;
+    }
+    const sourceLineCount = await getSourceLineCount(metric.branchId, metric.metricDate);
+    return withSourceLineCount(toMetricResponse(metric), sourceLineCount);
 }
 async function deleteMetric(id) {
-    try {
-        await prisma_1.prisma.branchMetric.delete({ where: { id } });
-        return true;
+    const metric = await prisma_1.prisma.branchMetric.findUnique({
+        where: { id },
+        select: {
+            branchId: true,
+            metricDate: true,
+        },
+    });
+    if (!metric) {
+        return false;
     }
-    catch (error) {
-        if (error instanceof client_1.Prisma.PrismaClientKnownRequestError &&
-            error.code === "P2025") {
-            return false;
-        }
-        throw error;
-    }
+    await prisma_1.prisma.$transaction([
+        prisma_1.prisma.agentLineMetric.deleteMany({
+            where: {
+                metricDate: metric.metricDate,
+                agentLine: {
+                    branchId: metric.branchId,
+                },
+            },
+        }),
+        prisma_1.prisma.branchMetric.delete({ where: { id } }),
+    ]);
+    return true;
 }
