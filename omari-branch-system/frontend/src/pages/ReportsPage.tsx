@@ -33,13 +33,11 @@ import {
   buildReportSummaryCsv,
   fetchReportsData,
 } from "../services/reports";
+import type { ReminderState } from "../services/reminders";
 import { EmptyState } from "../shared/components/EmptyState";
 import { ErrorState } from "../shared/components/ErrorState";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
-import type { ExpenseStatus } from "../types/api";
-
-const EXPENSE_STATUSES: ExpenseStatus[] = ["PENDING", "PAID", "OVERDUE"];
 
 function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -49,14 +47,14 @@ function shiftDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-function statusColor(status: ExpenseStatus): "warning" | "success" | "error" {
-  if (status === "PAID") {
-    return "success";
-  }
-  if (status === "OVERDUE") {
+function reminderStateColor(state: ReminderState): "warning" | "error" | "default" {
+  if (state === "OVERDUE") {
     return "error";
   }
-  return "warning";
+  if (state === "DUE_TODAY") {
+    return "warning";
+  }
+  return "default";
 }
 
 function downloadCsv(content: string, filename: string): void {
@@ -78,7 +76,6 @@ export default function ReportsPage() {
   const defaultDateFrom = toInputDate(shiftDays(new Date(), -30));
 
   const branchId = searchParams.get("branchId") ?? "";
-  const status = (searchParams.get("status") ?? "") as ExpenseStatus | "";
   const dateTo = searchParams.get("dateTo") ?? defaultDateTo;
   const dateFrom = searchParams.get("dateFrom") ?? defaultDateFrom;
 
@@ -97,11 +94,10 @@ export default function ReportsPage() {
   const filters = useMemo(
     () => ({
       branchId: branchId || undefined,
-      status: (status || undefined) as ExpenseStatus | undefined,
       dateFrom,
       dateTo,
     }),
-    [branchId, dateFrom, dateTo, status],
+    [branchId, dateFrom, dateTo],
   );
 
   const reportsQuery = useQuery({
@@ -164,7 +160,7 @@ export default function ReportsPage() {
           disabled={!report || reportsQuery.isFetching}
           onClick={handleExportExpenses}
         >
-          Export Expenses CSV
+          Export Reminder CSV
         </Button>
       </Stack>
 
@@ -182,22 +178,6 @@ export default function ReportsPage() {
             {(report?.availableBranches ?? []).map((branch) => (
               <MenuItem key={branch.id} value={branch.id}>
                 {branch.displayName}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select
-            size="small"
-            label="Status"
-            value={status}
-            onChange={(event) => updateParams({ status: event.target.value || undefined })}
-            sx={{ minWidth: { xs: "100%", lg: 180 } }}
-          >
-            <MenuItem value="">All statuses</MenuItem>
-            {EXPENSE_STATUSES.map((item) => (
-              <MenuItem key={item} value={item}>
-                {item}
               </MenuItem>
             ))}
           </TextField>
@@ -261,21 +241,27 @@ export default function ReportsPage() {
             }}
           >
             <StatCard
-              label="Expenses in Range"
+              label="Reminders in Range"
               value={String(report.totals.expenseCount)}
               hint={`Total amount: ${formatCurrency(report.totals.totalAmount)}`}
               icon={<FileSpreadsheet size={18} />}
             />
             <StatCard
-              label="Outstanding Balance"
-              value={formatCurrency(report.totals.totalOutstanding)}
-              hint={`Paid to date: ${formatCurrency(report.totals.totalPaid)}`}
+              label="Scheduled Amount"
+              value={formatCurrency(report.totals.totalAmount)}
+              hint={`${report.totals.expenseCount} reminder items`}
               icon={<Wallet size={18} />}
             />
             <StatCard
-              label="Overdue Exposure"
-              value={formatCurrency(report.totals.overdueOutstanding)}
-              hint={`${report.totals.overdueCount} overdue expenses`}
+              label="Overdue Reminder Amount"
+              value={formatCurrency(report.totals.overdueAmount)}
+              hint={`${report.totals.overdueCount} overdue reminders`}
+              icon={<AlertTriangle size={18} />}
+            />
+            <StatCard
+              label="Due in 7 Days"
+              value={formatCurrency(report.totals.dueNext7Amount)}
+              hint="Upcoming reminder exposure"
               icon={<AlertTriangle size={18} />}
             />
             <StatCard
@@ -319,11 +305,11 @@ export default function ReportsPage() {
                   <TableHead>
                     <TableRow>
                       <TableCell>Branch</TableCell>
-                      <TableCell align="right">Expenses</TableCell>
+                      <TableCell align="right">Reminders</TableCell>
                       <TableCell align="right">Amount</TableCell>
-                      <TableCell align="right">Paid</TableCell>
-                      <TableCell align="right">Outstanding</TableCell>
                       <TableCell align="right">Overdue</TableCell>
+                      <TableCell align="right">Overdue Amount</TableCell>
+                      <TableCell align="right">Due in 7 Days</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -339,9 +325,9 @@ export default function ReportsPage() {
                           <TableCell sx={{ fontWeight: 600 }}>{row.branchName}</TableCell>
                           <TableCell align="right">{row.expenseCount}</TableCell>
                           <TableCell align="right">{formatCurrency(row.totalAmount)}</TableCell>
-                          <TableCell align="right">{formatCurrency(row.totalPaid)}</TableCell>
-                          <TableCell align="right">{formatCurrency(row.totalOutstanding)}</TableCell>
                           <TableCell align="right">{row.overdueCount}</TableCell>
+                          <TableCell align="right">{formatCurrency(row.overdueAmount)}</TableCell>
+                          <TableCell align="right">{row.dueNext7Count}</TableCell>
                         </TableRow>
                       ))
                     )}
@@ -353,7 +339,7 @@ export default function ReportsPage() {
             <Paper sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", overflow: "hidden" }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Expense Type Mix
+                  Reminder Type Mix
                 </Typography>
               </Box>
               <TableContainer>
@@ -363,7 +349,7 @@ export default function ReportsPage() {
                       <TableCell>Type</TableCell>
                       <TableCell align="right">Count</TableCell>
                       <TableCell align="right">Amount</TableCell>
-                      <TableCell align="right">Outstanding</TableCell>
+                      <TableCell align="right">Overdue Amount</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -379,7 +365,7 @@ export default function ReportsPage() {
                           <TableCell sx={{ fontWeight: 600 }}>{row.expenseType}</TableCell>
                           <TableCell align="right">{row.expenseCount}</TableCell>
                           <TableCell align="right">{formatCurrency(row.totalAmount)}</TableCell>
-                          <TableCell align="right">{formatCurrency(row.totalOutstanding)}</TableCell>
+                          <TableCell align="right">{formatCurrency(row.overdueAmount)}</TableCell>
                         </TableRow>
                       ))
                     )}
@@ -393,7 +379,7 @@ export default function ReportsPage() {
             <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
               <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={0.6}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Expense Detail Snapshot
+                  Reminder Detail Snapshot
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Showing {Math.min(report.expenses.length, 100)} of {report.expenses.length} rows
@@ -409,16 +395,14 @@ export default function ReportsPage() {
                     <TableCell>Period</TableCell>
                     <TableCell>Due Date</TableCell>
                     <TableCell align="right">Amount</TableCell>
-                    <TableCell align="right">Paid</TableCell>
-                    <TableCell align="right">Balance</TableCell>
-                    <TableCell>Status</TableCell>
+                    <TableCell>Reminder State</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {report.expenses.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} align="center" sx={{ py: 4, color: "text.secondary" }}>
-                        No expenses found for selected filters.
+                      <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                        No reminders found for selected filters.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -429,10 +413,12 @@ export default function ReportsPage() {
                         <TableCell>{expense.period}</TableCell>
                         <TableCell>{formatDate(expense.dueDate)}</TableCell>
                         <TableCell align="right">{formatCurrency(expense.amount, expense.currency)}</TableCell>
-                        <TableCell align="right">{formatCurrency(expense.totalPaid, expense.currency)}</TableCell>
-                        <TableCell align="right">{formatCurrency(expense.balanceRemaining, expense.currency)}</TableCell>
                         <TableCell>
-                          <Chip size="small" color={statusColor(expense.status)} label={expense.status} />
+                          <Chip
+                            size="small"
+                            color={reminderStateColor(expense.reminderState)}
+                            label={expense.reminderState}
+                          />
                         </TableCell>
                       </TableRow>
                     ))

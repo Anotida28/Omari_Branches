@@ -14,7 +14,6 @@ export type ApiItemsResponse<T> = {
 };
 
 export type ExpenseType = "RENT" | "ZESA" | "WIFI" | "OTHER";
-export type ExpenseStatus = "PENDING" | "PAID" | "OVERDUE";
 
 export type UserRole = "VIEWER" | "FULL_ACCESS" | "SUPER_ADMIN";
 
@@ -123,22 +122,17 @@ export type Expense = {
   dueDate: string;
   amount: string;
   currency: string;
-  status: ExpenseStatus;
   vendor: string | null;
   notes: string | null;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
-  totalPaid: string;
-  balanceRemaining: string;
-  isOverdue: boolean;
 };
 
 export type ExpenseDetail = Expense;
 
 export type ExpensesListParams = {
   branchId?: string;
-  status?: ExpenseStatus;
   expenseType?: ExpenseType;
   period?: string;
   dueFrom?: string;
@@ -173,7 +167,7 @@ export type DashboardStats = {
   totalBranches: number;
   totalExpenses: number;
   overdueExpenses: number;
-  totalOutstandingBalance: number;
+  totalReminderAmount: number;
 };
 
 export type DashboardRankingItem = {

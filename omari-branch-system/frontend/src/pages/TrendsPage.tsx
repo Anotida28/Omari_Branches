@@ -265,9 +265,9 @@ export default function TrendsPage() {
               hint={branchName}
             />
             <StatCard
-              label="Outstanding Balance"
-              value={formatCurrency(trendsQuery.data.kpis.totalOutstandingBalance)}
-              hint="All unpaid balances"
+              label="Scheduled Amount"
+              value={formatCurrency(trendsQuery.data.kpis.totalScheduledAmount)}
+              hint="All reminder amounts"
             />
             <StatCard
               label="Overdue Amount"
@@ -396,14 +396,14 @@ export default function TrendsPage() {
               )}
             </ChartCard>
 
-            <ChartCard title="Outstanding by Branch" subtitle="Highest unpaid exposure">
-              {trendsQuery.data.outstandingByBranch.length === 0 ? (
-                <ChartEmpty message="No outstanding balances." />
+            <ChartCard title="Due by Branch" subtitle="Largest reminder totals by branch">
+              {trendsQuery.data.dueByBranch.length === 0 ? (
+                <ChartEmpty message="No reminder amounts." />
               ) : (
                 <Box sx={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={trendsQuery.data.outstandingByBranch}
+                      data={trendsQuery.data.dueByBranch}
                       layout="vertical"
                       margin={{ left: 10, right: 20 }}
                     >
@@ -411,7 +411,7 @@ export default function TrendsPage() {
                       <XAxis type="number" tickFormatter={formatCompactCurrency} />
                       <YAxis type="category" dataKey="branchName" width={140} />
                       <Tooltip formatter={formatTooltipMoney} />
-                      <Bar dataKey="outstandingBalance" fill={chartPalette.primary} name="Outstanding" />
+                      <Bar dataKey="scheduledAmount" fill={chartPalette.primary} name="Scheduled Amount" />
                     </BarChart>
                   </ResponsiveContainer>
                 </Box>
@@ -438,16 +438,16 @@ export default function TrendsPage() {
               )}
             </ChartCard>
 
-            <ChartCard title="Expense Type Mix" subtitle="Outstanding balance by type">
+            <ChartCard title="Expense Type Mix" subtitle="Scheduled reminder amount by type">
               {trendsQuery.data.expenseTypeMix.length === 0 ? (
-                <ChartEmpty message="No outstanding expense mix data." />
+                <ChartEmpty message="No expense mix data." />
               ) : (
                 <Box sx={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={trendsQuery.data.expenseTypeMix}
-                        dataKey="outstandingBalance"
+                        dataKey="scheduledAmount"
                         nameKey="expenseType"
                         innerRadius={55}
                         outerRadius={95}

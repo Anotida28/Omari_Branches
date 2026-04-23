@@ -9,7 +9,7 @@ import {
   listExpenses,
   updateExpense,
 } from "../services/expenses.service";
-import { ExpenseStatus, ExpenseType } from "../shared/prisma-enums";
+import { ExpenseType } from "../shared/prisma-enums";
 
 function normalizeDateInput(value: string): Date | null {
   const trimmed = value.trim();
@@ -122,7 +122,6 @@ const updateExpenseSchema = z
 
 const listQuerySchema = z.object({
   branchId: branchIdSchema.optional(),
-  status: z.nativeEnum(ExpenseStatus).optional(),
   expenseType: z.nativeEnum(ExpenseType).optional(),
   period: periodSchema.optional(),
   dueFrom: dateSchema.optional(),
@@ -181,7 +180,6 @@ export async function listExpensesHandler(
 ): Promise<void> {
   const queryInput = {
     branchId: normalizeQueryValue(req.query.branchId),
-    status: normalizeQueryValue(req.query.status),
     expenseType: normalizeQueryValue(req.query.expenseType),
     period: normalizeQueryValue(req.query.period),
     dueFrom: normalizeQueryValue(req.query.dueFrom),

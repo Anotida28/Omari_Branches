@@ -1,7 +1,6 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
-import { deleteDocumentsWhere } from "./documents.service";
 import {
   findSourceAgentsByLineNumbers,
   isSourceMetricsConfigured,
@@ -452,35 +451,6 @@ export async function updateBranch(
 
 export async function deleteBranch(id: bigint): Promise<boolean> {
   try {
-    await deleteDocumentsWhere({
-      OR: [
-        {
-          expense: {
-            is: {
-              branchId: id,
-            },
-          },
-        },
-        {
-          payment: {
-            is: {
-              expense: {
-                is: {
-                  branchId: id,
-                },
-              },
-            },
-          },
-        },
-        {
-          metric: {
-            is: {
-              branchId: id,
-            },
-          },
-        },
-      ],
-    });
     await prisma.branch.delete({ where: { id } });
     return true;
   } catch (error) {

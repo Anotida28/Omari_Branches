@@ -2,7 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
-const EXTERNAL_AUTH_ONLY_PASSWORD = "EXTERNAL_AUTH_ONLY";
 function todayDateOnly() {
     const now = new Date();
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -22,13 +21,11 @@ async function seedUsers() {
         await prisma.user.upsert({
             where: { username: user.username },
             update: {
-                passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
                 role: user.role,
                 isActive: true,
             },
             create: {
                 username: user.username,
-                passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
                 role: user.role,
                 isActive: true,
             },

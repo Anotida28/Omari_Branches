@@ -2,11 +2,11 @@ import { listBranches } from "./branches";
 import { listExpenses } from "./expenses";
 import { toMoneyNumber } from "./format";
 import { listMetrics } from "./metrics";
+import { getReminderState, isReminderDueWithinDays, isReminderOverdue, type ReminderState } from "./reminders";
 import type {
   Branch,
   BranchMetric,
   Expense,
-  ExpenseStatus,
   ExpenseType,
   PaginatedResponse,
 } from "../types/api";
@@ -15,7 +15,6 @@ const PAGE_SIZE = 100;
 
 export type ReportsFilters = {
   branchId?: string;
-  status?: ExpenseStatus;
   dateFrom: string;
   dateTo: string;
 };
@@ -25,17 +24,16 @@ export type ReportBranchSummary = {
   branchName: string;
   expenseCount: number;
   totalAmount: number;
-  totalPaid: number;
-  totalOutstanding: number;
   overdueCount: number;
-  overdueOutstanding: number;
+  overdueAmount: number;
+  dueNext7Count: number;
 };
 
 export type ReportExpenseTypeSummary = {
   expenseType: ExpenseType;
   expenseCount: number;
   totalAmount: number;
-  totalOutstanding: number;
+  overdueAmount: number;
 };
 
 export type ReportExpenseLine = {
@@ -46,9 +44,7 @@ export type ReportExpenseLine = {
   period: string;
   dueDate: string;
   amount: number;
-  totalPaid: number;
-  balanceRemaining: number;
-  status: ExpenseStatus;
+  reminderState: ReminderState;
   vendor: string | null;
   currency: string;
 };
@@ -56,10 +52,9 @@ export type ReportExpenseLine = {
 export type ReportTotals = {
   expenseCount: number;
   totalAmount: number;
-  totalPaid: number;
-  totalOutstanding: number;
   overdueCount: number;
-  overdueOutstanding: number;
+  overdueAmount: number;
+  dueNext7Amount: number;
   metricsCount: number;
   totalCashInValue: number;
   totalCashOutValue: number;
@@ -82,17 +77,16 @@ type BranchSummaryAccumulator = {
   branchName: string;
   expenseCount: number;
   totalAmount: number;
-  totalPaid: number;
-  totalOutstanding: number;
   overdueCount: number;
-  overdueOutstanding: number;
+  overdueAmount: number;
+  dueNext7Count: number;
 };
 
 type TypeSummaryAccumulator = {
   expenseType: ExpenseType;
   expenseCount: number;
   totalAmount: number;
-  totalOutstanding: number;
+  overdueAmount: number;
 };
 
 async function fetchAllPages<T>(
@@ -139,9 +133,7 @@ function toExpenseLine(expense: Expense, branchNameById: Map<string, string>): R
     period: expense.period,
     dueDate: expense.dueDate,
     amount: toMoneyNumber(expense.amount),
-    totalPaid: toMoneyNumber(expense.totalPaid),
-    balanceRemaining: toMoneyNumber(expense.balanceRemaining),
-    status: expense.status,
+    reminderState: getReminderState(expense.dueDate),
     vendor: expense.vendor,
     currency: expense.currency,
   };
@@ -180,7 +172,6 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
         page,
         pageSize,
         branchId: filters.branchId,
-        status: filters.status,
       }),
     ),
     fetchAllPages((page, pageSize) =>
@@ -207,19 +198,23 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
   const typeSummaryMap = new Map<ExpenseType, TypeSummaryAccumulator>();
 
   let totalAmount = 0;
-  let totalPaid = 0;
-  let totalOutstanding = 0;
   let overdueCount = 0;
-  let overdueOutstanding = 0;
+  let overdueAmount = 0;
+  let dueNext7Amount = 0;
 
   for (const expense of expensesInRange) {
     totalAmount += expense.amount;
-    totalPaid += expense.totalPaid;
-    totalOutstanding += expense.balanceRemaining;
 
-    if (expense.status === "OVERDUE") {
+    const isOverdue = isReminderOverdue(expense.dueDate);
+    const isDueNext7 = isReminderDueWithinDays(expense.dueDate, 7);
+
+    if (isOverdue) {
       overdueCount += 1;
-      overdueOutstanding += expense.balanceRemaining;
+      overdueAmount += expense.amount;
+    }
+
+    if (isDueNext7) {
+      dueNext7Amount += expense.amount;
     }
 
     const branchSummary = branchSummaryMap.get(expense.branchId) ?? {
@@ -227,19 +222,19 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
       branchName: expense.branchName,
       expenseCount: 0,
       totalAmount: 0,
-      totalPaid: 0,
-      totalOutstanding: 0,
       overdueCount: 0,
-      overdueOutstanding: 0,
+      overdueAmount: 0,
+      dueNext7Count: 0,
     };
 
     branchSummary.expenseCount += 1;
     branchSummary.totalAmount += expense.amount;
-    branchSummary.totalPaid += expense.totalPaid;
-    branchSummary.totalOutstanding += expense.balanceRemaining;
-    if (expense.status === "OVERDUE") {
+    if (isOverdue) {
       branchSummary.overdueCount += 1;
-      branchSummary.overdueOutstanding += expense.balanceRemaining;
+      branchSummary.overdueAmount += expense.amount;
+    }
+    if (isDueNext7) {
+      branchSummary.dueNext7Count += 1;
     }
     branchSummaryMap.set(expense.branchId, branchSummary);
 
@@ -247,20 +242,22 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
       expenseType: expense.expenseType,
       expenseCount: 0,
       totalAmount: 0,
-      totalOutstanding: 0,
+      overdueAmount: 0,
     };
     typeSummary.expenseCount += 1;
     typeSummary.totalAmount += expense.amount;
-    typeSummary.totalOutstanding += expense.balanceRemaining;
+    if (isOverdue) {
+      typeSummary.overdueAmount += expense.amount;
+    }
     typeSummaryMap.set(expense.expenseType, typeSummary);
   }
 
   const branchSummary = [...branchSummaryMap.values()].sort(
-    (a, b) => b.totalOutstanding - a.totalOutstanding,
+    (a, b) => b.totalAmount - a.totalAmount,
   );
 
   const expenseTypeSummary = [...typeSummaryMap.values()].sort(
-    (a, b) => b.totalOutstanding - a.totalOutstanding,
+    (a, b) => b.totalAmount - a.totalAmount,
   );
 
   const totalCashInValue = metrics.reduce(
@@ -285,10 +282,9 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
     totals: {
       expenseCount: expensesInRange.length,
       totalAmount,
-      totalPaid,
-      totalOutstanding,
       overdueCount,
-      overdueOutstanding,
+      overdueAmount,
+      dueNext7Amount,
       metricsCount: metrics.length,
       totalCashInValue,
       totalCashOutValue,
@@ -303,20 +299,18 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
 
 export function buildReportSummaryCsv(data: ReportsData): string {
   const rows: string[][] = [
-    ["Report", "Finance Summary"],
+    ["Report", "Reminder and Branch Summary"],
     ["Generated At (UTC)", data.generatedAt],
     ["Date From", data.filters.dateFrom],
     ["Date To", data.filters.dateTo],
     ["Branch Filter", data.filters.branchId || "All"],
-    ["Status Filter", data.filters.status || "All"],
     [],
     ["KPI", "Value"],
-    ["Expense Count", String(data.totals.expenseCount)],
-    ["Total Amount", data.totals.totalAmount.toFixed(2)],
-    ["Total Paid", data.totals.totalPaid.toFixed(2)],
-    ["Total Outstanding", data.totals.totalOutstanding.toFixed(2)],
-    ["Overdue Count", String(data.totals.overdueCount)],
-    ["Overdue Outstanding", data.totals.overdueOutstanding.toFixed(2)],
+    ["Reminder Count", String(data.totals.expenseCount)],
+    ["Scheduled Amount", data.totals.totalAmount.toFixed(2)],
+    ["Overdue Reminder Count", String(data.totals.overdueCount)],
+    ["Overdue Reminder Amount", data.totals.overdueAmount.toFixed(2)],
+    ["Due in 7 Days", data.totals.dueNext7Amount.toFixed(2)],
     ["Metric Rows", String(data.totals.metricsCount)],
     ["Total Cash In Value", data.totals.totalCashInValue.toFixed(2)],
     ["Total Cash Out Value", data.totals.totalCashOutValue.toFixed(2)],
@@ -325,29 +319,27 @@ export function buildReportSummaryCsv(data: ReportsData): string {
     [],
     [
       "Branch",
-      "Expense Count",
-      "Total Amount",
-      "Total Paid",
-      "Outstanding",
+      "Reminder Count",
+      "Scheduled Amount",
       "Overdue Count",
-      "Overdue Outstanding",
+      "Overdue Amount",
+      "Due Next 7 Days",
     ],
     ...data.branchSummary.map((row) => [
       row.branchName,
       String(row.expenseCount),
       row.totalAmount.toFixed(2),
-      row.totalPaid.toFixed(2),
-      row.totalOutstanding.toFixed(2),
       String(row.overdueCount),
-      row.overdueOutstanding.toFixed(2),
+      row.overdueAmount.toFixed(2),
+      String(row.dueNext7Count),
     ]),
     [],
-    ["Expense Type", "Expense Count", "Total Amount", "Outstanding"],
+    ["Expense Type", "Reminder Count", "Scheduled Amount", "Overdue Amount"],
     ...data.expenseTypeSummary.map((row) => [
       row.expenseType,
       String(row.expenseCount),
       row.totalAmount.toFixed(2),
-      row.totalOutstanding.toFixed(2),
+      row.overdueAmount.toFixed(2),
     ]),
   ];
 
@@ -362,12 +354,10 @@ export function buildReportExpensesCsv(data: ReportsData): string {
       "Expense Type",
       "Period",
       "Due Date",
-      "Status",
+      "Reminder State",
       "Vendor",
       "Currency",
       "Amount",
-      "Total Paid",
-      "Balance Remaining",
     ],
     ...data.expenses.map((expense) => [
       expense.id,
@@ -375,12 +365,10 @@ export function buildReportExpensesCsv(data: ReportsData): string {
       expense.expenseType,
       expense.period,
       expense.dueDate,
-      expense.status,
+      expense.reminderState,
       expense.vendor || "",
       expense.currency,
       expense.amount.toFixed(2),
-      expense.totalPaid.toFixed(2),
-      expense.balanceRemaining.toFixed(2),
     ]),
   ];
 

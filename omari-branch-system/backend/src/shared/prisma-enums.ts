@@ -7,22 +7,6 @@ export const ExpenseType = {
 
 export type ExpenseType = string;
 
-export const ExpenseStatus = {
-  PENDING: "PENDING",
-  PAID: "PAID",
-  OVERDUE: "OVERDUE",
-} as const;
-
-export type ExpenseStatus = string;
-
-export const DocumentType = {
-  INVOICE: "INVOICE",
-  RECEIPT: "RECEIPT",
-  OTHER: "OTHER",
-} as const;
-
-export type DocumentType = string;
-
 export const AlertRuleType = {
   DUE_REMINDER: "DUE_REMINDER",
   OVERDUE_ESCALATION: "OVERDUE_ESCALATION",

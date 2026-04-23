@@ -1,5 +1,3 @@
-import type { ExpenseStatus } from "../../types/api";
-
 import { cn } from "./cn";
 
 type BadgeVariant = "neutral" | "success" | "warning" | "danger";
@@ -23,14 +21,4 @@ export function Badge({ children, variant = "neutral" }: BadgeProps) {
       {children}
     </span>
   );
-}
-
-export function ExpenseStatusBadge({ status }: { status: ExpenseStatus }) {
-  if (status === "PAID") {
-    return <Badge variant="success">PAID</Badge>;
-  }
-  if (status === "OVERDUE") {
-    return <Badge variant="danger">OVERDUE</Badge>;
-  }
-  return <Badge variant="warning">PENDING</Badge>;
 }

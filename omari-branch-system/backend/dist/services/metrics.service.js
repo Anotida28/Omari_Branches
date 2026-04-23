@@ -11,7 +11,6 @@ exports.deleteMetric = deleteMetric;
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../db/prisma");
 const pagination_1 = require("../utils/pagination");
-const documents_service_1 = require("./documents.service");
 class MetricServiceError extends Error {
     constructor(message, status) {
         super(message);
@@ -279,7 +278,6 @@ async function deleteMetric(id) {
     if (!metric) {
         return false;
     }
-    await (0, documents_service_1.deleteDocumentsWhere)({ metricId: id });
     await prisma_1.prisma.$transaction([
         prisma_1.prisma.agentLineMetric.deleteMany({
             where: {

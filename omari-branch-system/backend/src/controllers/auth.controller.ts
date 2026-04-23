@@ -6,8 +6,6 @@ import { prisma } from "../db/prisma";
 import { createAuthToken } from "../utils/token";
 import { UserRole, isUserRole, type UserRole as UserRoleValue } from "../shared/prisma-enums";
 
-const EXTERNAL_AUTH_ONLY_PASSWORD = "EXTERNAL_AUTH_ONLY";
-
 const loginSchema = z
   .object({
     username: z.string().min(1, "Username is required").max(80),
@@ -246,7 +244,6 @@ async function upsertAuthenticatedUser(username: string): Promise<{ id: bigint; 
       where: { id: existingUser.id },
       data: {
         role,
-        passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
       },
     });
   }
@@ -254,7 +251,6 @@ async function upsertAuthenticatedUser(username: string): Promise<{ id: bigint; 
   return prisma.user.create({
     data: {
       username,
-      passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
       role,
       isActive: true,
     },

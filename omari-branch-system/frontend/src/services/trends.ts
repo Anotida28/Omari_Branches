@@ -2,6 +2,7 @@ import { listAlertLogs } from "./alerts";
 import { listBranches } from "./branches";
 import { listExpenses } from "./expenses";
 import { listMetrics } from "./metrics";
+import { isReminderDueWithinDays, isReminderOverdue } from "./reminders";
 import { toMoneyNumber } from "./format";
 import type {
   AlertLog,
@@ -24,7 +25,7 @@ export type TrendsFilters = {
 
 export type TrendsKpis = {
   totalCashOnBranch: number;
-  totalOutstandingBalance: number;
+  totalScheduledAmount: number;
   overdueAmount: number;
   overdueCount: number;
   dueNext7Amount: number;
@@ -42,10 +43,10 @@ export type CashTrendPoint = {
   netCashValue: number;
 };
 
-export type OutstandingByBranchPoint = {
+export type DueByBranchPoint = {
   branchId: string;
   branchName: string;
-  outstandingBalance: number;
+  scheduledAmount: number;
 };
 
 export type DueRiskPoint = {
@@ -56,7 +57,7 @@ export type DueRiskPoint = {
 
 export type ExpenseTypeMixPoint = {
   expenseType: ExpenseType;
-  outstandingBalance: number;
+  scheduledAmount: number;
 };
 
 export type AlertsHealthPoint = {
@@ -69,7 +70,7 @@ export type AlertsHealthPoint = {
 export type TrendsData = {
   kpis: TrendsKpis;
   cashTrend: CashTrendPoint[];
-  outstandingByBranch: OutstandingByBranchPoint[];
+  dueByBranch: DueByBranchPoint[];
   dueRiskTimeline: DueRiskPoint[];
   expenseTypeMix: ExpenseTypeMixPoint[];
   alertsHealthTrend: AlertsHealthPoint[];
@@ -156,28 +157,27 @@ function buildExpenseAnalytics(
   expenses: Expense[],
   branches: Branch[],
 ): {
-  outstandingByBranch: OutstandingByBranchPoint[];
+  dueByBranch: DueByBranchPoint[];
   dueRiskTimeline: DueRiskPoint[];
   expenseTypeMix: ExpenseTypeMixPoint[];
-  totalOutstandingBalance: number;
+  totalScheduledAmount: number;
   overdueAmount: number;
   overdueCount: number;
   dueNext7Amount: number;
 } {
   const branchNameById = new Map(branches.map((branch) => [branch.id, branch.displayName]));
 
-  const outstandingByBranchMap = new Map<string, number>();
+  const dueByBranchMap = new Map<string, number>();
   const expenseTypeMap = new Map<ExpenseType, number>();
 
   const now = toDateOnly(new Date());
-  const next7 = new Date(now.getTime() + 7 * MS_PER_DAY);
+  const currentWeekStart = startOfWeekUtc(now);
 
-  let totalOutstandingBalance = 0;
+  let totalScheduledAmount = 0;
   let overdueAmount = 0;
   let overdueCount = 0;
   let dueNext7Amount = 0;
 
-  const currentWeekStart = startOfWeekUtc(now);
   const weekBuckets = new Map<string, DueRiskPoint>();
 
   for (let offset = -4; offset <= 4; offset += 1) {
@@ -191,69 +191,64 @@ function buildExpenseAnalytics(
   }
 
   for (const expense of expenses) {
-    const balance = Math.max(0, toMoneyNumber(expense.balanceRemaining));
-    if (balance <= 0) {
-      continue;
-    }
+    const amount = Math.max(0, toMoneyNumber(expense.amount));
+    totalScheduledAmount += amount;
 
-    totalOutstandingBalance += balance;
-
-    const dueDate = toDateOnly(expense.dueDate);
-    if (expense.status === "OVERDUE" || dueDate.getTime() < now.getTime()) {
-      overdueAmount += balance;
+    if (isReminderOverdue(expense.dueDate, now)) {
+      overdueAmount += amount;
       overdueCount += 1;
     }
 
-    if (
-      dueDate.getTime() >= now.getTime() &&
-      dueDate.getTime() <= next7.getTime() &&
-      expense.status !== "PAID"
-    ) {
-      dueNext7Amount += balance;
+    if (isReminderDueWithinDays(expense.dueDate, 7, now)) {
+      dueNext7Amount += amount;
     }
 
-    const branchCurrent = outstandingByBranchMap.get(expense.branchId) ?? 0;
-    outstandingByBranchMap.set(expense.branchId, branchCurrent + balance);
+    dueByBranchMap.set(
+      expense.branchId,
+      (dueByBranchMap.get(expense.branchId) ?? 0) + amount,
+    );
 
-    const typeCurrent = expenseTypeMap.get(expense.expenseType) ?? 0;
-    expenseTypeMap.set(expense.expenseType, typeCurrent + balance);
+    expenseTypeMap.set(
+      expense.expenseType,
+      (expenseTypeMap.get(expense.expenseType) ?? 0) + amount,
+    );
 
-    const weekStart = startOfWeekUtc(dueDate);
+    const weekStart = startOfWeekUtc(toDateOnly(expense.dueDate));
     const weekKey = formatDateKey(weekStart);
     const bucket = weekBuckets.get(weekKey);
     if (!bucket) {
       continue;
     }
 
-    if (expense.status === "OVERDUE" || dueDate.getTime() < now.getTime()) {
-      bucket.overdueAmount += balance;
+    if (isReminderOverdue(expense.dueDate, now)) {
+      bucket.overdueAmount += amount;
     } else {
-      bucket.upcomingAmount += balance;
+      bucket.upcomingAmount += amount;
     }
   }
 
-  const outstandingByBranch: OutstandingByBranchPoint[] = [...outstandingByBranchMap.entries()]
-    .map(([branchId, outstandingBalance]) => ({
+  const dueByBranch: DueByBranchPoint[] = [...dueByBranchMap.entries()]
+    .map(([branchId, scheduledAmount]) => ({
       branchId,
       branchName: branchNameById.get(branchId) ?? branchId,
-      outstandingBalance,
+      scheduledAmount,
     }))
-    .sort((a, b) => b.outstandingBalance - a.outstandingBalance)
+    .sort((a, b) => b.scheduledAmount - a.scheduledAmount)
     .slice(0, 10);
 
   const expenseTypeMix: ExpenseTypeMixPoint[] = [...expenseTypeMap.entries()]
-    .map(([expenseType, outstandingBalance]) => ({ expenseType, outstandingBalance }))
-    .sort((a, b) => b.outstandingBalance - a.outstandingBalance);
+    .map(([expenseType, scheduledAmount]) => ({ expenseType, scheduledAmount }))
+    .sort((a, b) => b.scheduledAmount - a.scheduledAmount);
 
   const dueRiskTimeline = [...weekBuckets.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([, value]) => value);
 
   return {
-    outstandingByBranch,
+    dueByBranch,
     dueRiskTimeline,
     expenseTypeMix,
-    totalOutstandingBalance,
+    totalScheduledAmount,
     overdueAmount,
     overdueCount,
     dueNext7Amount,
@@ -313,6 +308,8 @@ export async function fetchTrendsData(filters: TrendsFilters): Promise<TrendsDat
         page,
         pageSize,
         branchId: filters.branchId,
+        dueFrom: filters.dateFrom,
+        dueTo: filters.dateTo,
       }),
     ),
     fetchAllPages((page, pageSize) =>
@@ -342,14 +339,14 @@ export async function fetchTrendsData(filters: TrendsFilters): Promise<TrendsDat
   return {
     kpis: {
       totalCashOnBranch: latestCashPoint?.cashOnBranch ?? 0,
-      totalOutstandingBalance: expenseAnalytics.totalOutstandingBalance,
+      totalScheduledAmount: expenseAnalytics.totalScheduledAmount,
       overdueAmount: expenseAnalytics.overdueAmount,
       overdueCount: expenseAnalytics.overdueCount,
       dueNext7Amount: expenseAnalytics.dueNext7Amount,
       alertFailureRate,
     },
     cashTrend,
-    outstandingByBranch: expenseAnalytics.outstandingByBranch,
+    dueByBranch: expenseAnalytics.dueByBranch,
     dueRiskTimeline: expenseAnalytics.dueRiskTimeline,
     expenseTypeMix: expenseAnalytics.expenseTypeMix,
     alertsHealthTrend: alertsAnalytics.trend,

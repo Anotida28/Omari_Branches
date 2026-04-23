@@ -2,7 +2,6 @@ import { Prisma, type BranchMetric } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
 import { getPagination } from "../utils/pagination";
-import { deleteDocumentsWhere } from "./documents.service";
 
 export class MetricServiceError extends Error {
   status: number;
@@ -396,8 +395,6 @@ export async function deleteMetric(id: bigint): Promise<boolean> {
   if (!metric) {
     return false;
   }
-
-  await deleteDocumentsWhere({ metricId: id });
 
   await prisma.$transaction([
     prisma.agentLineMetric.deleteMany({

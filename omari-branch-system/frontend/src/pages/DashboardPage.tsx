@@ -96,18 +96,18 @@ export default function DashboardPage() {
               icon={<Building2 size={20} />}
             />
             <StatCard
-              label="Total Expenses"
+              label="Total Reminders"
               value={String(overviewQuery.data.totalExpenses)}
               icon={<FileText size={20} />}
             />
             <StatCard
-              label="Overdue Expenses"
+              label="Overdue Reminders"
               value={String(overviewQuery.data.overdueExpenses)}
               icon={<AlertTriangle size={20} />}
             />
             <StatCard
-              label="Outstanding Balance"
-              value={formatCurrency(overviewQuery.data.totalOutstandingBalance)}
+              label="Reminder Amount"
+              value={formatCurrency(overviewQuery.data.totalReminderAmount)}
               icon={<DollarSign size={20} />}
             />
           </>

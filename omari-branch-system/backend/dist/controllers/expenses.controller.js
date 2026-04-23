@@ -92,7 +92,6 @@ const updateExpenseSchema = zod_1.z
 });
 const listQuerySchema = zod_1.z.object({
     branchId: branchIdSchema.optional(),
-    status: zod_1.z.nativeEnum(prisma_enums_1.ExpenseStatus).optional(),
     expenseType: zod_1.z.nativeEnum(prisma_enums_1.ExpenseType).optional(),
     period: periodSchema.optional(),
     dueFrom: dateSchema.optional(),
@@ -139,7 +138,6 @@ async function createExpenseHandler(req, res, next) {
 async function listExpensesHandler(req, res, next) {
     const queryInput = {
         branchId: normalizeQueryValue(req.query.branchId),
-        status: normalizeQueryValue(req.query.status),
         expenseType: normalizeQueryValue(req.query.expenseType),
         period: normalizeQueryValue(req.query.period),
         dueFrom: normalizeQueryValue(req.query.dueFrom),

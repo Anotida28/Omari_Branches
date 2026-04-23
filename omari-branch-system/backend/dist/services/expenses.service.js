@@ -2,8 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ExpenseServiceError = void 0;
 exports.buildExpenseResponse = buildExpenseResponse;
-exports.getTotalPaidForExpense = getTotalPaidForExpense;
-exports.refreshExpenseStatus = refreshExpenseStatus;
 exports.createExpense = createExpense;
 exports.updateExpense = updateExpense;
 exports.listExpenses = listExpenses;
@@ -12,8 +10,6 @@ exports.deleteExpense = deleteExpense;
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../db/prisma");
 const pagination_1 = require("../utils/pagination");
-const prisma_enums_1 = require("../shared/prisma-enums");
-const documents_service_1 = require("./documents.service");
 class ExpenseServiceError extends Error {
     constructor(message, status) {
         super(message);
@@ -22,7 +18,6 @@ class ExpenseServiceError extends Error {
     }
 }
 exports.ExpenseServiceError = ExpenseServiceError;
-const ZERO = new client_1.Prisma.Decimal(0);
 function decimalToString(value) {
     return new client_1.Prisma.Decimal(value).toString();
 }
@@ -32,25 +27,7 @@ function formatDate(date) {
 function formatDateTime(date) {
     return date.toISOString();
 }
-function startOfTodayUtc() {
-    const now = new Date();
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-function computeExpenseStatus(amount, totalPaid, dueDate) {
-    if (totalPaid.greaterThanOrEqualTo(amount)) {
-        return prisma_enums_1.ExpenseStatus.PAID;
-    }
-    const today = startOfTodayUtc();
-    if (dueDate.getTime() < today.getTime()) {
-        return prisma_enums_1.ExpenseStatus.OVERDUE;
-    }
-    return prisma_enums_1.ExpenseStatus.PENDING;
-}
-function buildExpenseResponse(expense, totalPaid) {
-    const amount = new client_1.Prisma.Decimal(expense.amount);
-    const status = computeExpenseStatus(amount, totalPaid, expense.dueDate);
-    const balance = amount.minus(totalPaid);
-    const balanceRemaining = balance.lessThan(0) ? ZERO : balance;
+function buildExpenseResponse(expense) {
     return {
         id: expense.id.toString(),
         branchId: expense.branchId.toString(),
@@ -59,43 +36,12 @@ function buildExpenseResponse(expense, totalPaid) {
         dueDate: formatDate(expense.dueDate),
         amount: decimalToString(expense.amount),
         currency: expense.currency,
-        status,
         vendor: expense.vendor,
         notes: expense.notes,
         createdBy: expense.createdBy,
         createdAt: formatDateTime(expense.createdAt),
         updatedAt: formatDateTime(expense.updatedAt),
-        totalPaid: totalPaid.toString(),
-        balanceRemaining: balanceRemaining.toString(),
-        isOverdue: status === prisma_enums_1.ExpenseStatus.OVERDUE,
     };
-}
-async function getTotalPaidForExpense(expenseId) {
-    const aggregate = await prisma_1.prisma.payment.aggregate({
-        where: { expenseId },
-        _sum: { amountPaid: true },
-    });
-    return aggregate._sum.amountPaid
-        ? new client_1.Prisma.Decimal(aggregate._sum.amountPaid)
-        : ZERO;
-}
-async function refreshExpenseStatus(expenseId) {
-    const expense = await prisma_1.prisma.expense.findUnique({
-        where: { id: expenseId },
-    });
-    if (!expense) {
-        throw new ExpenseServiceError("Expense not found", 404);
-    }
-    const totalPaid = await getTotalPaidForExpense(expenseId);
-    const status = computeExpenseStatus(new client_1.Prisma.Decimal(expense.amount), totalPaid, expense.dueDate);
-    if (expense.status !== status) {
-        const updated = await prisma_1.prisma.expense.update({
-            where: { id: expenseId },
-            data: { status },
-        });
-        return { expense: updated, totalPaid, status };
-    }
-    return { expense, totalPaid, status };
 }
 function mapCreateExpenseError(error) {
     if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
@@ -120,7 +66,6 @@ function mapUpdateExpenseError(error) {
     throw error;
 }
 async function createExpense(input) {
-    const status = computeExpenseStatus(new client_1.Prisma.Decimal(input.amount), ZERO, input.dueDate);
     const data = {
         branch: { connect: { id: input.branchId } },
         expenseType: input.expenseType,
@@ -131,11 +76,10 @@ async function createExpense(input) {
         vendor: input.vendor,
         notes: input.notes,
         createdBy: input.createdBy,
-        status,
     };
     try {
         const expense = await prisma_1.prisma.expense.create({ data });
-        return buildExpenseResponse(expense, ZERO);
+        return buildExpenseResponse(expense);
     }
     catch (error) {
         mapCreateExpenseError(error);
@@ -169,16 +113,7 @@ async function updateExpense(id, input) {
             where: { id },
             data,
         });
-        const totalPaid = await getTotalPaidForExpense(id);
-        const status = computeExpenseStatus(new client_1.Prisma.Decimal(expense.amount), totalPaid, expense.dueDate);
-        if (expense.status !== status) {
-            const updated = await prisma_1.prisma.expense.update({
-                where: { id },
-                data: { status },
-            });
-            return buildExpenseResponse(updated, totalPaid);
-        }
-        return buildExpenseResponse(expense, totalPaid);
+        return buildExpenseResponse(expense);
     }
     catch (error) {
         return mapUpdateExpenseError(error);
@@ -203,29 +138,6 @@ async function listExpenses(params) {
     if (params.dueTo) {
         dueDateFilter.lte = params.dueTo;
     }
-    if (params.status) {
-        const today = startOfTodayUtc();
-        if (params.status === prisma_enums_1.ExpenseStatus.PAID) {
-            where.status = prisma_enums_1.ExpenseStatus.PAID;
-        }
-        else {
-            where.status = { not: prisma_enums_1.ExpenseStatus.PAID };
-            if (params.status === prisma_enums_1.ExpenseStatus.OVERDUE) {
-                dueDateFilter.lt = today;
-            }
-            else if (params.status === prisma_enums_1.ExpenseStatus.PENDING) {
-                const currentGte = dueDateFilter.gte;
-                const currentGteDate = currentGte instanceof Date
-                    ? currentGte
-                    : currentGte
-                        ? new Date(currentGte)
-                        : null;
-                if (!currentGteDate || currentGteDate.getTime() < today.getTime()) {
-                    dueDateFilter.gte = today;
-                }
-            }
-        }
-    }
     if (Object.keys(dueDateFilter).length > 0) {
         where.dueDate = dueDateFilter;
     }
@@ -238,27 +150,8 @@ async function listExpenses(params) {
             orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
         }),
     ]);
-    if (expenses.length === 0) {
-        return {
-            items: [],
-            page,
-            pageSize,
-            total,
-        };
-    }
-    const expenseIds = expenses.map((expense) => expense.id);
-    const totals = await prisma_1.prisma.payment.groupBy({
-        by: ["expenseId"],
-        where: { expenseId: { in: expenseIds } },
-        _sum: { amountPaid: true },
-    });
-    const totalsMap = new Map();
-    for (const entry of totals) {
-        const amountPaid = entry._sum.amountPaid ?? ZERO;
-        totalsMap.set(entry.expenseId.toString(), new client_1.Prisma.Decimal(amountPaid));
-    }
     return {
-        items: expenses.map((expense) => buildExpenseResponse(expense, totalsMap.get(expense.id.toString()) ?? ZERO)),
+        items: expenses.map((expense) => buildExpenseResponse(expense)),
         page,
         pageSize,
         total,
@@ -271,23 +164,10 @@ async function getExpenseById(id) {
     if (!expense) {
         return null;
     }
-    const totalPaid = await getTotalPaidForExpense(id);
-    return buildExpenseResponse(expense, totalPaid);
+    return buildExpenseResponse(expense);
 }
 async function deleteExpense(id) {
     try {
-        await (0, documents_service_1.deleteDocumentsWhere)({
-            OR: [
-                { expenseId: id },
-                {
-                    payment: {
-                        is: {
-                            expenseId: id,
-                        },
-                    },
-                },
-            ],
-        });
         await prisma_1.prisma.expense.delete({ where: { id } });
         return true;
     }
