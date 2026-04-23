@@ -102,6 +102,22 @@ async function removeManagedLocalFile(storageKey: string): Promise<void> {
   }
 }
 
+async function deleteDocumentRecord(document: Pick<Document, "id" | "filePath">): Promise<boolean> {
+  try {
+    await prisma.document.delete({ where: { id: document.id } });
+    await removeManagedLocalFile(document.filePath);
+    return true;
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 export async function createDocument(
   input: DocumentCreateInput,
 ): Promise<DocumentResponse> {
@@ -197,28 +213,37 @@ export async function listDocumentsForMetric(
 }
 
 export async function deleteDocument(id: bigint): Promise<boolean> {
-  try {
-    const existing = await prisma.document.findUnique({
-      where: { id },
-      select: { id: true, filePath: true },
-    });
+  const existing = await prisma.document.findUnique({
+    where: { id },
+    select: { id: true, filePath: true },
+  });
 
-    if (!existing) {
-      return false;
-    }
-
-    await prisma.document.delete({ where: { id } });
-    await removeManagedLocalFile(existing.filePath);
-    return true;
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2025"
-    ) {
-      return false;
-    }
-    throw error;
+  if (!existing) {
+    return false;
   }
+
+  return deleteDocumentRecord(existing);
+}
+
+export async function deleteDocumentsWhere(
+  where: Prisma.DocumentWhereInput,
+): Promise<number> {
+  const documents = await prisma.document.findMany({
+    where,
+    select: {
+      id: true,
+      filePath: true,
+    },
+  });
+
+  let deletedCount = 0;
+  for (const document of documents) {
+    if (await deleteDocumentRecord(document)) {
+      deletedCount += 1;
+    }
+  }
+
+  return deletedCount;
 }
 
 export async function getDocumentFileInfo(

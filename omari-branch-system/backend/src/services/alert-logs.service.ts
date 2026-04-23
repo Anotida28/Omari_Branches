@@ -41,8 +41,6 @@ export type AlertLogExpenseSummary = {
   period: string;
   dueDate: string;
   amount: string;
-  balanceRemaining: string;
-  status: string;
 };
 
 export type AlertLogBranchSummary = {
@@ -104,18 +102,6 @@ function getRuleDescription(ruleType: AlertRuleTypeValue, dayOffset: number): st
   return `${ruleType} (offset: ${dayOffset})`;
 }
 
-function computeBalanceRemaining(
-  amount: Prisma.Decimal,
-  payments: { amountPaid: Prisma.Decimal }[]
-): Prisma.Decimal {
-  const totalPaid = payments.reduce(
-    (sum, p) => sum.plus(p.amountPaid),
-    new Prisma.Decimal(0)
-  );
-  const balance = amount.minus(totalPaid);
-  return balance.lessThan(0) ? new Prisma.Decimal(0) : balance;
-}
-
 type AlertLogWithRelations = AlertLog & {
   expense: {
     id: bigint;
@@ -124,24 +110,15 @@ type AlertLogWithRelations = AlertLog & {
     period: string;
     dueDate: Date;
     amount: Prisma.Decimal;
-    status: string;
     branch: {
       id: bigint;
       city: string;
       label: string;
     };
-    payments: {
-      amountPaid: Prisma.Decimal;
-    }[];
   };
 };
 
 function toAlertLogResponse(log: AlertLogWithRelations): AlertLogResponse {
-  const balanceRemaining = computeBalanceRemaining(
-    log.expense.amount,
-    log.expense.payments
-  );
-
   return {
     id: log.id.toString(),
     expenseId: log.expenseId.toString(),
@@ -157,8 +134,6 @@ function toAlertLogResponse(log: AlertLogWithRelations): AlertLogResponse {
       period: log.expense.period,
       dueDate: formatDate(log.expense.dueDate),
       amount: decimalToString(log.expense.amount),
-      balanceRemaining: decimalToString(balanceRemaining),
-      status: log.expense.status,
     },
     rule: {
       ruleType: log.ruleType,
@@ -231,11 +206,6 @@ export async function listAlertLogs(
                 label: true,
               },
             },
-            payments: {
-              select: {
-                amountPaid: true,
-              },
-            },
           },
         },
       },
@@ -266,11 +236,6 @@ export async function getAlertLogById(
               id: true,
               city: true,
               label: true,
-            },
-          },
-          payments: {
-            select: {
-              amountPaid: true,
             },
           },
         },

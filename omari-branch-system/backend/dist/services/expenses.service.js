@@ -13,6 +13,7 @@ const client_1 = require("@prisma/client");
 const prisma_1 = require("../db/prisma");
 const pagination_1 = require("../utils/pagination");
 const prisma_enums_1 = require("../shared/prisma-enums");
+const documents_service_1 = require("./documents.service");
 class ExpenseServiceError extends Error {
     constructor(message, status) {
         super(message);
@@ -44,38 +45,6 @@ function computeExpenseStatus(amount, totalPaid, dueDate) {
         return prisma_enums_1.ExpenseStatus.OVERDUE;
     }
     return prisma_enums_1.ExpenseStatus.PENDING;
-}
-function sumPayments(payments) {
-    return payments.reduce((sum, payment) => sum.plus(payment.amountPaid), ZERO);
-}
-function toPaymentResponse(payment) {
-    return {
-        id: payment.id.toString(),
-        expenseId: payment.expenseId.toString(),
-        paidDate: formatDate(payment.paidDate),
-        amountPaid: decimalToString(payment.amountPaid),
-        currency: payment.currency,
-        reference: payment.reference,
-        notes: payment.notes,
-        createdBy: payment.createdBy,
-        createdAt: formatDateTime(payment.createdAt),
-    };
-}
-function toDocumentResponse(document) {
-    return {
-        id: document.id.toString(),
-        docType: document.docType,
-        fileName: document.fileName,
-        mimeType: document.mimeType,
-        sizeBytes: document.fileSize === null || document.fileSize === undefined
-            ? null
-            : document.fileSize.toString(),
-        storageKey: document.filePath,
-        expenseId: document.expenseId ? document.expenseId.toString() : null,
-        paymentId: document.paymentId ? document.paymentId.toString() : null,
-        uploadedBy: document.uploadedBy,
-        uploadedAt: formatDateTime(document.uploadedAt),
-    };
 }
 function buildExpenseResponse(expense, totalPaid) {
     const amount = new client_1.Prisma.Decimal(expense.amount);
@@ -298,24 +267,27 @@ async function listExpenses(params) {
 async function getExpenseById(id) {
     const expense = await prisma_1.prisma.expense.findUnique({
         where: { id },
-        include: {
-            payments: { orderBy: { paidDate: "desc" } },
-            documents: { orderBy: { uploadedAt: "desc" } },
-        },
     });
     if (!expense) {
         return null;
     }
-    const totalPaid = sumPayments(expense.payments);
-    const base = buildExpenseResponse(expense, totalPaid);
-    return {
-        ...base,
-        payments: expense.payments.map(toPaymentResponse),
-        documents: expense.documents.map(toDocumentResponse),
-    };
+    const totalPaid = await getTotalPaidForExpense(id);
+    return buildExpenseResponse(expense, totalPaid);
 }
 async function deleteExpense(id) {
     try {
+        await (0, documents_service_1.deleteDocumentsWhere)({
+            OR: [
+                { expenseId: id },
+                {
+                    payment: {
+                        is: {
+                            expenseId: id,
+                        },
+                    },
+                },
+            ],
+        });
         await prisma_1.prisma.expense.delete({ where: { id } });
         return true;
     }

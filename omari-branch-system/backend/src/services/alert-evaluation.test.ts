@@ -63,8 +63,6 @@ function makeExpense(overrides: Partial<EligibleExpenseInput> = {}): EligibleExp
     period: "2026-02",
     dueDate: new Date(Date.UTC(2026, 1, 27)), // Feb 27, 2026
     amount: "1000",
-    status: "PENDING",
-    balanceRemaining: "1000",
     ...overrides,
   };
 }
@@ -116,28 +114,13 @@ test("generateAlertKey creates unique key", () => {
 });
 
 // --- isExpenseEligible ---
-test("isExpenseEligible returns true for pending expense with balance", () => {
-  const expense = makeExpense({ status: "PENDING", balanceRemaining: "500" });
+test("isExpenseEligible returns true for valid due-date expense", () => {
+  const expense = makeExpense();
   assertEqual(isExpenseEligible(expense), true);
 });
 
-test("isExpenseEligible returns true for overdue expense with balance", () => {
-  const expense = makeExpense({ status: "OVERDUE", balanceRemaining: "500" });
-  assertEqual(isExpenseEligible(expense), true);
-});
-
-test("isExpenseEligible returns false for PAID expense", () => {
-  const expense = makeExpense({ status: "PAID", balanceRemaining: "0" });
-  assertEqual(isExpenseEligible(expense), false);
-});
-
-test("isExpenseEligible returns false for zero balance", () => {
-  const expense = makeExpense({ status: "PENDING", balanceRemaining: "0" });
-  assertEqual(isExpenseEligible(expense), false);
-});
-
-test("isExpenseEligible returns false for negative balance", () => {
-  const expense = makeExpense({ status: "PENDING", balanceRemaining: "-10" });
+test("isExpenseEligible returns false for invalid due date", () => {
+  const expense = makeExpense({ dueDate: new Date("invalid-date") });
   assertEqual(isExpenseEligible(expense), false);
 });
 
@@ -211,7 +194,6 @@ test("evaluateAlerts matches OVERDUE_ESCALATION correctly", () => {
     makeExpense({
       id: BigInt(200),
       dueDate: new Date(Date.UTC(2026, 1, 20)), // 1 day overdue
-      status: "OVERDUE",
     }),
   ];
   const rules = [
@@ -232,7 +214,6 @@ test("evaluateAlerts matches multiple rules for same expense", () => {
     makeExpense({
       id: BigInt(300),
       dueDate: new Date(Date.UTC(2026, 1, 21)), // 7 days overdue
-      status: "OVERDUE",
     }),
   ];
   const rules = [
@@ -248,21 +229,19 @@ test("evaluateAlerts matches multiple rules for same expense", () => {
   assertEqual(result.candidates[0].ruleId, BigInt(2));
 });
 
-test("evaluateAlerts skips PAID expenses", () => {
+test("evaluateAlerts still evaluates expenses regardless of payment state", () => {
   const today = new Date(Date.UTC(2026, 1, 20));
   const expenses = [
     makeExpense({
       dueDate: new Date(Date.UTC(2026, 1, 27)),
-      status: "PAID",
-      balanceRemaining: "0",
     }),
   ];
   const rules = [makeRule({ dayOffset: -7 })];
 
   const result = evaluateAlerts(today, expenses, rules);
   
-  assertArrayLength(result.candidates, 0);
-  assertEqual(result.eligibleExpenseCount, 0);
+  assertArrayLength(result.candidates, 1);
+  assertEqual(result.eligibleExpenseCount, 1);
 });
 
 test("evaluateAlerts handles multiple expenses and rules", () => {
@@ -283,7 +262,6 @@ test("evaluateAlerts handles multiple expenses and rules", () => {
     makeExpense({
       id: BigInt(4),
       dueDate: new Date(Date.UTC(2026, 1, 19)), // 1 day overdue
-      status: "OVERDUE",
     }),
   ];
   const rules = [

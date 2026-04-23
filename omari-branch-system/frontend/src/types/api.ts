@@ -15,7 +15,6 @@ export type ApiItemsResponse<T> = {
 
 export type ExpenseType = "RENT" | "ZESA" | "WIFI" | "OTHER";
 export type ExpenseStatus = "PENDING" | "PAID" | "OVERDUE";
-export type DocumentType = "INVOICE" | "RECEIPT" | "OTHER";
 
 export type UserRole = "VIEWER" | "FULL_ACCESS" | "SUPER_ADMIN";
 
@@ -135,36 +134,7 @@ export type Expense = {
   isOverdue: boolean;
 };
 
-export type Payment = {
-  id: string;
-  expenseId: string;
-  paidDate: string;
-  amountPaid: string;
-  currency: string;
-  reference: string | null;
-  notes: string | null;
-  createdBy: string | null;
-  createdAt: string;
-};
-
-export type DocumentRecord = {
-  id: string;
-  docType: DocumentType;
-  fileName: string;
-  mimeType: string | null;
-  sizeBytes: string | null;
-  storageKey: string;
-  expenseId: string | null;
-  paymentId: string | null;
-  metricId: string | null;
-  uploadedBy: string | null;
-  uploadedAt: string;
-};
-
-export type ExpenseDetail = Expense & {
-  payments: Payment[];
-  documents: DocumentRecord[];
-};
+export type ExpenseDetail = Expense;
 
 export type ExpensesListParams = {
   branchId?: string;
@@ -197,42 +167,6 @@ export type UpdateExpenseInput = {
   currency?: string;
   vendor?: string;
   notes?: string;
-};
-
-export type CreatePaymentInput = {
-  paidDate: string;
-  amountPaid: number;
-  currency?: string;
-  reference?: string;
-  notes?: string;
-  createdBy?: string;
-};
-
-export type CreateDocumentInput = {
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  storageKey?: string;
-  url?: string;
-  uploadedBy?: string;
-  docType?: DocumentType;
-  expenseId?: string;
-  paymentId?: string;
-  metricId?: string;
-};
-
-export type UploadDocumentInput = {
-  file: File;
-  uploadedBy?: string;
-  docType?: DocumentType;
-  expenseId?: string;
-  paymentId?: string;
-  metricId?: string;
-};
-
-export type CreatePaymentResponse = {
-  data: Payment;
-  expense: Expense;
 };
 
 export type DashboardStats = {
@@ -302,8 +236,6 @@ export type AlertLogExpenseSummary = {
   period: string;
   dueDate: string;
   amount: string;
-  balanceRemaining: string;
-  status: string;
 };
 
 export type AlertLogRuleSummary = {

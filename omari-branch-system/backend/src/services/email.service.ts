@@ -21,7 +21,6 @@ export type AlertEmailPayload = {
   period: string;
   dueDate: string;
   amount: string;
-  balanceRemaining: string;
   alertType: string;
   dayOffset: number;
 };
@@ -130,7 +129,7 @@ function formatSubject(payload: AlertEmailPayload): string {
  * Format the email body based on alert type.
  */
 function formatBody(payload: AlertEmailPayload): string {
-  const { branchName, expenseType, period, dueDate, amount, balanceRemaining, alertType, dayOffset } = payload;
+  const { branchName, expenseType, period, dueDate, amount, alertType, dayOffset } = payload;
 
   const header = alertType === "DUE_REMINDER"
     ? `This is a reminder that ${expenseType} for ${branchName} is due soon.`
@@ -143,12 +142,11 @@ Branch: ${branchName}
 Expense Type: ${expenseType}
 Period: ${period}
 Due Date: ${dueDate}
-Total Amount: ${amount}
-Balance Remaining: ${balanceRemaining}
+Expected Amount: ${amount}
 
 ${alertType === "DUE_REMINDER"
-    ? `Please ensure payment is made before the due date.`
-    : `This expense is ${dayOffset} day(s) overdue. Please take immediate action.`
+    ? `Please review this expense before the due date.`
+    : `This expense is ${dayOffset} day(s) overdue. Please follow up with the branch.`
 }
 
 ---

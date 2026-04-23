@@ -11,8 +11,6 @@
  *    - Sends email and logs the result
  */
 
-import { Prisma } from "@prisma/client";
-
 import { prisma } from "../db/prisma";
 import {
   evaluateAlerts,
@@ -76,8 +74,7 @@ async function loadActiveRules(): Promise<AlertRuleInput[]> {
 }
 
 /**
- * Load eligible expenses within the date range needed for evaluation.
- * Includes joined payments to compute balanceRemaining.
+ * Load expenses within the date range needed for evaluation.
  */
 async function loadEligibleExpenses(today: Date): Promise<EligibleExpenseInput[]> {
   // Calculate date range
@@ -86,39 +83,21 @@ async function loadEligibleExpenses(today: Date): Promise<EligibleExpenseInput[]
 
   const expenses = await prisma.expense.findMany({
     where: {
-      status: { not: "PAID" },
       dueDate: {
         gte: rangeStart,
         lte: rangeEnd,
       },
     },
-    include: {
-      payments: {
-        select: { amountPaid: true },
-      },
-    },
   });
 
-  // Map to EligibleExpenseInput with computed balanceRemaining
-  return expenses.map((e) => {
-    const amount = new Prisma.Decimal(e.amount);
-    const totalPaid = e.payments.reduce(
-      (sum, p) => sum.plus(p.amountPaid),
-      new Prisma.Decimal(0)
-    );
-    const balanceRemaining = amount.minus(totalPaid);
-
-    return {
-      id: e.id,
-      branchId: e.branchId,
-      expenseType: e.expenseType,
-      period: e.period,
-      dueDate: e.dueDate,
-      amount: amount.toString(),
-      status: e.status,
-      balanceRemaining: balanceRemaining.toString(),
-    };
-  }).filter((e) => parseFloat(e.balanceRemaining) > 0);
+  return expenses.map((expense) => ({
+    id: expense.id,
+    branchId: expense.branchId,
+    expenseType: expense.expenseType,
+    period: expense.period,
+    dueDate: expense.dueDate,
+    amount: expense.amount.toString(),
+  }));
 }
 
 /**
@@ -300,8 +279,7 @@ export async function runAlertEvaluatorJob(): Promise<AlertJobResult> {
             expenseType: candidate.expenseType,
             period: candidate.period,
             dueDate: formatDateString(candidate.dueDate),
-            amount: formatAmount(candidate.balanceRemaining), // Using balance as "amount to pay"
-            balanceRemaining: formatAmount(candidate.balanceRemaining),
+            amount: formatAmount(candidate.amount),
             alertType: candidate.ruleType,
             dayOffset: candidate.dayOffset,
           };

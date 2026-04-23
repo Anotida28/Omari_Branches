@@ -460,9 +460,6 @@ export default function AlertsPage() {
                 <Typography variant="body2">
                   Amount: {formatCurrency(Number(selectedLog.expense.amount))}
                 </Typography>
-                <Typography variant="body2">
-                  Balance: {formatCurrency(Number(selectedLog.expense.balanceRemaining))}
-                </Typography>
               </Stack>
             </Box>
 

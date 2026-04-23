@@ -1,17 +1,12 @@
 import { api } from "./api";
 import type {
   ApiDataResponse,
-  CreateDocumentInput,
   CreateExpenseInput,
-  CreatePaymentInput,
-  CreatePaymentResponse,
-  DocumentRecord,
   Expense,
   ExpenseDetail,
   ExpensesListParams,
   PaginatedResponse,
   UpdateExpenseInput,
-  UploadDocumentInput,
 } from "../types/api";
 
 export async function listExpenses(
@@ -48,60 +43,4 @@ export async function updateExpense(
 
 export async function deleteExpense(expenseId: string): Promise<void> {
   await api.delete(`/api/expenses/${expenseId}`);
-}
-
-export async function createPayment(
-  expenseId: string,
-  input: CreatePaymentInput,
-): Promise<CreatePaymentResponse> {
-  const { data } = await api.post<CreatePaymentResponse>(
-    `/api/expenses/${expenseId}/payments`,
-    input,
-  );
-  return data;
-}
-
-export async function createDocument(
-  input: CreateDocumentInput,
-): Promise<DocumentRecord> {
-  const { data } = await api.post<ApiDataResponse<DocumentRecord>>(
-    "/api/documents",
-    input,
-  );
-  return data.data;
-}
-
-export async function uploadDocument(input: UploadDocumentInput): Promise<DocumentRecord> {
-  const formData = new FormData();
-  formData.append("file", input.file);
-
-  if (input.docType) {
-    formData.append("docType", input.docType);
-  }
-  if (input.uploadedBy) {
-    formData.append("uploadedBy", input.uploadedBy);
-  }
-  if (input.expenseId) {
-    formData.append("expenseId", input.expenseId);
-  }
-  if (input.paymentId) {
-    formData.append("paymentId", input.paymentId);
-  }
-  if (input.metricId) {
-    formData.append("metricId", input.metricId);
-  }
-
-  const { data } = await api.post<ApiDataResponse<DocumentRecord>>(
-    "/api/documents/upload",
-    formData,
-  );
-  return data.data;
-}
-
-export async function deleteDocumentById(documentId: string): Promise<void> {
-  await api.delete(`/api/documents/${documentId}`);
-}
-
-export async function deletePayment(paymentId: string): Promise<void> {
-  await api.delete(`/api/payments/${paymentId}`);
 }

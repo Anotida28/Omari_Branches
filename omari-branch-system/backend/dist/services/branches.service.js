@@ -8,6 +8,7 @@ exports.updateBranch = updateBranch;
 exports.deleteBranch = deleteBranch;
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../db/prisma");
+const documents_service_1 = require("./documents.service");
 class BranchServiceError extends Error {
     constructor(message, status) {
         super(message);
@@ -178,6 +179,35 @@ async function updateBranch(id, input) {
 }
 async function deleteBranch(id) {
     try {
+        await (0, documents_service_1.deleteDocumentsWhere)({
+            OR: [
+                {
+                    expense: {
+                        is: {
+                            branchId: id,
+                        },
+                    },
+                },
+                {
+                    payment: {
+                        is: {
+                            expense: {
+                                is: {
+                                    branchId: id,
+                                },
+                            },
+                        },
+                    },
+                },
+                {
+                    metric: {
+                        is: {
+                            branchId: id,
+                        },
+                    },
+                },
+            ],
+        });
         await prisma_1.prisma.branch.delete({ where: { id } });
         return true;
     }

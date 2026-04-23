@@ -9,6 +9,7 @@ exports.listDocumentsForExpense = listDocumentsForExpense;
 exports.listDocumentsForPayment = listDocumentsForPayment;
 exports.listDocumentsForMetric = listDocumentsForMetric;
 exports.deleteDocument = deleteDocument;
+exports.deleteDocumentsWhere = deleteDocumentsWhere;
 exports.getDocumentFileInfo = getDocumentFileInfo;
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
@@ -69,6 +70,20 @@ async function removeManagedLocalFile(storageKey) {
         if (code !== "ENOENT") {
             console.warn(`[Documents] Failed to remove local file: ${absolutePath}`);
         }
+    }
+}
+async function deleteDocumentRecord(document) {
+    try {
+        await prisma_1.prisma.document.delete({ where: { id: document.id } });
+        await removeManagedLocalFile(document.filePath);
+        return true;
+    }
+    catch (error) {
+        if (error instanceof client_1.Prisma.PrismaClientKnownRequestError &&
+            error.code === "P2025") {
+            return false;
+        }
+        throw error;
     }
 }
 async function createDocument(input) {
@@ -138,25 +153,30 @@ async function listDocumentsForMetric(metricId) {
     return documents.map(toDocumentResponse);
 }
 async function deleteDocument(id) {
-    try {
-        const existing = await prisma_1.prisma.document.findUnique({
-            where: { id },
-            select: { id: true, filePath: true },
-        });
-        if (!existing) {
-            return false;
-        }
-        await prisma_1.prisma.document.delete({ where: { id } });
-        await removeManagedLocalFile(existing.filePath);
-        return true;
+    const existing = await prisma_1.prisma.document.findUnique({
+        where: { id },
+        select: { id: true, filePath: true },
+    });
+    if (!existing) {
+        return false;
     }
-    catch (error) {
-        if (error instanceof client_1.Prisma.PrismaClientKnownRequestError &&
-            error.code === "P2025") {
-            return false;
+    return deleteDocumentRecord(existing);
+}
+async function deleteDocumentsWhere(where) {
+    const documents = await prisma_1.prisma.document.findMany({
+        where,
+        select: {
+            id: true,
+            filePath: true,
+        },
+    });
+    let deletedCount = 0;
+    for (const document of documents) {
+        if (await deleteDocumentRecord(document)) {
+            deletedCount += 1;
         }
-        throw error;
     }
+    return deletedCount;
 }
 async function getDocumentFileInfo(id) {
     const document = await prisma_1.prisma.document.findUnique({

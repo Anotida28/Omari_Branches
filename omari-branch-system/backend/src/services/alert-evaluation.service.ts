@@ -6,15 +6,11 @@
  *
  * Key concepts:
  * - Alert Key: expenseId + ruleId + triggerDate (prevents duplicate alerts)
- * - Eligible Expense: status != PAID, has dueDate, balanceRemaining > 0
+ * - Eligible Expense: has a valid dueDate within the reminder window
  * - Timezone: Africa/Harare (UTC+2) for "today" calculation
  */
 
-import type {
-  AlertRuleType,
-  ExpenseStatus,
-  ExpenseType,
-} from "../shared/prisma-enums";
+import type { AlertRuleType, ExpenseType } from "../shared/prisma-enums";
 
 // ============================================================================
 // Types
@@ -31,8 +27,6 @@ export type EligibleExpenseInput = {
   period: string;
   dueDate: Date;
   amount: string | number; // Decimal as string or number
-  status: ExpenseStatus;
-  balanceRemaining: string | number; // Computed: amount - totalPaid
 };
 
 /**
@@ -58,7 +52,7 @@ export type AlertCandidate = {
   expenseType: ExpenseType;
   period: string;
   dueDate: Date;
-  balanceRemaining: number;
+  amount: number;
 
   /** The rule that matched */
   ruleId: bigint;
@@ -85,7 +79,7 @@ export type AlertEvaluationResult = {
   /** Total expenses evaluated */
   totalExpensesEvaluated: number;
 
-  /** Expenses that were eligible (not paid, has dueDate) */
+  /** Expenses that were eligible for due-date evaluation */
   eligibleExpenseCount: number;
 
   /** Alert candidates that matched rules */
@@ -178,7 +172,7 @@ export function generateAlertKey(
 }
 
 /**
- * Parse a balance value to number.
+ * Parse an amount value to number.
  */
 function toNumber(value: string | number): number {
   if (typeof value === "number") {
@@ -191,22 +185,9 @@ function toNumber(value: string | number): number {
  * Check if an expense is eligible for alert evaluation.
  * 
  * Criteria:
- * - status != PAID
- * - balanceRemaining > 0
  * - has a valid dueDate
  */
 export function isExpenseEligible(expense: EligibleExpenseInput): boolean {
-  // Must not be fully paid
-  if (expense.status === "PAID") {
-    return false;
-  }
-  
-  // Must have remaining balance
-  const balance = toNumber(expense.balanceRemaining);
-  if (balance <= 0) {
-    return false;
-  }
-  
   // Must have a valid dueDate
   if (!expense.dueDate || !(expense.dueDate instanceof Date)) {
     return false;
@@ -305,7 +286,7 @@ export function evaluateAlerts(
           expenseType: expense.expenseType,
           period: expense.period,
           dueDate: expense.dueDate,
-          balanceRemaining: toNumber(expense.balanceRemaining),
+          amount: toNumber(expense.amount),
           ruleId: rule.id,
           ruleType: rule.ruleType,
           dayOffset: rule.dayOffset,

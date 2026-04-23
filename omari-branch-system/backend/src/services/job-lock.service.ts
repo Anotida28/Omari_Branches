@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+
 import { prisma } from "../db/prisma";
 
 /**
@@ -29,6 +31,10 @@ function toSafeLockDurationMs(lockDurationMs: number): number {
   return Math.floor(lockDurationMs);
 }
 
+function buildLockExpiry(lockDurationMs: number): Date {
+  return new Date(Date.now() + lockDurationMs);
+}
+
 /**
  * Attempt to acquire a lock for a job.
  * Returns lock details if acquired, null if another worker holds the lock.
@@ -38,47 +44,59 @@ export async function acquireLock(
   lockDurationMs: number = DEFAULT_LOCK_DURATION_MS
 ): Promise<AcquiredLock | null> {
   const safeLockDurationMs = toSafeLockDurationMs(lockDurationMs);
-  const lockDurationMicros = safeLockDurationMs * 1000;
   const workerId = getWorkerId();
+  const lockedUntil = buildLockExpiry(safeLockDurationMs);
 
   try {
-    // Compare against database time (NOW) to avoid cross-instance clock skew.
-    await prisma.$executeRaw`
-      INSERT INTO JobLock (jobName, lockedUntil, lockedBy, createdAt, updatedAt)
-      VALUES (
-        ${jobName},
-        TIMESTAMPADD(MICROSECOND, ${lockDurationMicros}, NOW(3)),
-        ${workerId},
-        NOW(3),
-        NOW(3)
-      )
-      ON DUPLICATE KEY UPDATE
-        lockedBy = IF(lockedUntil < NOW(3), ${workerId}, lockedBy),
-        lockedUntil = IF(
-          lockedUntil < NOW(3),
-          TIMESTAMPADD(MICROSECOND, ${lockDurationMicros}, NOW(3)),
-          lockedUntil
-        ),
-        updatedAt = IF(lockedUntil < NOW(3), NOW(3), updatedAt)
-    `;
-
-    // Now check if we actually hold the lock
-    const lock = await prisma.jobLock.findUnique({
-      where: { jobName },
-    });
-
-    if (lock && lock.lockedBy === workerId) {
-      return {
+    await prisma.jobLock.create({
+      data: {
         jobName,
         lockedBy: workerId,
-        lockDurationMs: safeLockDurationMs,
-      };
-    }
+        lockedUntil,
+      },
+    });
 
-    return null;
+    return {
+      jobName,
+      lockedBy: workerId,
+      lockDurationMs: safeLockDurationMs,
+    };
   } catch (error) {
-    console.error(`[JobLock] Failed to acquire lock for ${jobName}:`, error);
-    return null;
+    try {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code !== "P2002"
+      ) {
+        throw error;
+      }
+
+      const now = new Date();
+      const updated = await prisma.jobLock.updateMany({
+        where: {
+          jobName,
+          lockedUntil: {
+            lte: now,
+          },
+        },
+        data: {
+          lockedBy: workerId,
+          lockedUntil,
+        },
+      });
+
+      if (updated.count > 0) {
+        return {
+          jobName,
+          lockedBy: workerId,
+          lockDurationMs: safeLockDurationMs,
+        };
+      }
+
+      return null;
+    } catch (updateError) {
+      console.error(`[JobLock] Failed to acquire lock for ${jobName}:`, updateError);
+      return null;
+    }
   }
 }
 
@@ -91,14 +109,16 @@ export async function releaseLock(
   lockedBy: string
 ): Promise<boolean> {
   try {
-    const updated = await prisma.$executeRaw`
-      UPDATE JobLock
-      SET lockedUntil = FROM_UNIXTIME(0),
-          updatedAt = NOW(3)
-      WHERE jobName = ${jobName}
-        AND lockedBy = ${lockedBy}
-    `;
-    return Number(updated) > 0;
+    const updated = await prisma.jobLock.updateMany({
+      where: {
+        jobName,
+        lockedBy,
+      },
+      data: {
+        lockedUntil: new Date(0),
+      },
+    });
+    return updated.count > 0;
   } catch (error) {
     console.warn(
       `[JobLock] Could not release lock for ${jobName} by ${lockedBy}:`,
@@ -118,18 +138,21 @@ export async function renewLock(
   lockDurationMs: number = DEFAULT_LOCK_DURATION_MS
 ): Promise<boolean> {
   const safeLockDurationMs = toSafeLockDurationMs(lockDurationMs);
-  const lockDurationMicros = safeLockDurationMs * 1000;
 
   try {
-    const updated = await prisma.$executeRaw`
-      UPDATE JobLock
-      SET lockedUntil = TIMESTAMPADD(MICROSECOND, ${lockDurationMicros}, NOW(3)),
-          updatedAt = NOW(3)
-      WHERE jobName = ${jobName}
-        AND lockedBy = ${lockedBy}
-        AND lockedUntil >= NOW(3)
-    `;
-    return Number(updated) > 0;
+    const updated = await prisma.jobLock.updateMany({
+      where: {
+        jobName,
+        lockedBy,
+        lockedUntil: {
+          gte: new Date(),
+        },
+      },
+      data: {
+        lockedUntil: buildLockExpiry(safeLockDurationMs),
+      },
+    });
+    return updated.count > 0;
   } catch (error) {
     console.error(
       `[JobLock] Could not renew lock for ${jobName} by ${lockedBy}:`,

@@ -8,6 +8,7 @@ const client_1 = require("@prisma/client");
 const prisma_1 = require("../db/prisma");
 const expenses_service_1 = require("./expenses.service");
 const prisma_enums_1 = require("../shared/prisma-enums");
+const documents_service_1 = require("./documents.service");
 class PaymentServiceError extends Error {
     constructor(message, status) {
         super(message);
@@ -67,12 +68,11 @@ async function createPayment(expenseId, input) {
     const requested = new client_1.Prisma.Decimal(input.amountPaid);
     try {
         return await prisma_1.prisma.$transaction(async (tx) => {
-            // Serialize all payments for the same expense row.
+            // SQL Server row-level lock to serialize payment writes per expense.
             await tx.$queryRaw `
-        SELECT id
-        FROM Expense
-        WHERE id = ${expenseId}
-        FOR UPDATE
+        SELECT [id]
+        FROM [Expense] WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
+        WHERE [id] = ${expenseId}
       `;
             const expense = await tx.expense.findUnique({
                 where: { id: expenseId },
@@ -141,6 +141,7 @@ async function listPaymentsForExpense(expenseId) {
 }
 async function deletePayment(id) {
     try {
+        await (0, documents_service_1.deleteDocumentsWhere)({ paymentId: id });
         const payment = await prisma_1.prisma.payment.delete({ where: { id } });
         try {
             await (0, expenses_service_1.refreshExpenseStatus)(payment.expenseId);

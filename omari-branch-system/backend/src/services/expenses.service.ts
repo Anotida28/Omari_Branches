@@ -1,7 +1,5 @@
 import {
   type Expense,
-  type Payment,
-  type Document,
   Prisma,
 } from "@prisma/client";
 
@@ -10,11 +8,10 @@ import { getPagination } from "../utils/pagination";
 import {
   ExpenseStatus,
   ExpenseType,
-  DocumentType,
   type ExpenseStatus as ExpenseStatusValue,
   type ExpenseType as ExpenseTypeValue,
-  type DocumentType as DocumentTypeValue,
 } from "../shared/prisma-enums";
+import { deleteDocumentsWhere } from "./documents.service";
 
 export class ExpenseServiceError extends Error {
   status: number;
@@ -78,35 +75,7 @@ export type ExpenseResponse = {
   isOverdue: boolean;
 };
 
-export type PaymentResponse = {
-  id: string;
-  expenseId: string;
-  paidDate: string;
-  amountPaid: string;
-  currency: string;
-  reference: string | null;
-  notes: string | null;
-  createdBy: string | null;
-  createdAt: string;
-};
-
-export type DocumentResponse = {
-  id: string;
-  docType: DocumentTypeValue;
-  fileName: string;
-  mimeType: string | null;
-  sizeBytes: string | null;
-  storageKey: string;
-  expenseId: string | null;
-  paymentId: string | null;
-  uploadedBy: string | null;
-  uploadedAt: string;
-};
-
-export type ExpenseDetailResponse = ExpenseResponse & {
-  payments: PaymentResponse[];
-  documents: DocumentResponse[];
-};
+export type ExpenseDetailResponse = ExpenseResponse;
 
 export type ExpenseListResult = {
   items: ExpenseResponse[];
@@ -149,45 +118,6 @@ function computeExpenseStatus(
   }
 
   return ExpenseStatus.PENDING;
-}
-
-function sumPayments(payments: Payment[]): Prisma.Decimal {
-  return payments.reduce(
-    (sum, payment) => sum.plus(payment.amountPaid),
-    ZERO,
-  );
-}
-
-function toPaymentResponse(payment: Payment): PaymentResponse {
-  return {
-    id: payment.id.toString(),
-    expenseId: payment.expenseId.toString(),
-    paidDate: formatDate(payment.paidDate),
-    amountPaid: decimalToString(payment.amountPaid),
-    currency: payment.currency,
-    reference: payment.reference,
-    notes: payment.notes,
-    createdBy: payment.createdBy,
-    createdAt: formatDateTime(payment.createdAt),
-  };
-}
-
-function toDocumentResponse(document: Document): DocumentResponse {
-  return {
-    id: document.id.toString(),
-    docType: document.docType,
-    fileName: document.fileName,
-    mimeType: document.mimeType,
-    sizeBytes:
-      document.fileSize === null || document.fileSize === undefined
-        ? null
-        : document.fileSize.toString(),
-    storageKey: document.filePath,
-    expenseId: document.expenseId ? document.expenseId.toString() : null,
-    paymentId: document.paymentId ? document.paymentId.toString() : null,
-    uploadedBy: document.uploadedBy,
-    uploadedAt: formatDateTime(document.uploadedAt),
-  };
 }
 
 export function buildExpenseResponse(
@@ -488,28 +418,30 @@ export async function getExpenseById(
 ): Promise<ExpenseDetailResponse | null> {
   const expense = await prisma.expense.findUnique({
     where: { id },
-    include: {
-      payments: { orderBy: { paidDate: "desc" } },
-      documents: { orderBy: { uploadedAt: "desc" } },
-    },
   });
 
   if (!expense) {
     return null;
   }
 
-  const totalPaid = sumPayments(expense.payments);
-  const base = buildExpenseResponse(expense, totalPaid);
-
-  return {
-    ...base,
-    payments: expense.payments.map(toPaymentResponse),
-    documents: expense.documents.map(toDocumentResponse),
-  };
+  const totalPaid = await getTotalPaidForExpense(id);
+  return buildExpenseResponse(expense, totalPaid);
 }
 
 export async function deleteExpense(id: bigint): Promise<boolean> {
   try {
+    await deleteDocumentsWhere({
+      OR: [
+        { expenseId: id },
+        {
+          payment: {
+            is: {
+              expenseId: id,
+            },
+          },
+        },
+      ],
+    });
     await prisma.expense.delete({ where: { id } });
     return true;
   } catch (error) {
