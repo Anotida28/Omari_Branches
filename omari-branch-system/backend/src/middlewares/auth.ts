@@ -1,9 +1,9 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import type { UserRole } from "@prisma/client";
 
 import { env } from "../config/env";
 import { prisma } from "../db/prisma";
 import { verifyAuthToken } from "../utils/token";
+import { UserRole, isUserRole, type UserRole as UserRoleValue } from "../shared/prisma-enums";
 
 type HttpError = Error & {
   status?: number;
@@ -14,7 +14,7 @@ const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 export type AuthenticatedRequestUser = {
   id: bigint;
   username: string;
-  role: UserRole;
+  role: UserRoleValue;
 };
 
 function toHttpError(message: string, status: number): HttpError {
@@ -62,8 +62,8 @@ export const requireAuthenticatedUser: RequestHandler = async (
       return;
     }
 
-    const payload = verifyAuthToken(token, env.AUTH_TOKEN_SECRET);
-    if (!payload || !/^\d+$/.test(payload.sub)) {
+    const payload = verifyAuthToken(token, env.JWT_SECRET);
+    if (!payload || !/^[0-9]+$/.test(payload.sub)) {
       next(toHttpError("Unauthorized", 401));
       return;
     }
@@ -86,7 +86,7 @@ export const requireAuthenticatedUser: RequestHandler = async (
     req.authUser = {
       id: user.id,
       username: user.username,
-      role: user.role,
+      role: isUserRole(user.role) ? user.role : UserRole.VIEWER,
     };
 
     next();
@@ -110,7 +110,7 @@ export const requireWriteAccess: RequestHandler = (
     return;
   }
 
-  if (req.authUser.role !== "FULL_ACCESS") {
+  if (req.authUser.role !== UserRole.FULL_ACCESS && req.authUser.role !== UserRole.SUPER_ADMIN) {
     next(toHttpError("Forbidden", 403));
     return;
   }

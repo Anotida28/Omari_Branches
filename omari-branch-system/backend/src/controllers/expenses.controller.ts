@@ -1,5 +1,4 @@
 import type { NextFunction, Request, Response } from "express";
-import { ExpenseStatus, ExpenseType } from "@prisma/client";
 import { z } from "zod";
 
 import {
@@ -10,6 +9,7 @@ import {
   listExpenses,
   updateExpense,
 } from "../services/expenses.service";
+import { ExpenseStatus, ExpenseType } from "../shared/prisma-enums";
 
 function normalizeDateInput(value: string): Date | null {
   const trimmed = value.trim();

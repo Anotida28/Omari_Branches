@@ -4,6 +4,7 @@ exports.requireWriteAccess = exports.requireAuthenticatedUser = void 0;
 const env_1 = require("../config/env");
 const prisma_1 = require("../db/prisma");
 const token_1 = require("../utils/token");
+const prisma_enums_1 = require("../shared/prisma-enums");
 const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 function toHttpError(message, status) {
     const error = new Error(message);
@@ -38,8 +39,8 @@ const requireAuthenticatedUser = async (req, _res, next) => {
             next(toHttpError("Unauthorized", 401));
             return;
         }
-        const payload = (0, token_1.verifyAuthToken)(token, env_1.env.AUTH_TOKEN_SECRET);
-        if (!payload || !/^\d+$/.test(payload.sub)) {
+        const payload = (0, token_1.verifyAuthToken)(token, env_1.env.JWT_SECRET);
+        if (!payload || !/^[0-9]+$/.test(payload.sub)) {
             next(toHttpError("Unauthorized", 401));
             return;
         }
@@ -59,7 +60,7 @@ const requireAuthenticatedUser = async (req, _res, next) => {
         req.authUser = {
             id: user.id,
             username: user.username,
-            role: user.role,
+            role: (0, prisma_enums_1.isUserRole)(user.role) ? user.role : prisma_enums_1.UserRole.VIEWER,
         };
         next();
     }
@@ -77,7 +78,7 @@ const requireWriteAccess = (req, _res, next) => {
         next(toHttpError("Unauthorized", 401));
         return;
     }
-    if (req.authUser.role !== "FULL_ACCESS") {
+    if (req.authUser.role !== prisma_enums_1.UserRole.FULL_ACCESS && req.authUser.role !== prisma_enums_1.UserRole.SUPER_ADMIN) {
         next(toHttpError("Forbidden", 403));
         return;
     }

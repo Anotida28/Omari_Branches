@@ -1,11 +1,11 @@
 import type { Request, Response, NextFunction } from "express";
-import { AlertRuleType, AlertSendStatus } from "@prisma/client";
 
 import {
   listAlertLogs,
   getAlertLogById,
   getAlertLogStats,
 } from "../services/alert-logs.service";
+import { AlertRuleType, AlertSendStatus } from "../shared/prisma-enums";
 
 // ============================================================================
 // Helpers

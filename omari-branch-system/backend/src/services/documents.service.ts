@@ -1,9 +1,10 @@
 import fs from "fs/promises";
 import path from "path";
 
-import { DocumentType, Prisma, type Document } from "@prisma/client";
+import { Prisma, type Document } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
+import { DocumentType, type DocumentType as DocumentTypeValue } from "../shared/prisma-enums";
 
 export class DocumentServiceError extends Error {
   status: number;
@@ -24,12 +25,12 @@ export type DocumentCreateInput = {
   expenseId?: bigint;
   paymentId?: bigint;
   metricId?: bigint;
-  docType?: DocumentType;
+  docType?: DocumentTypeValue;
 };
 
 export type DocumentResponse = {
   id: string;
-  docType: DocumentType;
+  docType: DocumentTypeValue;
   fileName: string;
   mimeType: string | null;
   sizeBytes: string | null;

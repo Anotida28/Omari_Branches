@@ -14,6 +14,7 @@ const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../db/prisma");
+const prisma_enums_1 = require("../shared/prisma-enums");
 class DocumentServiceError extends Error {
     constructor(message, status) {
         super(message);
@@ -76,7 +77,7 @@ async function createDocument(input) {
         throw new DocumentServiceError("Provide exactly one of expenseId, paymentId, or metricId", 400);
     }
     const data = {
-        docType: input.docType ?? client_1.DocumentType.OTHER,
+        docType: input.docType ?? prisma_enums_1.DocumentType.OTHER,
         fileName: input.fileName,
         filePath: input.storageKey,
         mimeType: input.mimeType,

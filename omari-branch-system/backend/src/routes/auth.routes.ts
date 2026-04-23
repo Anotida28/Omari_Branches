@@ -1,8 +1,8 @@
 import { Router } from "express";
 
 import {
-  getCurrentUserHandler,
   loginHandler,
+  getCurrentUserHandler,
   logoutHandler,
 } from "../controllers/auth.controller";
 import { requireAuthenticatedUser } from "../middlewares/auth";

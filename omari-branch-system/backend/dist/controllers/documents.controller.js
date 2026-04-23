@@ -12,9 +12,9 @@ exports.deleteDocumentHandler = deleteDocumentHandler;
 exports.openDocumentHandler = openDocumentHandler;
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
-const client_1 = require("@prisma/client");
 const zod_1 = require("zod");
 const documents_service_1 = require("../services/documents.service");
+const prisma_enums_1 = require("../shared/prisma-enums");
 const idParamSchema = zod_1.z
     .string()
     .regex(/^\d+$/)
@@ -43,7 +43,7 @@ const createDocumentSchema = zod_1.z
     storageKey: zod_1.z.string().min(1).optional(),
     url: zod_1.z.string().min(1).optional(),
     uploadedBy: zod_1.z.string().optional(),
-    docType: zod_1.z.nativeEnum(client_1.DocumentType).optional(),
+    docType: zod_1.z.nativeEnum(prisma_enums_1.DocumentType).optional(),
     expenseId: relationIdSchema.optional(),
     paymentId: relationIdSchema.optional(),
     metricId: relationIdSchema.optional(),
@@ -58,7 +58,7 @@ const createDocumentSchema = zod_1.z
 const uploadDocumentSchema = zod_1.z
     .object({
     uploadedBy: zod_1.z.string().optional(),
-    docType: zod_1.z.nativeEnum(client_1.DocumentType).optional(),
+    docType: zod_1.z.nativeEnum(prisma_enums_1.DocumentType).optional(),
     expenseId: relationIdSchema.optional(),
     paymentId: relationIdSchema.optional(),
     metricId: relationIdSchema.optional(),

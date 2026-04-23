@@ -155,8 +155,7 @@ function SidebarLinks({
 }
 
 export default function AppLayout() {
-  const { user, logout } = useAuth();
-  const canWrite = user?.role === "FULL_ACCESS";
+  const { user, canWrite, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -324,7 +323,7 @@ export default function AppLayout() {
               ) : (
                 <Chip
                   icon={<Shield size={14} />}
-                  label="FULL_ACCESS"
+                  label={user?.role ?? "FULL_ACCESS"}
                   size="small"
                   color="primary"
                   variant="outlined"

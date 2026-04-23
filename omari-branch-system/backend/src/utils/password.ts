@@ -1,4 +1,5 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { compareSync as compareBcryptSync } from "bcryptjs";
 
 const HASH_PREFIX = "scrypt";
 const KEY_LENGTH = 64;
@@ -25,6 +26,20 @@ export function hashPassword(password: string): string {
 export function verifyPassword(password: string, storedHash: string): boolean {
   if (!password || !storedHash) {
     return false;
+  }
+
+  // bcrypt hashes start with $2a$, $2b$, or $2y$
+  if (/^\$2[aby]\$/.test(storedHash)) {
+    try {
+      return compareBcryptSync(password, storedHash);
+    } catch {
+      return false;
+    }
+  }
+
+  // Plaintext fallback for legacy records.
+  if (!storedHash.includes("$")) {
+    return password === storedHash;
   }
 
   const parts = storedHash.split("$");

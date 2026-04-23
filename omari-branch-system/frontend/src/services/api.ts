@@ -86,10 +86,14 @@ api.interceptors.response.use(
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const payload = error.response?.data as
-      | { error?: string; details?: unknown }
+      | { error?: string; message?: string; details?: unknown }
       | undefined;
     if (payload?.error && typeof payload.error === "string") {
       return payload.error;
+    }
+
+    if (payload?.message && typeof payload.message === "string") {
+      return payload.message;
     }
 
     if (typeof payload?.details === "string") {

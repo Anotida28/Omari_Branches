@@ -1,26 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
-const crypto_1 = require("node:crypto");
 const prisma = new client_1.PrismaClient();
-const HASH_PREFIX = "scrypt";
-const KEY_LENGTH = 64;
-const SALT_LENGTH = 16;
-const COST = 16384;
-const BLOCK_SIZE = 8;
-const PARALLELIZATION = 1;
-function hashPassword(password) {
-    if (!password) {
-        throw new Error("Password is required");
-    }
-    const salt = (0, crypto_1.randomBytes)(SALT_LENGTH);
-    const hash = (0, crypto_1.scryptSync)(password, salt, KEY_LENGTH, {
-        N: COST,
-        r: BLOCK_SIZE,
-        p: PARALLELIZATION,
-    });
-    return `${HASH_PREFIX}$${salt.toString("hex")}$${hash.toString("hex")}`;
-}
+const EXTERNAL_AUTH_ONLY_PASSWORD = "EXTERNAL_AUTH_ONLY";
 function todayDateOnly() {
     const now = new Date();
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -29,12 +11,10 @@ async function seedUsers() {
     const users = [
         {
             username: "admin",
-            password: "admin123",
             role: "FULL_ACCESS",
         },
         {
             username: "viewer",
-            password: "viewer123",
             role: "VIEWER",
         },
     ];
@@ -42,13 +22,13 @@ async function seedUsers() {
         await prisma.user.upsert({
             where: { username: user.username },
             update: {
-                passwordHash: hashPassword(user.password),
+                passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
                 role: user.role,
                 isActive: true,
             },
             create: {
                 username: user.username,
-                passwordHash: hashPassword(user.password),
+                passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
                 role: user.role,
                 isActive: true,
             },
@@ -140,7 +120,8 @@ async function main() {
         });
     }
     console.log("Seed completed successfully.");
-    console.log("Seeded users: admin/admin123 (FULL_ACCESS), viewer/viewer123 (VIEWER)");
+    console.log("Seeded user profiles: admin (FULL_ACCESS), viewer (VIEWER).");
+    console.log("These accounts must still authenticate through the external auth service.");
 }
 main()
     .catch((e) => {

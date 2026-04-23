@@ -1,17 +1,17 @@
 import { api } from "./api";
-import type { ApiDataResponse, AuthUser, LoginResponse } from "../types/api";
+import type { ApiDataResponse, AuthLoginApiResponse, AuthUser } from "../types/api";
 
-type LoginPayload = {
+export type LoginPayload = {
   username: string;
   password: string;
 };
 
-export async function login(payload: LoginPayload): Promise<LoginResponse> {
-  const { data } = await api.post<ApiDataResponse<LoginResponse>>(
+export async function login(payload: LoginPayload): Promise<AuthLoginApiResponse> {
+  const { data } = await api.post<AuthLoginApiResponse>(
     "/api/auth/login",
     payload,
   );
-  return data.data;
+  return data;
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {

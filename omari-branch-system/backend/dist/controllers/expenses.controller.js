@@ -5,9 +5,9 @@ exports.listExpensesHandler = listExpensesHandler;
 exports.getExpenseByIdHandler = getExpenseByIdHandler;
 exports.updateExpenseHandler = updateExpenseHandler;
 exports.deleteExpenseHandler = deleteExpenseHandler;
-const client_1 = require("@prisma/client");
 const zod_1 = require("zod");
 const expenses_service_1 = require("../services/expenses.service");
+const prisma_enums_1 = require("../shared/prisma-enums");
 function normalizeDateInput(value) {
     const trimmed = value.trim();
     if (!trimmed) {
@@ -66,7 +66,7 @@ const currencySchema = zod_1.z.preprocess((value) => (typeof value === "string" 
 const createExpenseSchema = zod_1.z
     .object({
     branchId: branchIdSchema,
-    expenseType: zod_1.z.nativeEnum(client_1.ExpenseType),
+    expenseType: zod_1.z.nativeEnum(prisma_enums_1.ExpenseType),
     period: periodSchema,
     dueDate: dateSchema,
     amount: zod_1.z.number().min(0),
@@ -78,7 +78,7 @@ const createExpenseSchema = zod_1.z
     .strict();
 const updateExpenseSchema = zod_1.z
     .object({
-    expenseType: zod_1.z.nativeEnum(client_1.ExpenseType).optional(),
+    expenseType: zod_1.z.nativeEnum(prisma_enums_1.ExpenseType).optional(),
     period: periodSchema.optional(),
     dueDate: dateSchema.optional(),
     amount: zod_1.z.number().min(0).optional(),
@@ -92,8 +92,8 @@ const updateExpenseSchema = zod_1.z
 });
 const listQuerySchema = zod_1.z.object({
     branchId: branchIdSchema.optional(),
-    status: zod_1.z.nativeEnum(client_1.ExpenseStatus).optional(),
-    expenseType: zod_1.z.nativeEnum(client_1.ExpenseType).optional(),
+    status: zod_1.z.nativeEnum(prisma_enums_1.ExpenseStatus).optional(),
+    expenseType: zod_1.z.nativeEnum(prisma_enums_1.ExpenseType).optional(),
     period: periodSchema.optional(),
     dueFrom: dateSchema.optional(),
     dueTo: dateSchema.optional(),

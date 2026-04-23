@@ -22,7 +22,7 @@ export type AlertEmailPayload = {
   dueDate: string;
   amount: string;
   balanceRemaining: string;
-  alertType: "DUE_REMINDER" | "OVERDUE_ESCALATION";
+  alertType: string;
   dayOffset: number;
 };
 

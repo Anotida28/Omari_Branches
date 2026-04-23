@@ -12,6 +12,7 @@ exports.deleteExpense = deleteExpense;
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../db/prisma");
 const pagination_1 = require("../utils/pagination");
+const prisma_enums_1 = require("../shared/prisma-enums");
 class ExpenseServiceError extends Error {
     constructor(message, status) {
         super(message);
@@ -36,13 +37,13 @@ function startOfTodayUtc() {
 }
 function computeExpenseStatus(amount, totalPaid, dueDate) {
     if (totalPaid.greaterThanOrEqualTo(amount)) {
-        return client_1.ExpenseStatus.PAID;
+        return prisma_enums_1.ExpenseStatus.PAID;
     }
     const today = startOfTodayUtc();
     if (dueDate.getTime() < today.getTime()) {
-        return client_1.ExpenseStatus.OVERDUE;
+        return prisma_enums_1.ExpenseStatus.OVERDUE;
     }
-    return client_1.ExpenseStatus.PENDING;
+    return prisma_enums_1.ExpenseStatus.PENDING;
 }
 function sumPayments(payments) {
     return payments.reduce((sum, payment) => sum.plus(payment.amountPaid), ZERO);
@@ -97,7 +98,7 @@ function buildExpenseResponse(expense, totalPaid) {
         updatedAt: formatDateTime(expense.updatedAt),
         totalPaid: totalPaid.toString(),
         balanceRemaining: balanceRemaining.toString(),
-        isOverdue: status === client_1.ExpenseStatus.OVERDUE,
+        isOverdue: status === prisma_enums_1.ExpenseStatus.OVERDUE,
     };
 }
 async function getTotalPaidForExpense(expenseId) {
@@ -235,15 +236,15 @@ async function listExpenses(params) {
     }
     if (params.status) {
         const today = startOfTodayUtc();
-        if (params.status === client_1.ExpenseStatus.PAID) {
-            where.status = client_1.ExpenseStatus.PAID;
+        if (params.status === prisma_enums_1.ExpenseStatus.PAID) {
+            where.status = prisma_enums_1.ExpenseStatus.PAID;
         }
         else {
-            where.status = { not: client_1.ExpenseStatus.PAID };
-            if (params.status === client_1.ExpenseStatus.OVERDUE) {
+            where.status = { not: prisma_enums_1.ExpenseStatus.PAID };
+            if (params.status === prisma_enums_1.ExpenseStatus.OVERDUE) {
                 dueDateFilter.lt = today;
             }
-            else if (params.status === client_1.ExpenseStatus.PENDING) {
+            else if (params.status === prisma_enums_1.ExpenseStatus.PENDING) {
                 const currentGte = dueDateFilter.gte;
                 const currentGteDate = currentGte instanceof Date
                     ? currentGte

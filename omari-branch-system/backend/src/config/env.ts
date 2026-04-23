@@ -3,15 +3,6 @@ import { z } from "zod";
 
 dotenv.config();
 
-function normalizeOptionalString(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
 function normalizeOptionalBoolean(value: unknown): unknown {
   if (typeof value === "boolean") {
     return value;
@@ -34,24 +25,24 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).optional(),
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  AUTH_TOKEN_SECRET: z
+  ACCESS_GATEWAY_ENABLED: z.preprocess(
+    normalizeOptionalBoolean,
+    z.boolean().default(true),
+  ),
+  AUTH_EXTERNAL_URL: z.string().url().default("http://180.10.1.222:3002/authenticate/login"),
+  AUTH_EXTERNAL_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(8000),
+  ACCESS_GATEWAY_BASE_URL: z.string().url().default("http://172.16.3.21:3003"),
+  ACCESS_GATEWAY_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(8000),
+  JWT_SECRET: z
     .string()
-    .min(16, "AUTH_TOKEN_SECRET must be at least 16 characters")
-    .default("omari-dev-auth-token-secret-change-me"),
-  AUTH_TOKEN_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(24),
+    .min(16, "JWT_SECRET must be at least 16 characters")
+    .default("change-this-jwt-secret-in-production"),
+  JWT_EXPIRES_IN: z.string().min(2).default("8h"),
+  SUPER_ADMIN_USERNAMES: z.string().default(""),
   EMAIL_PROVIDER: z.enum(["gmail"]).default("gmail"),
   EMAIL_FROM: z.string().email("EMAIL_FROM must be a valid email address").default("noreply@example.com"),
   EMAIL_USER: z.string().email("EMAIL_USER must be a valid email address").default("noreply@example.com"),
   EMAIL_APP_PASSWORD: z.string().min(1).default("disabled"),
-  SHARED_AUTH_URL: z.preprocess(
-    normalizeOptionalString,
-    z.string().url("SHARED_AUTH_URL must be a valid URL").optional(),
-  ),
-  SHARED_AUTH_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(8000),
-  SHARED_AUTH_ENABLED: z.preprocess(
-    normalizeOptionalBoolean,
-    z.boolean().default(true),
-  ),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -17,7 +17,7 @@ export type ExpenseType = "RENT" | "ZESA" | "WIFI" | "OTHER";
 export type ExpenseStatus = "PENDING" | "PAID" | "OVERDUE";
 export type DocumentType = "INVOICE" | "RECEIPT" | "OTHER";
 
-export type UserRole = "VIEWER" | "FULL_ACCESS";
+export type UserRole = "VIEWER" | "FULL_ACCESS" | "SUPER_ADMIN";
 
 export type AuthUser = {
   id: string;
@@ -25,11 +25,26 @@ export type AuthUser = {
   role: UserRole;
 };
 
-export type LoginResponse = {
-  token: string;
-  expiresAt: string;
-  user: AuthUser;
+export type AuthLoginApiResponse = {
+  status: string;
+  message: string;
+  accessToken: string;
+  tokenType: string;
+  user: {
+    username: string;
+    role: UserRole;
+    lastLogin: string;
+  };
 };
+
+export function isUserRole(value: unknown): value is UserRole {
+  return value === "VIEWER" || value === "FULL_ACCESS" || value === "SUPER_ADMIN";
+}
+
+export function canRoleWrite(role: UserRole | null | undefined): boolean {
+  return role === "FULL_ACCESS" || role === "SUPER_ADMIN";
+}
+
 export type Branch = {
   id: string;
   city: string;

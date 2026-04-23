@@ -2,7 +2,6 @@ import fs from "fs/promises";
 import path from "path";
 
 import type { NextFunction, Request, Response } from "express";
-import { DocumentType } from "@prisma/client";
 import { z } from "zod";
 
 import {
@@ -14,6 +13,7 @@ import {
   listDocumentsForMetric,
   listDocumentsForPayment,
 } from "../services/documents.service";
+import { DocumentType } from "../shared/prisma-enums";
 
 const idParamSchema = z
   .string()

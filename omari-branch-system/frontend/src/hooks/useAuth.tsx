@@ -16,7 +16,7 @@ import {
   setStoredAuthToken,
 } from "../services/api";
 import { getCurrentUser, login as loginRequest, logout as logoutRequest } from "../services/auth";
-import type { AuthUser } from "../types/api";
+import { canRoleWrite, isUserRole, type AuthUser } from "../types/api";
 
 const AUTH_USER_STORAGE_KEY = "omari_branch_system_auth_user";
 
@@ -51,7 +51,7 @@ function readStoredUser(): AuthUser | null {
     if (
       typeof parsed.id === "string" &&
       typeof parsed.username === "string" &&
-      (parsed.role === "VIEWER" || parsed.role === "FULL_ACCESS")
+      isUserRole(parsed.role)
     ) {
       return {
         id: parsed.id,
@@ -150,9 +150,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
         password,
       });
 
-      storeSession(result.token, result.user);
+      setStoredAuthToken(result.accessToken);
+      setToken(result.accessToken);
+
+      try {
+        const currentUser = await getCurrentUser();
+        storeSession(result.accessToken, currentUser);
+      } catch (error) {
+        clearSession();
+        throw error;
+      }
     },
-    [storeSession],
+    [clearSession, storeSession],
   );
 
   const logout = useCallback(async () => {
@@ -196,7 +205,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [clearSession]);
 
   const isAuthenticated = Boolean(token && user);
-  const canWrite = user?.role === "FULL_ACCESS";
+  const canWrite = canRoleWrite(user?.role);
 
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -3,51 +3,15 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlserver"
   url      = env("DATABASE_URL")
-}
-
-enum ExpenseType {
-  RENT
-  ZESA
-  WIFI
-  OTHER
-}
-
-enum ExpenseStatus {
-  PENDING
-  PAID
-  OVERDUE
-}
-
-enum DocumentType {
-  INVOICE
-  RECEIPT
-  OTHER
-}
-
-enum AlertRuleType {
-  DUE_REMINDER
-  OVERDUE_ESCALATION
-}
-
-enum AlertSendStatus {
-  SENT
-  FAILED
-  SKIPPED
-  PENDING
-}
-
-enum UserRole {
-  VIEWER
-  FULL_ACCESS
 }
 
 model User {
   id           BigInt   @id @default(autoincrement())
   username     String   @unique @db.VarChar(80)
   passwordHash String   @db.VarChar(255)
-  role         UserRole @default(VIEWER)
+  role         String   @default("VIEWER") @db.VarChar(20)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -109,9 +73,9 @@ model BranchMetric {
   cashBalance   Decimal @default(0.00) @db.Decimal(18, 2)
   eFloatBalance Decimal @default(0.00) @db.Decimal(18, 2)
   cashInVault   Decimal @default(0.00) @db.Decimal(18, 2)
-  cashInVolume  Int     @default(0) @db.UnsignedInt
+  cashInVolume  Int     @default(0)
   cashInValue   Decimal @default(0.00) @db.Decimal(18, 2)
-  cashOutVolume Int     @default(0) @db.UnsignedInt
+  cashOutVolume Int     @default(0)
   cashOutValue  Decimal @default(0.00) @db.Decimal(18, 2)
 
   notes     String?  @db.VarChar(500)
@@ -135,9 +99,9 @@ model AgentLineMetric {
   cashBalance   Decimal @default(0.00) @db.Decimal(18, 2)
   eFloatBalance Decimal @default(0.00) @db.Decimal(18, 2)
   cashInVault   Decimal @default(0.00) @db.Decimal(18, 2)
-  cashInVolume  Int     @default(0) @db.UnsignedInt
+  cashInVolume  Int     @default(0)
   cashInValue   Decimal @default(0.00) @db.Decimal(18, 2)
-  cashOutVolume Int     @default(0) @db.UnsignedInt
+  cashOutVolume Int     @default(0)
   cashOutValue  Decimal @default(0.00) @db.Decimal(18, 2)
 
   notes     String?  @db.VarChar(500)
@@ -156,12 +120,12 @@ model Expense {
   id       BigInt @id @default(autoincrement())
   branchId BigInt
 
-  expenseType ExpenseType
+  expenseType String        @db.VarChar(30)
   period      String        @db.Char(7) // YYYY-MM
   dueDate     DateTime      @db.Date
   amount      Decimal       @db.Decimal(18, 2)
   currency    String        @default("USD") @db.Char(3)
-  status      ExpenseStatus @default(PENDING)
+  status      String        @default("PENDING") @db.VarChar(20)
 
   vendor String? @db.VarChar(120)
   notes  String? @db.VarChar(500)
@@ -205,7 +169,7 @@ model Payment {
 model Document {
   id BigInt @id @default(autoincrement())
 
-  docType  DocumentType
+  docType  String       @db.VarChar(20)
   fileName String       @db.VarChar(255)
   filePath String       @db.VarChar(500)
   mimeType String?      @db.VarChar(100)
@@ -219,9 +183,9 @@ model Document {
   uploadedBy String?  @db.VarChar(120)
   uploadedAt DateTime @default(now())
 
-  expense Expense?      @relation(fields: [expenseId], references: [id], onDelete: Cascade, map: "fk_document_expense")
-  payment Payment?      @relation(fields: [paymentId], references: [id], onDelete: Cascade, map: "fk_document_payment")
-  metric  BranchMetric? @relation(fields: [metricId], references: [id], onDelete: Cascade, map: "fk_document_metric")
+  expense Expense?      @relation(fields: [expenseId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_document_expense")
+  payment Payment?      @relation(fields: [paymentId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_document_payment")
+  metric  BranchMetric? @relation(fields: [metricId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_document_metric")
 
   @@index([expenseId])
   @@index([paymentId])
@@ -231,7 +195,7 @@ model Document {
 
 model AlertRule {
   id        BigInt        @id @default(autoincrement())
-  ruleType  AlertRuleType
+  ruleType  String        @db.VarChar(30)
   dayOffset Int
   isActive  Boolean       @default(true)
   createdAt DateTime      @default(now())
@@ -244,16 +208,16 @@ model AlertLog {
   id           BigInt          @id @default(autoincrement())
   expenseId    BigInt
   ruleId       BigInt
-  ruleType     AlertRuleType
+  ruleType     String          @db.VarChar(30)
   dayOffset    Int
   triggerLocalDate DateTime    @db.Date
   sentTo       String          @db.VarChar(190)
   sentAt       DateTime        @default(now())
-  status       AlertSendStatus @default(SENT)
+  status       String          @default("SENT") @db.VarChar(20)
   errorMessage String?         @db.VarChar(500)
 
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
-  rule    AlertRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  rule    AlertRule @relation(fields: [ruleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([expenseId])
   @@index([ruleId])

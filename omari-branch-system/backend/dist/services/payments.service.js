@@ -7,6 +7,7 @@ exports.deletePayment = deletePayment;
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../db/prisma");
 const expenses_service_1 = require("./expenses.service");
+const prisma_enums_1 = require("../shared/prisma-enums");
 class PaymentServiceError extends Error {
     constructor(message, status) {
         super(message);
@@ -51,13 +52,13 @@ function startOfTodayUtc() {
 }
 function computeExpenseStatusAfterPayment(amount, totalPaid, dueDate) {
     if (totalPaid.greaterThanOrEqualTo(amount)) {
-        return client_1.ExpenseStatus.PAID;
+        return prisma_enums_1.ExpenseStatus.PAID;
     }
     const today = startOfTodayUtc();
     if (dueDate.getTime() < today.getTime()) {
-        return client_1.ExpenseStatus.OVERDUE;
+        return prisma_enums_1.ExpenseStatus.OVERDUE;
     }
-    return client_1.ExpenseStatus.PENDING;
+    return prisma_enums_1.ExpenseStatus.PENDING;
 }
 async function createPayment(expenseId, input) {
     if (input.amountPaid <= 0) {

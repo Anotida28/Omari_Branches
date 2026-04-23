@@ -1,11 +1,12 @@
-import type { RequestHandler, Response } from "express";
+import type { RequestHandler } from "express";
 import { z } from "zod";
 
 import { env } from "../config/env";
 import { prisma } from "../db/prisma";
-import { authenticateWithSharedAuth } from "../services/shared-auth.service";
 import { createAuthToken } from "../utils/token";
-import { verifyPassword } from "../utils/password";
+import { UserRole, isUserRole, type UserRole as UserRoleValue } from "../shared/prisma-enums";
+
+const EXTERNAL_AUTH_ONLY_PASSWORD = "EXTERNAL_AUTH_ONLY";
 
 const loginSchema = z
   .object({
@@ -18,114 +19,334 @@ function normalizeUsername(username: string): string {
   return username.trim().toLowerCase();
 }
 
-function mapUser(user: { id: bigint; username: string; role: "VIEWER" | "FULL_ACCESS" }) {
-  return {
-    id: user.id.toString(),
-    username: user.username,
-    role: user.role,
-  };
+function parseCsv(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
 }
 
-type AppUserForLogin = {
-  id: bigint;
-  username: string;
-  role: "VIEWER" | "FULL_ACCESS";
-  isActive: boolean;
-  passwordHash: string;
+function isSuperAdminUsername(username: string): boolean {
+  const usernames = parseCsv(env.SUPER_ADMIN_USERNAMES);
+  return usernames.includes(normalizeUsername(username));
+}
+
+function pickRole(existingRole: string | null | undefined, username: string, isNewExternalUser: boolean): UserRoleValue {
+  if (isSuperAdminUsername(username)) {
+    return UserRole.SUPER_ADMIN;
+  }
+
+  if (isNewExternalUser) {
+    return UserRole.VIEWER;
+  }
+
+  if (existingRole && isUserRole(existingRole)) {
+    return existingRole;
+  }
+
+  return UserRole.VIEWER;
+}
+
+function isStatusSuccess(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const root = payload as Record<string, unknown>;
+  const status = typeof root.status === "string" ? root.status.trim().toLowerCase() : null;
+  return status === "success";
+}
+
+function payloadContainsUsername(payload: unknown, username: string): boolean {
+  const target = normalizeUsername(username);
+
+  function walk(node: unknown): boolean {
+    if (node === null || node === undefined) {
+      return false;
+    }
+
+    if (typeof node === "string") {
+      return normalizeUsername(node) === target;
+    }
+
+    if (Array.isArray(node)) {
+      return node.some((item) => walk(item));
+    }
+
+    if (typeof node === "object") {
+      const record = node as Record<string, unknown>;
+      const usernameValue = record.username;
+      if (typeof usernameValue === "string" && normalizeUsername(usernameValue) === target) {
+        return true;
+      }
+
+      return Object.values(record).some((value) => walk(value));
+    }
+
+    return false;
+  }
+
+  return walk(payload);
+}
+
+async function tryReadJson(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+type ExternalAuthResult =
+  | { outcome: "authenticated" }
+  | { outcome: "invalid"; message: string }
+  | { outcome: "unavailable"; message: string };
+
+type AccessGatewayResult =
+  | { outcome: "authorized" }
+  | { outcome: "forbidden"; message: string }
+  | { outcome: "unavailable"; message: string };
+
+type AuthFlowError = Error & {
+  status: number;
 };
 
-function issueLoginResponse(res: Response, user: AppUserForLogin): void {
-  const issuedAtSeconds = Math.floor(Date.now() / 1000);
-  const expiresAtSeconds = issuedAtSeconds + env.AUTH_TOKEN_TTL_HOURS * 60 * 60;
+function readMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
 
+  const root = payload as Record<string, unknown>;
+  return typeof root.message === "string" && root.message.trim().length > 0
+    ? root.message.trim()
+    : null;
+}
+
+async function callExternalAuth(username: string, password: string): Promise<ExternalAuthResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.AUTH_EXTERNAL_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(env.AUTH_EXTERNAL_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ data: { username, password } }),
+      signal: controller.signal,
+    });
+
+    const payload = await tryReadJson(response);
+    if (response.ok && isStatusSuccess(payload)) {
+      return { outcome: "authenticated" };
+    }
+
+    if (response.status >= 500) {
+      return {
+        outcome: "unavailable",
+        message: readMessage(payload) ?? "Authentication service is currently unavailable",
+      };
+    }
+
+    return {
+      outcome: "invalid",
+      message: readMessage(payload) ?? "Invalid username or password",
+    };
+  } catch (error) {
+    if ((error as { name?: string }).name === "AbortError") {
+      return {
+        outcome: "unavailable",
+        message: `Authentication service timed out after ${env.AUTH_EXTERNAL_TIMEOUT_MS}ms`,
+      };
+    }
+
+    return {
+      outcome: "unavailable",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function verifyGatewayAccess(username: string): Promise<AccessGatewayResult> {
+  if (!env.ACCESS_GATEWAY_ENABLED) {
+    return { outcome: "authorized" };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.ACCESS_GATEWAY_TIMEOUT_MS);
+
+  try {
+    const url = `${env.ACCESS_GATEWAY_BASE_URL.replace(/\/$/, "")}/get/users/${encodeURIComponent(username)}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      if (response.status >= 500) {
+        return {
+          outcome: "unavailable",
+          message: "Access gateway is currently unavailable",
+        };
+      }
+
+      return {
+        outcome: "forbidden",
+        message: "User not authorized by access gateway",
+      };
+    }
+
+    const payload = await tryReadJson(response);
+    return payloadContainsUsername(payload, username)
+      ? { outcome: "authorized" }
+      : { outcome: "forbidden", message: "User not authorized by access gateway" };
+  } catch (error) {
+    if ((error as { name?: string }).name === "AbortError") {
+      return {
+        outcome: "unavailable",
+        message: `Access gateway timed out after ${env.ACCESS_GATEWAY_TIMEOUT_MS}ms`,
+      };
+    }
+
+    return {
+      outcome: "unavailable",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function upsertAuthenticatedUser(username: string): Promise<{ id: bigint; username: string; role: string }> {
+  const existingUser = await prisma.user.findUnique({
+    where: { username },
+  });
+
+  if (existingUser && !existingUser.isActive) {
+    const error = new Error("Your account has been disabled for this application.") as AuthFlowError;
+    error.status = 403;
+    throw error;
+  }
+
+  const role = pickRole(existingUser?.role, username, !existingUser);
+
+  if (existingUser) {
+    return prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        role,
+        passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
+      },
+    });
+  }
+
+  return prisma.user.create({
+    data: {
+      username,
+      passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
+      role,
+      isActive: true,
+    },
+  });
+}
+
+function issueLoginSuccess(res: Parameters<RequestHandler>[1], user: { id: bigint; username: string; role: string }) {
+  const role = isUserRole(user.role) ? user.role : UserRole.VIEWER;
   const token = createAuthToken(
     {
       sub: user.id.toString(),
       username: user.username,
-      role: user.role,
-      iat: issuedAtSeconds,
-      exp: expiresAtSeconds,
+      role,
     },
-    env.AUTH_TOKEN_SECRET,
+    env.JWT_SECRET,
+    env.JWT_EXPIRES_IN,
   );
 
   res.json({
-    data: {
-      token,
-      expiresAt: new Date(expiresAtSeconds * 1000).toISOString(),
-      user: mapUser(user),
+    status: "success",
+    message: "Login successful",
+    accessToken: token,
+    tokenType: "Bearer",
+    user: {
+      username: user.username,
+      role,
+      lastLogin: new Date().toISOString(),
     },
   });
 }
 
 export const loginHandler: RequestHandler = async (req, res, next) => {
-  const parsedBody = loginSchema.safeParse(req.body);
-  if (!parsedBody.success) {
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) {
     res.status(400).json({
-      error: "Validation error",
-      details: parsedBody.error.flatten(),
+      status: "error",
+      message: "Validation error",
+      details: parsed.error.flatten(),
     });
     return;
   }
 
+  const normalizedUsername = normalizeUsername(parsed.data.username);
+  const password = parsed.data.password;
+
   try {
-    /**
-     * Login flow:
-     * 1. Shared auth API validates identity (local BA_Users / AD in shared system)
-     * 2. Local Prisma User record determines authorization for THIS app
-     * 3. If shared auth fails/unavailable, fallback to local password verification
-     */
-    const normalizedUsername = normalizeUsername(parsedBody.data.username);
-    const sharedAuthResult = await authenticateWithSharedAuth(
-      normalizedUsername,
-      parsedBody.data.password,
-    );
+    const external = await callExternalAuth(normalizedUsername, password);
 
-    const user = await prisma.user.findUnique({
-      where: { username: normalizedUsername },
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        isActive: true,
-        passwordHash: true,
-      },
-    });
-
-    if (sharedAuthResult.outcome === "authenticated") {
-      // Shared auth proved identity, but local DB role decides app access.
-      if (!user || !user.isActive) {
-        res.status(403).json({
-          error:
-            "Authenticated identity is not authorized for this application. Contact an administrator to grant access.",
-        });
-        return;
-      }
-
-      issueLoginResponse(res, user);
+    if (external.outcome === "unavailable") {
+      res.status(502).json({
+        status: "error",
+        message: external.message,
+      });
       return;
     }
 
-    if (sharedAuthResult.outcome === "unavailable") {
-      console.warn(
-        `[Auth] Shared authentication unavailable for "${normalizedUsername}". Falling back to local auth. Reason: ${sharedAuthResult.reason}`,
-      );
-    }
-
-    // Shared auth rejected/disabled/unavailable -> local fallback users.
-    if (!user || !user.isActive) {
-      res.status(401).json({ error: "Invalid username or password" });
+    if (external.outcome === "invalid") {
+      res.status(401).json({
+        status: "error",
+        message: external.message,
+      });
       return;
     }
 
-    const isPasswordValid = verifyPassword(parsedBody.data.password, user.passwordHash);
-    if (!isPasswordValid) {
-      res.status(401).json({ error: "Invalid username or password" });
+    const access = await verifyGatewayAccess(normalizedUsername);
+    if (access.outcome === "unavailable") {
+      res.status(502).json({
+        status: "error",
+        message: access.message,
+      });
       return;
     }
 
-    issueLoginResponse(res, user);
+    if (access.outcome === "forbidden") {
+      res.status(403).json({
+        status: "error",
+        message: access.message,
+      });
+      return;
+    }
+
+    const user = await upsertAuthenticatedUser(normalizedUsername);
+    issueLoginSuccess(res, user);
   } catch (error) {
+    if (typeof (error as Partial<AuthFlowError>).status === "number" && error instanceof Error) {
+      res.status((error as AuthFlowError).status).json({
+        status: "error",
+        message: error.message,
+      });
+      return;
+    }
+
     next(error);
   }
 };
@@ -136,7 +357,13 @@ export const getCurrentUserHandler: RequestHandler = async (req, res) => {
     return;
   }
 
-  res.json({ data: mapUser(req.authUser) });
+  res.json({
+    data: {
+      id: req.authUser.id.toString(),
+      username: req.authUser.username,
+      role: req.authUser.role,
+    },
+  });
 };
 
 export const logoutHandler: RequestHandler = (_req, res) => {

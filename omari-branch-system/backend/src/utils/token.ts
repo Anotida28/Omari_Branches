@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { UserRole } from "@prisma/client";
+
+import { UserRole, isUserRole, type UserRole as UserRoleValue } from "../shared/prisma-enums";
 
 const TOKEN_HEADER = {
   alg: "HS256",
@@ -9,9 +10,15 @@ const TOKEN_HEADER = {
 export type AuthTokenPayload = {
   sub: string;
   username: string;
-  role: UserRole;
+  role: UserRoleValue;
   iat: number;
   exp: number;
+};
+
+type BasePayload = {
+  sub: string;
+  username: string;
+  role: string;
 };
 
 function toBase64Url(value: string): string {
@@ -40,6 +47,36 @@ function sign(input: string, secret: string): string {
     .replace(/\//g, "_");
 }
 
+function parseExpiresInToSeconds(expiresIn: string): number {
+  const normalized = expiresIn.trim().toLowerCase();
+  const match = /^(\d+)([smhd])$/.exec(normalized);
+  if (!match) {
+    return 8 * 60 * 60;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return 8 * 60 * 60;
+  }
+
+  if (unit === "s") {
+    return amount;
+  }
+  if (unit === "m") {
+    return amount * 60;
+  }
+  if (unit === "h") {
+    return amount * 60 * 60;
+  }
+  if (unit === "d") {
+    return amount * 24 * 60 * 60;
+  }
+
+  return 8 * 60 * 60;
+}
+
 function isValidPayload(value: unknown): value is AuthTokenPayload {
   if (!value || typeof value !== "object") {
     return false;
@@ -52,7 +89,8 @@ function isValidPayload(value: unknown): value is AuthTokenPayload {
     payload.sub.length > 0 &&
     typeof payload.username === "string" &&
     payload.username.length > 0 &&
-    (payload.role === "VIEWER" || payload.role === "FULL_ACCESS") &&
+    typeof payload.role === "string" &&
+    isUserRole(payload.role) &&
     typeof payload.iat === "number" &&
     Number.isFinite(payload.iat) &&
     typeof payload.exp === "number" &&
@@ -60,9 +98,21 @@ function isValidPayload(value: unknown): value is AuthTokenPayload {
   );
 }
 
-export function createAuthToken(payload: AuthTokenPayload, secret: string): string {
+export function createAuthToken(payload: BasePayload, secret: string, expiresIn: string): string {
+  const issuedAtSeconds = Math.floor(Date.now() / 1000);
+  const exp = issuedAtSeconds + parseExpiresInToSeconds(expiresIn);
+
+  const normalizedRole = isUserRole(payload.role) ? payload.role : UserRole.VIEWER;
+  const normalizedPayload: AuthTokenPayload = {
+    sub: payload.sub,
+    username: payload.username,
+    role: normalizedRole,
+    iat: issuedAtSeconds,
+    exp,
+  };
+
   const encodedHeader = toBase64Url(JSON.stringify(TOKEN_HEADER));
-  const encodedPayload = toBase64Url(JSON.stringify(payload));
+  const encodedPayload = toBase64Url(JSON.stringify(normalizedPayload));
   const input = `${encodedHeader}.${encodedPayload}`;
   const signature = sign(input, secret);
 

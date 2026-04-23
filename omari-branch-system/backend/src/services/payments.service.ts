@@ -1,4 +1,4 @@
-import { ExpenseStatus, Prisma, type Payment } from "@prisma/client";
+import { Prisma, type Payment } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
 import {
@@ -7,6 +7,7 @@ import {
   buildExpenseResponse,
   refreshExpenseStatus,
 } from "./expenses.service";
+import { ExpenseStatus, type ExpenseStatus as ExpenseStatusValue } from "../shared/prisma-enums";
 
 export class PaymentServiceError extends Error {
   status: number;

@@ -1,15 +1,20 @@
 import {
-  ExpenseStatus,
   type Expense,
   type Payment,
   type Document,
   Prisma,
-  type ExpenseType,
-  type DocumentType,
 } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
 import { getPagination } from "../utils/pagination";
+import {
+  ExpenseStatus,
+  ExpenseType,
+  DocumentType,
+  type ExpenseStatus as ExpenseStatusValue,
+  type ExpenseType as ExpenseTypeValue,
+  type DocumentType as DocumentTypeValue,
+} from "../shared/prisma-enums";
 
 export class ExpenseServiceError extends Error {
   status: number;
@@ -23,7 +28,7 @@ export class ExpenseServiceError extends Error {
 
 export type ExpenseCreateInput = {
   branchId: bigint;
-  expenseType: ExpenseType;
+  expenseType: ExpenseTypeValue;
   period: string;
   dueDate: Date;
   amount: number;
@@ -34,7 +39,7 @@ export type ExpenseCreateInput = {
 };
 
 export type ExpenseUpdateInput = {
-  expenseType?: ExpenseType;
+  expenseType?: ExpenseTypeValue;
   period?: string;
   dueDate?: Date;
   amount?: number;
@@ -45,8 +50,8 @@ export type ExpenseUpdateInput = {
 
 export type ExpenseListParams = {
   branchId?: bigint;
-  status?: ExpenseStatus;
-  expenseType?: ExpenseType;
+  status?: ExpenseStatusValue;
+  expenseType?: ExpenseTypeValue;
   period?: string;
   dueFrom?: Date;
   dueTo?: Date;
@@ -57,12 +62,12 @@ export type ExpenseListParams = {
 export type ExpenseResponse = {
   id: string;
   branchId: string;
-  expenseType: ExpenseType;
+  expenseType: ExpenseTypeValue;
   period: string;
   dueDate: string;
   amount: string;
   currency: string;
-  status: ExpenseStatus;
+  status: ExpenseStatusValue;
   vendor: string | null;
   notes: string | null;
   createdBy: string | null;
@@ -87,7 +92,7 @@ export type PaymentResponse = {
 
 export type DocumentResponse = {
   id: string;
-  docType: DocumentType;
+  docType: DocumentTypeValue;
   fileName: string;
   mimeType: string | null;
   sizeBytes: string | null;

@@ -10,7 +10,11 @@
  * - Timezone: Africa/Harare (UTC+2) for "today" calculation
  */
 
-import type { AlertRuleType, ExpenseStatus, ExpenseType } from "@prisma/client";
+import type {
+  AlertRuleType,
+  ExpenseStatus,
+  ExpenseType,
+} from "../shared/prisma-enums";
 
 // ============================================================================
 // Types

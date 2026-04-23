@@ -1,8 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
-import { hashPassword } from "../src/utils/password";
-
 const prisma = new PrismaClient();
+const EXTERNAL_AUTH_ONLY_PASSWORD = "EXTERNAL_AUTH_ONLY";
 
 function todayDateOnly() {
   const now = new Date();
@@ -13,12 +12,10 @@ async function seedUsers() {
   const users = [
     {
       username: "admin",
-      password: "admin123",
       role: "FULL_ACCESS" as const,
     },
     {
       username: "viewer",
-      password: "viewer123",
       role: "VIEWER" as const,
     },
   ];
@@ -27,13 +24,13 @@ async function seedUsers() {
     await prisma.user.upsert({
       where: { username: user.username },
       update: {
-        passwordHash: hashPassword(user.password),
+        passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
         role: user.role,
         isActive: true,
       },
       create: {
         username: user.username,
-        passwordHash: hashPassword(user.password),
+        passwordHash: EXTERNAL_AUTH_ONLY_PASSWORD,
         role: user.role,
         isActive: true,
       },
@@ -136,7 +133,8 @@ async function main() {
   }
 
   console.log("Seed completed successfully.");
-  console.log("Seeded users: admin/admin123 (FULL_ACCESS), viewer/viewer123 (VIEWER)");
+  console.log("Seeded user profiles: admin (FULL_ACCESS), viewer (VIEWER).");
+  console.log("These accounts must still authenticate through the external auth service.");
 }
 
 main()

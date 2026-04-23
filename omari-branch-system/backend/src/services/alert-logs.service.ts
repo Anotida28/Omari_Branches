@@ -1,4 +1,11 @@
-import { Prisma, AlertRuleType, AlertSendStatus, type AlertLog } from "@prisma/client";
+import { Prisma, type AlertLog } from "@prisma/client";
+
+import {
+  AlertRuleType,
+  AlertSendStatus,
+  type AlertRuleType as AlertRuleTypeValue,
+  type AlertSendStatus as AlertSendStatusValue,
+} from "../shared/prisma-enums";
 
 import { prisma } from "../db/prisma";
 import { getPagination } from "../utils/pagination";
@@ -20,8 +27,8 @@ export class AlertLogServiceError extends Error {
 export type AlertLogListParams = {
   branchId?: bigint;
   expenseId?: bigint;
-  ruleType?: AlertRuleType;
-  status?: AlertSendStatus;
+  ruleType?: AlertRuleTypeValue;
+  status?: AlertSendStatusValue;
   dateFrom?: Date;
   dateTo?: Date;
   page?: number;
@@ -46,7 +53,7 @@ export type AlertLogBranchSummary = {
 };
 
 export type AlertLogRuleSummary = {
-  ruleType: AlertRuleType;
+  ruleType: AlertRuleTypeValue;
   dayOffset: number;
   description: string;
 };
@@ -59,7 +66,7 @@ export type AlertLogResponse = {
   rule: AlertLogRuleSummary;
   sentTo: string;
   sentAt: string;
-  status: AlertSendStatus;
+  status: AlertSendStatusValue;
   errorMessage: string | null;
 };
 
@@ -86,7 +93,7 @@ function decimalToString(value: Prisma.Decimal | number | string): string {
   return new Prisma.Decimal(value).toString();
 }
 
-function getRuleDescription(ruleType: AlertRuleType, dayOffset: number): string {
+function getRuleDescription(ruleType: AlertRuleTypeValue, dayOffset: number): string {
   if (ruleType === "DUE_REMINDER") {
     const days = Math.abs(dayOffset);
     return `${days} day${days !== 1 ? "s" : ""} before due`;
