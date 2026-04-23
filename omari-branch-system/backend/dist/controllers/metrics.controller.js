@@ -5,8 +5,13 @@ exports.listMetricsHandler = listMetricsHandler;
 exports.getMetricByIdHandler = getMetricByIdHandler;
 exports.getMetricByBranchDateHandler = getMetricByBranchDateHandler;
 exports.deleteMetricHandler = deleteMetricHandler;
+exports.getSourceMetricMappingHandler = getSourceMetricMappingHandler;
+exports.syncMetricsFromSourceHandler = syncMetricsFromSourceHandler;
 const zod_1 = require("zod");
 const metrics_service_1 = require("../services/metrics.service");
+const metrics_source_sync_service_1 = require("../services/metrics-source-sync.service");
+const source_agent_metrics_service_1 = require("../services/source-agent-metrics.service");
+const source_metrics_sync_job_1 = require("../jobs/source-metrics-sync.job");
 function normalizeDateInput(value) {
     const trimmed = value.trim();
     if (!trimmed) {
@@ -78,6 +83,13 @@ const byBranchDateQuerySchema = zod_1.z.object({
     branchId: branchIdSchema,
     date: dateSchema,
 });
+const syncMetricsSchema = zod_1.z
+    .object({
+    branchId: branchIdSchema.optional(),
+    dateFrom: dateSchema.optional(),
+    dateTo: dateSchema.optional(),
+})
+    .strict();
 function normalizeQueryValue(value) {
     if (typeof value === "string") {
         return value;
@@ -89,6 +101,10 @@ function normalizeQueryValue(value) {
 }
 function handleServiceError(res, error) {
     if (error instanceof metrics_service_1.MetricServiceError) {
+        res.status(error.status).json({ error: error.message });
+        return true;
+    }
+    if (error instanceof metrics_source_sync_service_1.MetricSourceSyncError) {
         res.status(error.status).json({ error: error.message });
         return true;
     }
@@ -211,6 +227,52 @@ async function deleteMetricHandler(req, res, next) {
             return;
         }
         res.status(204).send();
+    }
+    catch (error) {
+        if (handleServiceError(res, error)) {
+            return;
+        }
+        next(error);
+    }
+}
+function getSourceMetricMappingHandler(_req, res) {
+    res.json({ data: (0, source_agent_metrics_service_1.describeSourceMetricMapping)() });
+}
+async function syncMetricsFromSourceHandler(req, res, next) {
+    const parsedBody = syncMetricsSchema.safeParse(req.body ?? {});
+    if (!parsedBody.success) {
+        res.status(400).json({
+            error: "Validation error",
+            details: parsedBody.error.flatten(),
+        });
+        return;
+    }
+    if (parsedBody.data.dateFrom &&
+        parsedBody.data.dateTo &&
+        parsedBody.data.dateFrom > parsedBody.data.dateTo) {
+        res.status(400).json({
+            error: "dateFrom must be less than or equal to dateTo",
+        });
+        return;
+    }
+    try {
+        const { executed, result, error } = await (0, source_metrics_sync_job_1.runSourceMetricsSyncJobWithLock)(parsedBody.data);
+        if (!executed) {
+            res.status(409).json({
+                error: "Source metrics sync is already running on another instance",
+            });
+            return;
+        }
+        if (error) {
+            if (handleServiceError(res, error)) {
+                return;
+            }
+            throw error;
+        }
+        res.json({
+            message: "Source metrics sync completed",
+            data: result,
+        });
     }
     catch (error) {
         if (handleServiceError(res, error)) {

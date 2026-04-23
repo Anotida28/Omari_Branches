@@ -35,6 +35,19 @@ function buildLockExpiry(lockDurationMs: number): Date {
   return new Date(Date.now() + lockDurationMs);
 }
 
+function getPrismaErrorCode(error: unknown): string | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+
+  return null;
+}
+
 /**
  * Attempt to acquire a lock for a job.
  * Returns lock details if acquired, null if another worker holds the lock.
@@ -62,41 +75,33 @@ export async function acquireLock(
       lockDurationMs: safeLockDurationMs,
     };
   } catch (error) {
-    try {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code !== "P2002"
-      ) {
-        throw error;
-      }
-
-      const now = new Date();
-      const updated = await prisma.jobLock.updateMany({
-        where: {
-          jobName,
-          lockedUntil: {
-            lte: now,
-          },
-        },
-        data: {
-          lockedBy: workerId,
-          lockedUntil,
-        },
-      });
-
-      if (updated.count > 0) {
-        return {
-          jobName,
-          lockedBy: workerId,
-          lockDurationMs: safeLockDurationMs,
-        };
-      }
-
-      return null;
-    } catch (updateError) {
-      console.error(`[JobLock] Failed to acquire lock for ${jobName}:`, updateError);
-      return null;
+    if (getPrismaErrorCode(error) !== "P2002") {
+      throw error;
     }
+
+    const now = new Date();
+    const updated = await prisma.jobLock.updateMany({
+      where: {
+        jobName,
+        lockedUntil: {
+          lte: now,
+        },
+      },
+      data: {
+        lockedBy: workerId,
+        lockedUntil,
+      },
+    });
+
+    if (updated.count > 0) {
+      return {
+        jobName,
+        lockedBy: workerId,
+        lockDurationMs: safeLockDurationMs,
+      };
+    }
+
+    return null;
   }
 }
 

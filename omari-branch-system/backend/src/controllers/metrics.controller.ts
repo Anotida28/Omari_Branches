@@ -9,6 +9,9 @@ import {
   listMetrics,
   upsertMetric,
 } from "../services/metrics.service";
+import { MetricSourceSyncError } from "../services/metrics-source-sync.service";
+import { describeSourceMetricMapping } from "../services/source-agent-metrics.service";
+import { runSourceMetricsSyncJobWithLock } from "../jobs/source-metrics-sync.job";
 
 function normalizeDateInput(value: string): Date | null {
   const trimmed = value.trim();
@@ -104,6 +107,14 @@ const byBranchDateQuerySchema = z.object({
   date: dateSchema,
 });
 
+const syncMetricsSchema = z
+  .object({
+    branchId: branchIdSchema.optional(),
+    dateFrom: dateSchema.optional(),
+    dateTo: dateSchema.optional(),
+  })
+  .strict();
+
 function normalizeQueryValue(value: unknown): string | undefined {
   if (typeof value === "string") {
     return value;
@@ -116,6 +127,10 @@ function normalizeQueryValue(value: unknown): string | undefined {
 
 function handleServiceError(res: Response, error: unknown): boolean {
   if (error instanceof MetricServiceError) {
+    res.status(error.status).json({ error: error.message });
+    return true;
+  }
+  if (error instanceof MetricSourceSyncError) {
     res.status(error.status).json({ error: error.message });
     return true;
   }
@@ -272,6 +287,70 @@ export async function deleteMetricHandler(
       return;
     }
     res.status(204).send();
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+    next(error);
+  }
+}
+
+export function getSourceMetricMappingHandler(
+  _req: Request,
+  res: Response,
+): void {
+  res.json({ data: describeSourceMetricMapping() });
+}
+
+export async function syncMetricsFromSourceHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const parsedBody = syncMetricsSchema.safeParse(req.body ?? {});
+  if (!parsedBody.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedBody.error.flatten(),
+    });
+    return;
+  }
+
+  if (
+    parsedBody.data.dateFrom &&
+    parsedBody.data.dateTo &&
+    parsedBody.data.dateFrom > parsedBody.data.dateTo
+  ) {
+    res.status(400).json({
+      error: "dateFrom must be less than or equal to dateTo",
+    });
+    return;
+  }
+
+  try {
+    const { executed, result, error } = await runSourceMetricsSyncJobWithLock(
+      parsedBody.data,
+    );
+
+    if (!executed) {
+      res.status(409).json({
+        error: "Source metrics sync is already running on another instance",
+      });
+      return;
+    }
+
+    if (error) {
+      if (handleServiceError(res, error)) {
+        return;
+      }
+
+      throw error;
+    }
+
+    res.json({
+      message: "Source metrics sync completed",
+      data: result,
+    });
   } catch (error) {
     if (handleServiceError(res, error)) {
       return;

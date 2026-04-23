@@ -22,6 +22,13 @@ function normalizeOptionalBoolean(value) {
     }
     return value;
 }
+function normalizeOptionalString(value) {
+    if (typeof value !== "string") {
+        return value;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
 const envSchema = zod_1.z.object({
     NODE_ENV: zod_1.z.enum(["development", "test", "production"]).optional(),
     PORT: zod_1.z.coerce.number().int().positive().default(4000),
@@ -41,6 +48,26 @@ const envSchema = zod_1.z.object({
     EMAIL_FROM: zod_1.z.string().email("EMAIL_FROM must be a valid email address").default("noreply@example.com"),
     EMAIL_USER: zod_1.z.string().email("EMAIL_USER must be a valid email address").default("noreply@example.com"),
     EMAIL_APP_PASSWORD: zod_1.z.string().min(1).default("disabled"),
+    SOURCE_SQL_SERVER: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().min(1).optional()),
+    SOURCE_SQL_PORT: zod_1.z.coerce.number().int().min(1).max(65535).default(1433),
+    SOURCE_SQL_DATABASE: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().min(1).optional()),
+    SOURCE_SQL_TLS_SERVER_NAME: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().min(1).optional()),
+    SOURCE_SQL_USER: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().min(1).optional()),
+    SOURCE_SQL_PASSWORD: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().min(1).optional()),
+    SOURCE_SQL_ENCRYPT: zod_1.z.preprocess(normalizeOptionalBoolean, zod_1.z.boolean().default(true)),
+    SOURCE_SQL_TRUST_SERVER_CERTIFICATE: zod_1.z.preprocess(normalizeOptionalBoolean, zod_1.z.boolean().default(true)),
+    SOURCE_SQL_CONNECT_TIMEOUT_MS: zod_1.z.coerce.number().int().min(1000).max(120000).default(15000),
+    SOURCE_SQL_REQUEST_TIMEOUT_MS: zod_1.z.coerce.number().int().min(1000).max(120000).default(30000),
+    SOURCE_SQL_AGENT_SUMMARY_TABLE: zod_1.z
+        .string()
+        .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_AGENT_SUMMARY_TABLE must be schema.table")
+        .default("reporting.omari_agent_summary_since_launch_daily"),
+    SOURCE_SQL_AGENT_LINE_MATCH_COLUMN: zod_1.z
+        .enum(["agent_account", "customer_id"])
+        .default("agent_account"),
+    SOURCE_SQL_SYNC_ENABLED: zod_1.z.preprocess(normalizeOptionalBoolean, zod_1.z.boolean().default(false)),
+    SOURCE_SQL_SYNC_CRON: zod_1.z.string().min(5).default("15 7 * * *"),
+    SOURCE_SQL_SYNC_LOOKBACK_DAYS: zod_1.z.coerce.number().int().min(1).max(30).default(2),
 });
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {

@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const metrics_controller_1 = require("../controllers/metrics.controller");
 const router = (0, express_1.Router)();
+router.get("/source-mapping", metrics_controller_1.getSourceMetricMappingHandler);
+router.post("/sync", metrics_controller_1.syncMetricsFromSourceHandler);
 router.post("/upsert", metrics_controller_1.upsertMetricHandler);
 router.get("/", metrics_controller_1.listMetricsHandler);
 router.get("/by-branch-date", metrics_controller_1.getMetricByBranchDateHandler);

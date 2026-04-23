@@ -123,27 +123,42 @@ async function getSourceLineCount(
   });
 }
 
-async function recomputeBranchMetricForDate(
+export async function recomputeBranchMetricForDate(
   branchId: bigint,
   metricDate: Date,
-): Promise<BranchMetric> {
-  const aggregate = await prisma.agentLineMetric.aggregate({
-    where: {
-      metricDate,
-      agentLine: {
-        branchId,
+): Promise<BranchMetric | null> {
+  const where: Prisma.AgentLineMetricWhereInput = {
+    metricDate,
+    agentLine: {
+      branchId,
+    },
+  };
+
+  const [lineCount, aggregate] = await Promise.all([
+    prisma.agentLineMetric.count({ where }),
+    prisma.agentLineMetric.aggregate({
+      where,
+      _sum: {
+        cashBalance: true,
+        eFloatBalance: true,
+        cashInVault: true,
+        cashInVolume: true,
+        cashInValue: true,
+        cashOutVolume: true,
+        cashOutValue: true,
       },
-    },
-    _sum: {
-      cashBalance: true,
-      eFloatBalance: true,
-      cashInVault: true,
-      cashInVolume: true,
-      cashInValue: true,
-      cashOutVolume: true,
-      cashOutValue: true,
-    },
-  });
+    }),
+  ]);
+
+  if (lineCount === 0) {
+    await prisma.branchMetric.deleteMany({
+      where: {
+        branchId,
+        metricDate,
+      },
+    });
+    return null;
+  }
 
   return prisma.branchMetric.upsert({
     where: {
@@ -173,6 +188,46 @@ async function recomputeBranchMetricForDate(
       cashOutValue: aggregate._sum.cashOutValue ?? 0,
     },
   });
+}
+
+function enumerateMetricDates(dateFrom: Date, dateTo: Date): Date[] {
+  const dates: Date[] = [];
+  const cursor = new Date(dateFrom.getTime());
+
+  while (cursor.getTime() <= dateTo.getTime()) {
+    dates.push(
+      new Date(
+        Date.UTC(
+          cursor.getUTCFullYear(),
+          cursor.getUTCMonth(),
+          cursor.getUTCDate(),
+        ),
+      ),
+    );
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
+export async function recomputeBranchMetricsForWindow(
+  branchIds: bigint[],
+  dateFrom: Date,
+  dateTo: Date,
+): Promise<number> {
+  const uniqueBranchIds = Array.from(new Set(branchIds.map((branchId) => branchId.toString())))
+    .map((branchId) => BigInt(branchId));
+  const metricDates = enumerateMetricDates(dateFrom, dateTo);
+
+  let refreshedCount = 0;
+  for (const branchId of uniqueBranchIds) {
+    for (const metricDate of metricDates) {
+      await recomputeBranchMetricForDate(branchId, metricDate);
+      refreshedCount += 1;
+    }
+  }
+
+  return refreshedCount;
 }
 
 function mapForeignKeyError(error: unknown): never {
@@ -237,6 +292,9 @@ export async function upsertMetric(
     });
 
     const metric = await recomputeBranchMetricForDate(agentLine.branchId, input.date);
+    if (!metric) {
+      throw new MetricServiceError("Failed to recompute branch metric", 500);
+    }
     const sourceLineCount = await getSourceLineCount(metric.branchId, metric.metricDate);
 
     return withSourceLineCount(toMetricResponse(metric), sourceLineCount);

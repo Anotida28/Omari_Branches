@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MetricServiceError = void 0;
+exports.recomputeBranchMetricForDate = recomputeBranchMetricForDate;
+exports.recomputeBranchMetricsForWindow = recomputeBranchMetricsForWindow;
 exports.upsertMetric = upsertMetric;
 exports.listMetrics = listMetrics;
 exports.getMetricById = getMetricById;
@@ -66,23 +68,36 @@ async function getSourceLineCount(branchId, metricDate) {
     });
 }
 async function recomputeBranchMetricForDate(branchId, metricDate) {
-    const aggregate = await prisma_1.prisma.agentLineMetric.aggregate({
-        where: {
-            metricDate,
-            agentLine: {
-                branchId,
+    const where = {
+        metricDate,
+        agentLine: {
+            branchId,
+        },
+    };
+    const [lineCount, aggregate] = await Promise.all([
+        prisma_1.prisma.agentLineMetric.count({ where }),
+        prisma_1.prisma.agentLineMetric.aggregate({
+            where,
+            _sum: {
+                cashBalance: true,
+                eFloatBalance: true,
+                cashInVault: true,
+                cashInVolume: true,
+                cashInValue: true,
+                cashOutVolume: true,
+                cashOutValue: true,
             },
-        },
-        _sum: {
-            cashBalance: true,
-            eFloatBalance: true,
-            cashInVault: true,
-            cashInVolume: true,
-            cashInValue: true,
-            cashOutVolume: true,
-            cashOutValue: true,
-        },
-    });
+        }),
+    ]);
+    if (lineCount === 0) {
+        await prisma_1.prisma.branchMetric.deleteMany({
+            where: {
+                branchId,
+                metricDate,
+            },
+        });
+        return null;
+    }
     return prisma_1.prisma.branchMetric.upsert({
         where: {
             uq_branch_date: {
@@ -111,6 +126,28 @@ async function recomputeBranchMetricForDate(branchId, metricDate) {
             cashOutValue: aggregate._sum.cashOutValue ?? 0,
         },
     });
+}
+function enumerateMetricDates(dateFrom, dateTo) {
+    const dates = [];
+    const cursor = new Date(dateFrom.getTime());
+    while (cursor.getTime() <= dateTo.getTime()) {
+        dates.push(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate())));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return dates;
+}
+async function recomputeBranchMetricsForWindow(branchIds, dateFrom, dateTo) {
+    const uniqueBranchIds = Array.from(new Set(branchIds.map((branchId) => branchId.toString())))
+        .map((branchId) => BigInt(branchId));
+    const metricDates = enumerateMetricDates(dateFrom, dateTo);
+    let refreshedCount = 0;
+    for (const branchId of uniqueBranchIds) {
+        for (const metricDate of metricDates) {
+            await recomputeBranchMetricForDate(branchId, metricDate);
+            refreshedCount += 1;
+        }
+    }
+    return refreshedCount;
 }
 function mapForeignKeyError(error) {
     if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
@@ -167,6 +204,9 @@ async function upsertMetric(input) {
             },
         });
         const metric = await recomputeBranchMetricForDate(agentLine.branchId, input.date);
+        if (!metric) {
+            throw new MetricServiceError("Failed to recompute branch metric", 500);
+        }
         const sourceLineCount = await getSourceLineCount(metric.branchId, metric.metricDate);
         return withSourceLineCount(toMetricResponse(metric), sourceLineCount);
     }
