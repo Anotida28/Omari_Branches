@@ -1,0 +1,50 @@
+PrismaClientKnownRequestError: 
+Invalid `prisma_1.prisma.agentLineMetric.count()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\dist\services\metrics.service.js:65:44
+
+  62     };
+  63 }
+  64 async function getSourceLineCount(branchId, metricDate) {
+→ 65     return prisma_1.prisma.agentLineMetric.count(
+Can't reach database server at `172.16.3.21:1433`
+
+Please make sure your database server is running at `172.16.3.21:1433`.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\runtime\library.js:121:7268)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\runtime\library.js:121:6593)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\runtime\library.js:121:6300)
+    at async a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\runtime\library.js:130:9551)
+    at async Promise.all (index 5)
+    at async listMetrics (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\dist\services\metrics.service.js:267:30)
+    at async listMetricsHandler (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\dist\controllers\metrics.controller.js:163:24) {
+  code: 'P1001',
+  meta: {
+    modelName: 'AgentLineMetric',
+    database_location: '172.16.3.21:1433'
+  },
+  clientVersion: '6.19.2'
+}
+PrismaClientKnownRequestError: 
+Invalid `prisma_1.prisma.agentLineMetric.count()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\dist\services\metrics.service.js:65:44
+
+  62     };
+  63 }
+  64 async function getSourceLineCount(branchId, metricDate) {
+→ 65     return prisma_1.prisma.agentLineMetric.count(
+Can't reach database server at `172.16.3.21:1433`
+
+Please make sure your database server is running at `172.16.3.21:1433`.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\runtime\library.js:121:7268)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\runtime\library.js:121:6593)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\runtime\library.js:121:6300)
+    at async a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\runtime\library.js:130:9551)
+    at async Promise.all (index 59)
+    at async listMetrics (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\dist\services\metrics.service.js:267:30)
+    at async listMetricsHandler (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\dist\controllers\metrics.controller.js:163:24) {
+  code: 'P1001',
+  meta: {
+    modelName: 'AgentLineMetric',
+    database_location: '172.16.3.21:1433'
+  },
+  clientVersion: '6.19.2'
+}

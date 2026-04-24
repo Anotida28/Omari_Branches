@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Building2,
   DollarSign,
+  Activity,
   FileText,
   TrendingUp,
   Wallet,
@@ -19,6 +20,7 @@ import {
   Alert,
   Box,
   Chip,
+  Divider,
   Paper,
   Skeleton,
   Stack,
@@ -33,6 +35,51 @@ import { fetchTrendsData } from "../services/trends";
 import { ErrorState } from "../shared/components/ErrorState";
 import { RankingList } from "../shared/components/RankingList";
 import { StatCard } from "../shared/components/StatCard";
+
+type PerformanceTooltipProps = {
+  active?: boolean;
+  payload?: Array<{ value?: number; payload?: Record<string, unknown> }>;
+  label?: string;
+};
+
+function PerformanceTooltip({ active, payload, label }: PerformanceTooltipProps) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const row = payload[0]?.payload as
+    | {
+        eFloatBalance?: number;
+        cashInVolume?: number;
+        cashOutVolume?: number;
+        totalTransactionVolume?: number;
+        cashInValue?: number;
+        cashOutValue?: number;
+        totalTransactionValue?: number;
+        totalCommission?: number;
+        netCashValue?: number;
+      }
+    | undefined;
+
+  return (
+    <Paper sx={{ p: 1.5, border: "1px solid rgba(15, 23, 42, 0.12)" }}>
+      <Stack spacing={0.4}>
+        <Typography variant="subtitle2" fontWeight={700}>
+          {label}
+        </Typography>
+        <Typography variant="body2">E-Float: {formatCurrency(row?.eFloatBalance ?? 0)}</Typography>
+        <Typography variant="body2">Cash In Value: {formatCurrency(row?.cashInValue ?? 0)}</Typography>
+        <Typography variant="body2">Cash Out Value: {formatCurrency(row?.cashOutValue ?? 0)}</Typography>
+        <Typography variant="body2">Txn Value: {formatCurrency(row?.totalTransactionValue ?? 0)}</Typography>
+        <Typography variant="body2">Commission: {formatCurrency(row?.totalCommission ?? 0)}</Typography>
+        <Typography variant="body2">Net Cash: {formatCurrency(row?.netCashValue ?? 0)}</Typography>
+        <Typography variant="body2">
+          Volumes: {row?.cashInVolume ?? 0} in / {row?.cashOutVolume ?? 0} out / {row?.totalTransactionVolume ?? 0} total
+        </Typography>
+      </Stack>
+    </Paper>
+  );
+}
 
 function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -132,12 +179,66 @@ export default function DashboardPage() {
             </Typography>
             <Chip size="small" icon={<TrendingUp size={14} />} label="30 days" color="success" />
           </Stack>
+          {trendsQuery.data ? (
+            <Box
+              sx={{
+                display: "grid",
+                gap: 1,
+                gridTemplateColumns: {
+                  xs: "repeat(2, minmax(0, 1fr))",
+                  md: "repeat(4, minmax(0, 1fr))",
+                },
+                mb: 1.5,
+              }}
+            >
+              <Paper variant="outlined" sx={{ p: 1.2, borderColor: "rgba(15, 23, 42, 0.08)" }}>
+                <Stack spacing={0.4}>
+                  <Typography variant="caption" color="text.secondary">
+                    Latest E-Float
+                  </Typography>
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    {formatCurrency(trendsQuery.data.kpis.latestTotalEFloat)}
+                  </Typography>
+                </Stack>
+              </Paper>
+              <Paper variant="outlined" sx={{ p: 1.2, borderColor: "rgba(15, 23, 42, 0.08)" }}>
+                <Stack spacing={0.4}>
+                  <Typography variant="caption" color="text.secondary">
+                    Transaction Value
+                  </Typography>
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    {formatCurrency(trendsQuery.data.kpis.totalTransactionValue)}
+                  </Typography>
+                </Stack>
+              </Paper>
+              <Paper variant="outlined" sx={{ p: 1.2, borderColor: "rgba(15, 23, 42, 0.08)" }}>
+                <Stack spacing={0.4}>
+                  <Typography variant="caption" color="text.secondary">
+                    Transaction Volume
+                  </Typography>
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    {trendsQuery.data.kpis.totalTransactionVolume.toLocaleString()}
+                  </Typography>
+                </Stack>
+              </Paper>
+              <Paper variant="outlined" sx={{ p: 1.2, borderColor: "rgba(15, 23, 42, 0.08)" }}>
+                <Stack spacing={0.4}>
+                  <Typography variant="caption" color="text.secondary">
+                    Commission
+                  </Typography>
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    {formatCurrency(trendsQuery.data.kpis.totalCommission)}
+                  </Typography>
+                </Stack>
+              </Paper>
+            </Box>
+          ) : null}
           {trendsQuery.isLoading ? (
             <Skeleton variant="rounded" height={280} />
           ) : trendsQuery.isError ? (
             <Alert severity="warning">{getErrorMessage(trendsQuery.error)}</Alert>
           ) : trendsQuery.data?.cashTrend.length ? (
-            <Box sx={{ height: 280 }}>
+            <Box sx={{ height: 300 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={trendsQuery.data.cashTrend}>
                   <defs>
@@ -149,7 +250,7 @@ export default function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
+                  <Tooltip content={<PerformanceTooltip />} />
                   <Area
                     type="monotone"
                     dataKey="eFloatBalance"
@@ -165,6 +266,40 @@ export default function DashboardPage() {
               No trend data available for selected window.
             </Typography>
           )}
+          {trendsQuery.data?.cashTrend.length ? (
+            <>
+              <Divider sx={{ my: 1.5 }} />
+              <Box
+                sx={{
+                  display: "grid",
+                  gap: 1,
+                  gridTemplateColumns: {
+                    xs: "1fr",
+                    md: "repeat(2, minmax(0, 1fr))",
+                  },
+                }}
+              >
+                {trendsQuery.data.cashTrend.slice(-4).map((point) => (
+                  <Paper key={point.date} variant="outlined" sx={{ p: 1.2, borderColor: "rgba(15, 23, 42, 0.08)" }}>
+                    <Stack spacing={0.5}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="subtitle2" fontWeight={700}>
+                          {point.date}
+                        </Typography>
+                        <Chip size="small" icon={<Activity size={12} />} label="daily snapshot" variant="outlined" />
+                      </Stack>
+                      <Typography variant="body2">E-Float: {formatCurrency(point.eFloatBalance)}</Typography>
+                      <Typography variant="body2">Cash In: {formatCurrency(point.cashInValue)} across {point.cashInVolume} txns</Typography>
+                      <Typography variant="body2">Cash Out: {formatCurrency(point.cashOutValue)} across {point.cashOutVolume} txns</Typography>
+                      <Typography variant="body2">Txn Value: {formatCurrency(point.totalTransactionValue)}</Typography>
+                      <Typography variant="body2">Commission: {formatCurrency(point.totalCommission)}</Typography>
+                      <Typography variant="body2">Net Cash: {formatCurrency(point.netCashValue)}</Typography>
+                    </Stack>
+                  </Paper>
+                ))}
+              </Box>
+            </>
+          ) : null}
         </Paper>
 
         <Paper sx={{ p: 2.2, ...glassPanelSx }}>
