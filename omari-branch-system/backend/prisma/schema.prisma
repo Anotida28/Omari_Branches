@@ -24,7 +24,6 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  recipients BranchRecipient[]
   agentLines BranchAgentLine[]
   metrics    BranchMetric[]
   expenses   Expense[]
@@ -50,18 +49,15 @@ model BranchAgentLine {
   @@index([branchId, isActive])
 }
 
-model BranchRecipient {
+model ReminderRecipient {
   id        BigInt   @id @default(autoincrement())
-  branchId  BigInt
-  email     String   @db.VarChar(190)
+  email     String   @unique(map: "uq_reminder_recipient_email") @db.VarChar(190)
   name      String?  @db.VarChar(120)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
-
-  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
-
-  @@unique([branchId, email], name: "uq_branch_email")
+  updatedAt DateTime @updatedAt
   @@index([email])
+  @@index([isActive])
 }
 
 model BranchMetric {

@@ -1,4 +1,4 @@
-import { Prisma, type BranchRecipient } from "@prisma/client";
+import { Prisma, type ReminderRecipient } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
 
@@ -26,136 +26,90 @@ export type RecipientUpdateInput = {
 
 export type RecipientResponse = {
   id: string;
-  branchId: string;
   email: string;
   name: string | null;
   isActive: boolean;
   createdAt: string;
+  updatedAt: string;
 };
 
 function formatDateTime(date: Date): string {
   return date.toISOString();
 }
 
-function toRecipientResponse(recipient: BranchRecipient): RecipientResponse {
+function toRecipientResponse(recipient: ReminderRecipient): RecipientResponse {
   return {
     id: recipient.id.toString(),
-    branchId: recipient.branchId.toString(),
     email: recipient.email,
     name: recipient.name ?? null,
     isActive: recipient.isActive,
     createdAt: formatDateTime(recipient.createdAt),
+    updatedAt: formatDateTime(recipient.updatedAt),
   };
 }
 
-/**
- * Email validation regex (basic but sufficient for most cases)
- */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function validateEmail(email: string): boolean {
-  return EMAIL_REGEX.test(email.trim());
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
 }
 
-/**
- * List all recipients for a branch
- */
-export async function listRecipientsForBranch(
-  branchId: bigint
-): Promise<RecipientResponse[] | null> {
-  // Check if branch exists
-  const branch = await prisma.branch.findUnique({
-    where: { id: branchId },
-    select: { id: true },
-  });
+function validateEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email);
+}
 
-  if (!branch) {
-    return null;
-  }
-
-  const recipients = await prisma.branchRecipient.findMany({
-    where: { branchId },
+export async function listRecipients(): Promise<RecipientResponse[]> {
+  const recipients = await prisma.reminderRecipient.findMany({
     orderBy: [{ isActive: "desc" }, { email: "asc" }],
   });
 
   return recipients.map(toRecipientResponse);
 }
 
-/**
- * Get a single recipient by ID
- */
-export async function getRecipientById(
-  id: bigint
-): Promise<RecipientResponse | null> {
-  const recipient = await prisma.branchRecipient.findUnique({
+export async function getRecipientById(id: bigint): Promise<RecipientResponse | null> {
+  const recipient = await prisma.reminderRecipient.findUnique({
     where: { id },
   });
 
   return recipient ? toRecipientResponse(recipient) : null;
 }
 
-/**
- * Create a recipient for a branch
- */
 export async function createRecipient(
-  branchId: bigint,
   input: RecipientCreateInput
 ): Promise<RecipientResponse> {
-  const email = input.email.trim().toLowerCase();
+  const email = normalizeEmail(input.email);
 
-  // Validate email format
   if (!validateEmail(email)) {
     throw new RecipientServiceError("Invalid email format", 400);
   }
 
-  // Check if branch exists
-  const branch = await prisma.branch.findUnique({
-    where: { id: branchId },
-    select: { id: true },
-  });
-
-  if (!branch) {
-    throw new RecipientServiceError("Branch not found", 404);
-  }
-
-  // Check for duplicate email in this branch
-  const existing = await prisma.branchRecipient.findUnique({
-    where: {
-      uq_branch_email: {
-        branchId,
-        email,
-      },
-    },
+  const existing = await prisma.reminderRecipient.findUnique({
+    where: { email },
   });
 
   if (existing) {
     throw new RecipientServiceError(
-      "A recipient with this email already exists for this branch",
+      "A reminder recipient with this email already exists",
       409
     );
   }
 
-  const data: Prisma.BranchRecipientCreateInput = {
-    branch: { connect: { id: branchId } },
+  const data: Prisma.ReminderRecipientCreateInput = {
     email,
     name: input.name?.trim() || null,
     isActive: input.isActive ?? true,
   };
 
-  const recipient = await prisma.branchRecipient.create({ data });
+  const recipient = await prisma.reminderRecipient.create({ data });
 
   return toRecipientResponse(recipient);
 }
 
-/**
- * Update a recipient
- */
 export async function updateRecipient(
   id: bigint,
   input: RecipientUpdateInput
 ): Promise<RecipientResponse | null> {
-  // Get existing recipient
-  const existing = await prisma.branchRecipient.findUnique({
+  const existing = await prisma.reminderRecipient.findUnique({
     where: { id },
   });
 
@@ -163,29 +117,23 @@ export async function updateRecipient(
     return null;
   }
 
-  const data: Prisma.BranchRecipientUpdateInput = {};
+  const data: Prisma.ReminderRecipientUpdateInput = {};
 
   if (input.email !== undefined) {
-    const email = input.email.trim().toLowerCase();
+    const email = normalizeEmail(input.email);
 
     if (!validateEmail(email)) {
       throw new RecipientServiceError("Invalid email format", 400);
     }
 
-    // Check for duplicate email if changing
     if (email !== existing.email) {
-      const duplicate = await prisma.branchRecipient.findUnique({
-        where: {
-          uq_branch_email: {
-            branchId: existing.branchId,
-            email,
-          },
-        },
+      const duplicate = await prisma.reminderRecipient.findUnique({
+        where: { email },
       });
 
       if (duplicate) {
         throw new RecipientServiceError(
-          "A recipient with this email already exists for this branch",
+          "A reminder recipient with this email already exists",
           409
         );
       }
@@ -203,7 +151,7 @@ export async function updateRecipient(
   }
 
   try {
-    const recipient = await prisma.branchRecipient.update({
+    const recipient = await prisma.reminderRecipient.update({
       where: { id },
       data,
     });
@@ -220,12 +168,9 @@ export async function updateRecipient(
   }
 }
 
-/**
- * Delete a recipient
- */
 export async function deleteRecipient(id: bigint): Promise<boolean> {
   try {
-    await prisma.branchRecipient.delete({ where: { id } });
+    await prisma.reminderRecipient.delete({ where: { id } });
     return true;
   } catch (error) {
     if (
@@ -238,19 +183,12 @@ export async function deleteRecipient(id: bigint): Promise<boolean> {
   }
 }
 
-/**
- * Get active recipients for a branch (for sending alerts)
- */
-export async function getActiveRecipientsForBranch(
-  branchId: bigint
-): Promise<RecipientResponse[]> {
-  const recipients = await prisma.branchRecipient.findMany({
-    where: {
-      branchId,
-      isActive: true,
-    },
+export async function getActiveRecipientEmails(): Promise<string[]> {
+  const recipients = await prisma.reminderRecipient.findMany({
+    where: { isActive: true },
     orderBy: { email: "asc" },
+    select: { email: true },
   });
 
-  return recipients.map(toRecipientResponse);
+  return recipients.map((recipient) => recipient.email);
 }

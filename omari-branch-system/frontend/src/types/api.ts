@@ -191,11 +191,11 @@ export type DashboardOverview = DashboardStats & {
 
 export type Recipient = {
   id: string;
-  branchId: string;
   email: string;
   name: string | null;
   isActive: boolean;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type CreateRecipientInput = {

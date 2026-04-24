@@ -7,7 +7,7 @@
  * 3. Evaluates which alerts should fire
  * 4. For each candidate:
  *    - Checks if already logged (deduplication)
- *    - Fetches active recipients for the branch
+ *    - Fetches active HQ reminder recipients
  *    - Sends email and logs the result
  */
 
@@ -22,6 +22,7 @@ import {
 } from "../services/alert-evaluation.service";
 import { sendAlertEmail, type AlertEmailPayload } from "../services/email.service";
 import { withLock } from "../services/job-lock.service";
+import { getActiveRecipientEmails } from "../services/recipients.service";
 
 // ============================================================================
 // Constants
@@ -141,21 +142,6 @@ async function isAlertAlreadySent(
 }
 
 /**
- * Get active recipients for a branch.
- */
-async function getActiveRecipients(branchId: bigint): Promise<string[]> {
-  const recipients = await prisma.branchRecipient.findMany({
-    where: {
-      branchId,
-      isActive: true,
-    },
-    select: { email: true },
-  });
-
-  return recipients.map((r) => r.email);
-}
-
-/**
  * Get branch info for display in emails.
  */
 async function getBranchInfo(branchId: bigint): Promise<BranchInfo | null> {
@@ -240,6 +226,7 @@ export async function runAlertEvaluatorJob(): Promise<AlertJobResult> {
     // Evaluate
     const evaluation = evaluateAlerts(today, expenses, rules);
     result.totalCandidates = evaluation.candidates.length;
+    const recipients = await getActiveRecipientEmails();
 
     console.log(`[AlertJob] Found ${evaluation.candidates.length} alert candidates`);
 
@@ -255,15 +242,17 @@ export async function runAlertEvaluatorJob(): Promise<AlertJobResult> {
           continue;
         }
 
-        // Get recipients
-        const recipients = await getActiveRecipients(candidate.branchId);
-
         if (recipients.length === 0) {
           result.skippedNoRecipients++;
-          console.log(`[AlertJob] Skipping ${candidate.alertKey} - no recipients`);
+          console.log(`[AlertJob] Skipping ${candidate.alertKey} - no HQ recipients`);
 
           // Log as SKIPPED
-          await logAlertResult(candidate, "no-recipients", "SKIPPED", "No active recipients for branch");
+          await logAlertResult(
+            candidate,
+            "no-recipients",
+            "SKIPPED",
+            "No active HQ reminder recipients configured"
+          );
           continue;
         }
 

@@ -6,14 +6,9 @@ import {
   createRecipient,
   deleteRecipient,
   getRecipientById,
-  listRecipientsForBranch,
+  listRecipients,
   updateRecipient,
 } from "../services/recipients.service";
-
-const branchIdSchema = z
-  .string()
-  .regex(/^\d+$/)
-  .transform((value) => BigInt(value));
 
 const recipientIdSchema = z
   .string()
@@ -50,27 +45,15 @@ function handleServiceError(res: Response, error: unknown): boolean {
 }
 
 /**
- * GET /api/branches/:branchId/recipients
+ * GET /api/recipients
  */
 export async function listRecipientsHandler(
-  req: Request,
+  _req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const parsedBranchId = branchIdSchema.safeParse(req.params.branchId);
-  if (!parsedBranchId.success) {
-    res.status(400).json({ error: "Invalid branch ID" });
-    return;
-  }
-
   try {
-    const recipients = await listRecipientsForBranch(parsedBranchId.data);
-
-    if (recipients === null) {
-      res.status(404).json({ error: "Branch not found" });
-      return;
-    }
-
+    const recipients = await listRecipients();
     res.json({ items: recipients });
   } catch (error) {
     if (handleServiceError(res, error)) {
@@ -81,19 +64,13 @@ export async function listRecipientsHandler(
 }
 
 /**
- * POST /api/branches/:branchId/recipients
+ * POST /api/recipients
  */
 export async function createRecipientHandler(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const parsedBranchId = branchIdSchema.safeParse(req.params.branchId);
-  if (!parsedBranchId.success) {
-    res.status(400).json({ error: "Invalid branch ID" });
-    return;
-  }
-
   const parsedBody = createRecipientSchema.safeParse(req.body);
   if (!parsedBody.success) {
     res.status(400).json({
@@ -104,7 +81,7 @@ export async function createRecipientHandler(
   }
 
   try {
-    const recipient = await createRecipient(parsedBranchId.data, parsedBody.data);
+    const recipient = await createRecipient(parsedBody.data);
     res.status(201).json({ data: recipient });
   } catch (error) {
     if (handleServiceError(res, error)) {

@@ -50,7 +50,7 @@ const navItems = [
   {
     to: "/branches",
     label: "Branches",
-    subtitle: "Manage branch locations, active status, and alert recipients",
+    subtitle: "Manage branch locations, active status, and mapped agent lines",
     icon: Building2,
   },
   {
@@ -74,7 +74,7 @@ const navItems = [
   {
     to: "/expenses",
     label: "Expenses",
-    subtitle: "Track expense lifecycle, balances, payments, and supporting documents",
+    subtitle: "Track reminder schedules and due dates for branch expenses",
     icon: DollarSign,
   },
   {
@@ -86,7 +86,7 @@ const navItems = [
   {
     to: "/settings",
     label: "Settings",
-    subtitle: "System settings, operational checks, and role visibility",
+    subtitle: "HQ reminder recipients, system checks, and role visibility",
     icon: Settings,
   },
 ];

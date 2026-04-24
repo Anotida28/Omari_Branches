@@ -53,7 +53,7 @@ export async function sendTestEmailHandler(
 
     res.json({
       ok: true,
-      message: "Test email sent",
+      message: "Test email accepted by delivery provider",
       messageId,
       to,
     });

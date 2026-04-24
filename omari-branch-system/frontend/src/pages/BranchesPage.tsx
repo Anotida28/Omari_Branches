@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Plus, Search, Trash2, Users } from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
 import {
   Alert,
   Box,
@@ -20,7 +20,6 @@ import {
   TableRow,
   TextField,
   Tooltip,
-  Typography,
 } from "@mui/material";
 import { useSearchParams } from "react-router-dom";
 
@@ -30,17 +29,10 @@ import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useAuth } from "../hooks/useAuth";
 import { getErrorMessage } from "../services/api";
 import { createBranch, deleteBranch, listBranches, updateBranch } from "../services/branches";
-import {
-  createRecipient,
-  deleteRecipient,
-  listRecipients,
-  updateRecipient,
-} from "../services/recipients";
 import { ConfirmDialog } from "../shared/components/ConfirmDialog";
-import { DrawerPanel } from "../shared/components/DrawerPanel";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
-import type { Branch, CreateBranchInput, CreateRecipientInput } from "../types/api";
+import type { Branch, CreateBranchInput } from "../types/api";
 
 const PAGE_SIZE = 10;
 
@@ -50,12 +42,6 @@ const INITIAL_FORM: CreateBranchInput = {
   address: "",
   isActive: true,
   agentLineNumbers: [],
-};
-
-const INITIAL_RECIPIENT_FORM: CreateRecipientInput = {
-  email: "",
-  name: "",
-  isActive: true,
 };
 
 export default function BranchesPage() {
@@ -75,16 +61,7 @@ export default function BranchesPage() {
   const [form, setForm] = useState<CreateBranchInput>(INITIAL_FORM);
   const [agentLinesText, setAgentLinesText] = useState("");
   const [formError, setFormError] = useState("");
-
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
-  const [isAddRecipientOpen, setIsAddRecipientOpen] = useState(false);
-  const [recipientForm, setRecipientForm] = useState<CreateRecipientInput>(INITIAL_RECIPIENT_FORM);
-  const [recipientFormError, setRecipientFormError] = useState("");
   const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
-  const [recipientToDelete, setRecipientToDelete] = useState<{ id: string; email: string } | null>(
-    null,
-  );
 
   const debouncedSearch = useDebouncedValue(search, 300);
 
@@ -140,38 +117,6 @@ export default function BranchesPage() {
     },
   });
 
-  const recipientsQuery = useQuery({
-    queryKey: ["recipients", selectedBranch?.id],
-    queryFn: () => listRecipients(selectedBranch!.id),
-    enabled: drawerOpen && Boolean(selectedBranch),
-  });
-
-  const createRecipientMutation = useMutation({
-    mutationFn: (input: CreateRecipientInput) => createRecipient(selectedBranch!.id, input),
-    onSuccess: () => {
-      setIsAddRecipientOpen(false);
-      setRecipientForm(INITIAL_RECIPIENT_FORM);
-      setRecipientFormError("");
-      queryClient.invalidateQueries({ queryKey: ["recipients", selectedBranch?.id] });
-    },
-  });
-
-  const toggleRecipientMutation = useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      updateRecipient(id, { isActive }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["recipients", selectedBranch?.id] });
-    },
-  });
-
-  const deleteRecipientMutation = useMutation({
-    mutationFn: deleteRecipient,
-    onSuccess: () => {
-      setRecipientToDelete(null);
-      queryClient.invalidateQueries({ queryKey: ["recipients", selectedBranch?.id] });
-    },
-  });
-
   const rows = branchesQuery.data?.items ?? [];
 
   const errorMessage = useMemo(() => {
@@ -187,15 +132,6 @@ export default function BranchesPage() {
     if (deleteMutation.isError) {
       return getErrorMessage(deleteMutation.error);
     }
-    if (createRecipientMutation.isError) {
-      return getErrorMessage(createRecipientMutation.error);
-    }
-    if (toggleRecipientMutation.isError) {
-      return getErrorMessage(toggleRecipientMutation.error);
-    }
-    if (deleteRecipientMutation.isError) {
-      return getErrorMessage(deleteRecipientMutation.error);
-    }
     return "";
   }, [
     branchesQuery.error,
@@ -206,12 +142,6 @@ export default function BranchesPage() {
     deleteMutation.isError,
     toggleMutation.error,
     toggleMutation.isError,
-    createRecipientMutation.error,
-    createRecipientMutation.isError,
-    toggleRecipientMutation.error,
-    toggleRecipientMutation.isError,
-    deleteRecipientMutation.error,
-    deleteRecipientMutation.isError,
   ]);
 
   const submitCreate = (event: FormEvent<HTMLFormElement>) => {
@@ -246,41 +176,6 @@ export default function BranchesPage() {
     });
   };
 
-  const openRecipientsDrawer = (branch: Branch) => {
-    setSelectedBranch(branch);
-    setDrawerOpen(true);
-  };
-
-  const closeRecipientsDrawer = () => {
-    setDrawerOpen(false);
-    setSelectedBranch(null);
-    setIsAddRecipientOpen(false);
-    setRecipientForm(INITIAL_RECIPIENT_FORM);
-    setRecipientFormError("");
-  };
-
-  const submitAddRecipient = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const email = recipientForm.email.trim();
-    if (!email) {
-      setRecipientFormError("Email is required.");
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setRecipientFormError("Invalid email format.");
-      return;
-    }
-
-    setRecipientFormError("");
-    createRecipientMutation.mutate({
-      email,
-      name: recipientForm.name?.trim() || undefined,
-      isActive: recipientForm.isActive,
-    });
-  };
-
   return (
     <section className="space-y-5 motion-fade-up">
       <Stack direction="row" justifyContent="flex-end">
@@ -293,6 +188,10 @@ export default function BranchesPage() {
           Create Branch
         </Button>
       </Stack>
+
+      <Alert severity="info" variant="outlined">
+        Reminder recipients are managed centrally in Settings and apply to all branches.
+      </Alert>
 
       <FilterBar>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
@@ -373,14 +272,6 @@ export default function BranchesPage() {
                     </TableCell>
                     <TableCell align="right">
                       <Stack direction="row" justifyContent="flex-end" spacing={0.8}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<Users size={14} />}
-                          onClick={() => openRecipientsDrawer(branch)}
-                        >
-                          Recipients
-                        </Button>
                         <Tooltip title={branch.isActive ? "Deactivate branch" : "Activate branch"}>
                           <span>
                             <Switch
@@ -514,179 +405,6 @@ export default function BranchesPage() {
         </Box>
       </Modal>
 
-      <DrawerPanel
-        open={drawerOpen}
-        onClose={closeRecipientsDrawer}
-        title={selectedBranch ? `${selectedBranch.displayName} Recipients` : "Recipients"}
-        width={820}
-      >
-        <Stack spacing={2}>
-          <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={1}>
-            <Typography variant="body2" color="text.secondary">
-              Configure recipients for branch-level alert notifications.
-            </Typography>
-            {canWrite ? (
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={<Plus size={14} />}
-                onClick={() => setIsAddRecipientOpen((prev) => !prev)}
-              >
-                {isAddRecipientOpen ? "Close Form" : "Add Recipient"}
-              </Button>
-            ) : null}
-          </Stack>
-
-          {isAddRecipientOpen && canWrite ? (
-            <Paper sx={{ p: 2, border: "1px solid rgba(15, 23, 42, 0.1)" }}>
-              <Box component="form" onSubmit={submitAddRecipient} sx={{ display: "grid", gap: 1.5 }}>
-                <TextField
-                  label="Email"
-                  type="email"
-                  size="small"
-                  value={recipientForm.email}
-                  onChange={(event) =>
-                    setRecipientForm((prev) => ({ ...prev, email: event.target.value }))
-                  }
-                  placeholder="recipient@example.com"
-                  required
-                />
-                <TextField
-                  label="Name (optional)"
-                  size="small"
-                  value={recipientForm.name || ""}
-                  onChange={(event) =>
-                    setRecipientForm((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={recipientForm.isActive ?? true}
-                      onChange={(_event, checked) =>
-                        setRecipientForm((prev) => ({ ...prev, isActive: checked }))
-                      }
-                    />
-                  }
-                  label="Active recipient"
-                />
-                {recipientFormError ? <Alert severity="warning">{recipientFormError}</Alert> : null}
-                <Stack direction="row" justifyContent="flex-end" spacing={1}>
-                  <Button
-                    type="button"
-                    variant="text"
-                    color="secondary"
-                    onClick={() => {
-                      setIsAddRecipientOpen(false);
-                      setRecipientForm(INITIAL_RECIPIENT_FORM);
-                      setRecipientFormError("");
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    disabled={createRecipientMutation.isPending}
-                  >
-                    {createRecipientMutation.isPending ? "Adding..." : "Add Recipient"}
-                  </Button>
-                </Stack>
-              </Box>
-            </Paper>
-          ) : null}
-
-          {recipientsQuery.isLoading ? (
-            <Typography variant="body2" color="text.secondary">
-              Loading recipients...
-            </Typography>
-          ) : recipientsQuery.isError ? (
-            <Alert severity="error">{getErrorMessage(recipientsQuery.error)}</Alert>
-          ) : recipientsQuery.data?.length === 0 ? (
-            <EmptyState
-              title="No recipients configured"
-              description="Add recipient emails to receive alert notifications for this branch."
-              icon={<Mail size={18} />}
-            />
-          ) : (
-            <Stack spacing={1}>
-              {recipientsQuery.data?.map((recipient) => (
-                <Paper
-                  key={recipient.id}
-                  sx={{
-                    px: 1.5,
-                    py: 1.1,
-                    border: "1px solid rgba(15, 23, 42, 0.1)",
-                  }}
-                >
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-                    <Stack direction="row" spacing={1.2} alignItems="center">
-                      <Box
-                        sx={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: "50%",
-                          bgcolor: recipient.isActive ? "rgba(22, 163, 74, 0.14)" : "rgba(100, 116, 139, 0.14)",
-                          color: recipient.isActive ? "success.main" : "text.secondary",
-                          display: "grid",
-                          placeItems: "center",
-                        }}
-                      >
-                        <Mail size={14} />
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" fontWeight={600}>
-                          {recipient.email}
-                        </Typography>
-                        {recipient.name ? (
-                          <Typography variant="caption" color="text.secondary">
-                            {recipient.name}
-                          </Typography>
-                        ) : null}
-                      </Box>
-                    </Stack>
-
-                    <Stack direction="row" alignItems="center" spacing={0.5}>
-                      <Chip
-                        size="small"
-                        color={recipient.isActive ? "success" : "default"}
-                        label={recipient.isActive ? "ACTIVE" : "INACTIVE"}
-                      />
-                      {canWrite ? (
-                        <>
-                          <Switch
-                            size="small"
-                            checked={recipient.isActive}
-                            disabled={toggleRecipientMutation.isPending}
-                            onChange={(_event, checked) =>
-                              toggleRecipientMutation.mutate({ id: recipient.id, isActive: checked })
-                            }
-                          />
-                          <Tooltip title="Remove recipient">
-                            <span>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() =>
-                                  setRecipientToDelete({ id: recipient.id, email: recipient.email })
-                                }
-                                disabled={deleteRecipientMutation.isPending}
-                              >
-                                <Trash2 size={14} />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        </>
-                      ) : null}
-                    </Stack>
-                  </Stack>
-                </Paper>
-              ))}
-            </Stack>
-          )}
-        </Stack>
-      </DrawerPanel>
-
       <ConfirmDialog
         open={Boolean(branchToDelete)}
         title="Delete Branch"
@@ -699,20 +417,6 @@ export default function BranchesPage() {
           }
         }}
         loading={deleteMutation.isPending}
-      />
-
-      <ConfirmDialog
-        open={Boolean(recipientToDelete)}
-        title="Remove Recipient"
-        message={`Remove ${recipientToDelete?.email ?? "this recipient"} from alerts?`}
-        confirmLabel="Remove"
-        onClose={() => setRecipientToDelete(null)}
-        onConfirm={() => {
-          if (recipientToDelete) {
-            deleteRecipientMutation.mutate(recipientToDelete.id);
-          }
-        }}
-        loading={deleteRecipientMutation.isPending}
       />
     </section>
   );

@@ -48,10 +48,37 @@ const envSchema = z.object({
     .default("change-this-jwt-secret-in-production"),
   JWT_EXPIRES_IN: z.string().min(2).default("8h"),
   SUPER_ADMIN_USERNAMES: z.string().default(""),
-  EMAIL_PROVIDER: z.enum(["gmail"]).default("gmail"),
-  EMAIL_FROM: z.string().email("EMAIL_FROM must be a valid email address").default("noreply@example.com"),
-  EMAIL_USER: z.string().email("EMAIL_USER must be a valid email address").default("noreply@example.com"),
-  EMAIL_APP_PASSWORD: z.string().min(1).default("disabled"),
+  EMAIL_PROVIDER: z.enum(["bulkmailer", "gmail"]).default("bulkmailer"),
+  EMAIL_FROM: z.preprocess(
+    normalizeOptionalString,
+    z.string().email("EMAIL_FROM must be a valid email address").optional(),
+  ),
+  EMAIL_USER: z.preprocess(
+    normalizeOptionalString,
+    z.string().email("EMAIL_USER must be a valid email address").optional(),
+  ),
+  EMAIL_APP_PASSWORD: z.preprocess(
+    normalizeOptionalString,
+    z.string().min(1).optional(),
+  ),
+  BULK_MAILER_BASE_URL: z
+    .string()
+    .url("BULK_MAILER_BASE_URL must be a valid URL")
+    .default("https://bulkmailer-nlb-8d1146c95f851bda.elb.eu-west-1.amazonaws.com"),
+  BULK_MAILER_SEND_PATH: z.string().min(1).default("/mail/send-email-single"),
+  BULK_MAILER_FROM: z.preprocess(
+    normalizeOptionalString,
+    z.string().email("BULK_MAILER_FROM must be a valid email address").optional(),
+  ),
+  BULK_MAILER_AUTH_TOKEN: z.preprocess(
+    normalizeOptionalString,
+    z.string().min(1).optional(),
+  ),
+  BULK_MAILER_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(15000),
+  BULK_MAILER_TRUST_SERVER_CERTIFICATE: z.preprocess(
+    normalizeOptionalBoolean,
+    z.boolean().default(true),
+  ),
   SOURCE_SQL_SERVER: z.preprocess(
     normalizeOptionalString,
     z.string().min(1).optional(),
@@ -108,4 +135,20 @@ if (!parsed.success) {
   );
 }
 
-export const env = parsed.data;
+const config = parsed.data;
+
+if (config.EMAIL_PROVIDER === "gmail") {
+  if (!config.EMAIL_FROM || !config.EMAIL_USER || !config.EMAIL_APP_PASSWORD) {
+    throw new Error(
+      "Invalid environment configuration: EMAIL_FROM, EMAIL_USER, and EMAIL_APP_PASSWORD are required when EMAIL_PROVIDER=gmail",
+    );
+  }
+}
+
+if (config.EMAIL_PROVIDER === "bulkmailer" && !config.BULK_MAILER_FROM) {
+  throw new Error(
+    "Invalid environment configuration: BULK_MAILER_FROM is required when EMAIL_PROVIDER=bulkmailer",
+  );
+}
+
+export const env = config;
