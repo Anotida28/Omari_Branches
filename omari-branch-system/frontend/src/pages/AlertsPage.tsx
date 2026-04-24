@@ -1,12 +1,10 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bell,
   CheckCircle2,
   Clock,
-  RotateCcw,
-  Send,
   XCircle,
 } from "lucide-react";
 import {
@@ -24,7 +22,7 @@ import {
 import { useSearchParams } from "react-router-dom";
 
 import { getErrorMessage } from "../services/api";
-import { getAlertStats, listAlertLogs, triggerAlertJob } from "../services/alerts";
+import { getAlertStats, listAlertLogs } from "../services/alerts";
 import { listBranches } from "../services/branches";
 import { formatCurrency, formatDateTime } from "../services/format";
 import { DataTable } from "../shared/components/DataTable";
@@ -32,20 +30,12 @@ import { DrawerPanel } from "../shared/components/DrawerPanel";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
-import { useAuth } from "../hooks/useAuth";
 import type {
   AlertLog,
-  AlertRuleType,
   AlertSendStatus,
 } from "../types/api";
 
 const PAGE_SIZE = 15;
-
-const RULE_TYPES: { value: AlertRuleType | ""; label: string }[] = [
-  { value: "", label: "All Types" },
-  { value: "DUE_REMINDER", label: "Due Reminder" },
-  { value: "OVERDUE_ESCALATION", label: "Overdue Escalation" },
-];
 
 const STATUS_OPTIONS: { value: AlertSendStatus | ""; label: string }[] = [
   { value: "", label: "All Statuses" },
@@ -73,20 +63,13 @@ function statusColor(status: AlertSendStatus): "success" | "error" | "warning" |
   return "default";
 }
 
-function ruleLabel(ruleType: AlertRuleType): string {
-  return ruleType === "DUE_REMINDER" ? "Due Reminder" : "Overdue Escalation";
-}
-
 export default function AlertsPage() {
-  const { canWrite } = useAuth();
-  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<AlertLog | null>(null);
 
   const page = parsePage(searchParams.get("page"));
   const branchId = searchParams.get("branchId") ?? "";
-  const ruleType = (searchParams.get("ruleType") ?? "") as AlertRuleType | "";
   const status = (searchParams.get("status") ?? "") as AlertSendStatus | "";
   const dateFrom = searchParams.get("dateFrom") ?? "";
   const dateTo = searchParams.get("dateTo") ?? "";
@@ -114,25 +97,16 @@ export default function AlertsPage() {
   });
 
   const logsQuery = useQuery({
-    queryKey: ["alert-logs", { page, branchId, ruleType, status, dateFrom, dateTo }],
+    queryKey: ["alert-logs", { page, branchId, status, dateFrom, dateTo }],
     queryFn: () =>
       listAlertLogs({
         page,
         pageSize: PAGE_SIZE,
         branchId: branchId || undefined,
-        ruleType: ruleType || undefined,
         status: status || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
       }),
-  });
-
-  const triggerMutation = useMutation({
-    mutationFn: triggerAlertJob,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["alert-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["alert-logs"] });
-    },
   });
 
   const errorMessage = useMemo(() => {
@@ -145,9 +119,6 @@ export default function AlertsPage() {
     if (logsQuery.isError) {
       return getErrorMessage(logsQuery.error);
     }
-    if (triggerMutation.isError) {
-      return getErrorMessage(triggerMutation.error);
-    }
     return "";
   }, [
     branchesQuery.error,
@@ -156,30 +127,14 @@ export default function AlertsPage() {
     logsQuery.isError,
     statsQuery.error,
     statsQuery.isError,
-    triggerMutation.error,
-    triggerMutation.isError,
   ]);
 
   return (
     <section className="space-y-5 motion-fade-up">
-      {canWrite ? (
-        <Stack direction="row" justifyContent="flex-end">
-          <Button
-            variant="contained"
-            startIcon={<RotateCcw size={15} />}
-            onClick={() => triggerMutation.mutate()}
-            disabled={triggerMutation.isPending}
-          >
-            {triggerMutation.isPending ? "Triggering..." : "Trigger Evaluator"}
-          </Button>
-        </Stack>
-      ) : null}
-
-      {triggerMutation.isSuccess ? (
-        <Alert severity="success">
-          {triggerMutation.data.message}
-        </Alert>
-      ) : null}
+      <Alert severity="info" variant="outlined">
+        This page is a read-only history of reminder delivery outcomes. Reminder evaluation runs
+        through the scheduler rather than manual UI actions.
+      </Alert>
 
       {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 
@@ -234,25 +189,6 @@ export default function AlertsPage() {
             {(branchesQuery.data?.items ?? []).map((branch) => (
               <MenuItem key={branch.id} value={branch.id}>
                 {branch.displayName}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select
-            label="Rule Type"
-            value={ruleType}
-            onChange={(event) =>
-              updateParams({
-                ruleType: event.target.value || undefined,
-                page: "1",
-              })
-            }
-            sx={{ minWidth: { xs: "100%", md: 190 } }}
-          >
-            {RULE_TYPES.map((item) => (
-              <MenuItem key={item.label} value={item.value}>
-                {item.label}
               </MenuItem>
             ))}
           </TextField>
@@ -321,8 +257,7 @@ export default function AlertsPage() {
           <TableRow>
             <TableCell>Sent At</TableCell>
             <TableCell>Branch</TableCell>
-            <TableCell>Rule</TableCell>
-            <TableCell>Expense</TableCell>
+            <TableCell>Reminder</TableCell>
             <TableCell>Recipients</TableCell>
             <TableCell>Status</TableCell>
           </TableRow>
@@ -330,16 +265,16 @@ export default function AlertsPage() {
         body={
           logsQuery.isLoading ? (
             <TableRow>
-              <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
-                Loading alert logs...
+              <TableCell colSpan={5} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                Loading reminder logs...
               </TableCell>
             </TableRow>
           ) : (logsQuery.data?.items.length ?? 0) === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} sx={{ py: 4 }}>
+              <TableCell colSpan={5} sx={{ py: 4 }}>
                 <EmptyState
-                  title="No alert logs found"
-                  description="Try adjusting filters or triggering evaluator."
+                  title="No reminder logs found"
+                  description="Delivery history will appear here after reminder runs."
                   icon={<AlertTriangle size={16} />}
                 />
               </TableCell>
@@ -358,7 +293,6 @@ export default function AlertsPage() {
                 >
                   <TableCell>{formatDateTime(log.sentAt)}</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>{log.branch.displayName}</TableCell>
-                  <TableCell>{ruleLabel(log.rule.ruleType)}</TableCell>
                   <TableCell>
                     {log.expense.expenseType} ({log.expense.period})
                   </TableCell>
@@ -378,7 +312,7 @@ export default function AlertsPage() {
               ))}
               {(logsQuery.data?.total ?? 0) > PAGE_SIZE ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="right">
+                  <TableCell colSpan={5} align="right">
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
                       <Typography variant="body2" color="text.secondary">
                         Showing page {page} of {Math.ceil((logsQuery.data?.total ?? 0) / PAGE_SIZE)}
@@ -416,7 +350,7 @@ export default function AlertsPage() {
           setDrawerOpen(false);
           setSelectedLog(null);
         }}
-        title="Alert Details"
+        title="Reminder Log Details"
         width={760}
       >
         {selectedLog ? (
@@ -461,15 +395,6 @@ export default function AlertsPage() {
                   Amount: {formatCurrency(Number(selectedLog.expense.amount))}
                 </Typography>
               </Stack>
-            </Box>
-
-            <Box>
-              <Typography variant="overline" color="text.secondary">
-                Rule
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 0.6 }}>
-                {selectedLog.rule.description} ({selectedLog.rule.dayOffset})
-              </Typography>
             </Box>
 
             <Box>

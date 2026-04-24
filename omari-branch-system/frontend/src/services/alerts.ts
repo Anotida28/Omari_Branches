@@ -25,23 +25,3 @@ export async function getAlertStats(): Promise<AlertStats> {
   const { data } = await api.get<AlertStats>("/api/alerts/stats");
   return data;
 }
-
-type TriggerAlertJobResponse = {
-  message: string;
-  executed: boolean;
-  result?: {
-    evaluationDate: string;
-    totalCandidates: number;
-    skippedAlreadySent: number;
-    skippedNoRecipients: number;
-    sentCount: number;
-    failedCount: number;
-    errors: string[];
-  };
-  error?: string;
-};
-
-export async function triggerAlertJob(): Promise<TriggerAlertJobResponse> {
-  const { data } = await api.post<TriggerAlertJobResponse>("/api/alerts/trigger");
-  return data;
-}

@@ -39,7 +39,7 @@ const INITIAL_RECIPIENT_FORM = {
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
-  const { user, canWrite } = useAuth();
+  const { canWrite } = useAuth();
   const [to, setTo] = useState("");
   const [subject, setSubject] = useState("Omari Email Test");
   const [message, setMessage] = useState("Testing bulk mailer delivery from Omari Branch Management.");
@@ -141,7 +141,7 @@ export default function SettingsPage() {
     testEmailMutation.mutate({
       to: to.trim(),
       subject: subject.trim() || "Omari Email Test",
-      message: message.trim() || "SMTP test email",
+      message: message.trim() || "Email delivery test",
     });
   };
 
@@ -180,28 +180,13 @@ export default function SettingsPage() {
       ) : null}
 
       <Card>
-        <CardHeader title="User Management" subtitle="Role and account access overview" />
-        <Stack spacing={1}>
-          <Typography variant="body2" color="text.secondary">
-            Current user
-          </Typography>
-          <Typography variant="subtitle1" color="text.primary">
-            {user?.username ?? "Unknown"} ({user?.role ?? "N/A"})
-          </Typography>
-          <Alert severity="info" variant="outlined">
-            Full user CRUD endpoints are not yet exposed by backend. This panel is ready for integration.
-          </Alert>
-        </Stack>
-      </Card>
-
-      <Card>
         <CardHeader
           title="Reminder Recipients"
-          subtitle="Shared HQ recipients who receive reminders for every branch"
+          subtitle="Shared HQ recipients who receive every reminder email"
         />
         <Stack spacing={2}>
           <Alert severity="info" variant="outlined">
-            This list applies to all branch reminders. Branch-level recipient overrides are no longer used.
+            This list applies to all reminder emails across the system.
           </Alert>
 
           <Paper sx={{ p: 2, border: "1px solid rgba(15, 23, 42, 0.1)" }}>
@@ -350,7 +335,7 @@ export default function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Email Configuration" subtitle="Validate bulk mailer delivery from backend" />
+        <CardHeader title="Email Delivery Test" subtitle="Validate bulk mailer delivery from backend" />
         <form onSubmit={onSubmit} className="space-y-3">
           <Stack spacing={2}>
             <TextField

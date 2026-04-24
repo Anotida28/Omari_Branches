@@ -44,7 +44,7 @@ const navItems = [
   {
     to: "/",
     label: "Dashboard",
-    subtitle: "Executive finance visibility across branches",
+    subtitle: "Branch performance and reminder visibility",
     icon: LayoutDashboard,
   },
   {
@@ -56,37 +56,37 @@ const navItems = [
   {
     to: "/metrics",
     label: "Metrics",
-    subtitle: "Track branch cash movement and operational balances",
+    subtitle: "Review imported branch cash movement and balances",
     icon: ChartColumn,
   },
   {
     to: "/trends",
     label: "Trends",
-    subtitle: "Cash movement, exposure, and alerts health analytics",
+    subtitle: "Branch cash movement and reminder exposure analytics",
     icon: LineChart,
   },
   {
     to: "/reports",
     label: "Reports",
-    subtitle: "Generate summary snapshots and export branch-level finance data",
+    subtitle: "Export branch performance and reminder summaries",
     icon: BarChart3,
   },
   {
     to: "/expenses",
-    label: "Expenses",
-    subtitle: "Track reminder schedules and due dates for branch expenses",
+    label: "Reminders",
+    subtitle: "Manage reminder records and due dates",
     icon: DollarSign,
   },
   {
     to: "/alerts",
-    label: "Alerts",
-    subtitle: "Monitor notification reliability and rule outcomes across branches",
+    label: "Reminder Logs",
+    subtitle: "Review reminder delivery history and failures",
     icon: Bell,
   },
   {
     to: "/settings",
     label: "Settings",
-    subtitle: "HQ reminder recipients, system checks, and role visibility",
+    subtitle: "HQ reminder recipients, email tests, and system checks",
     icon: Settings,
   },
 ];
@@ -234,7 +234,7 @@ export default function AppLayout() {
             color="text.secondary"
             sx={{ display: "block", textAlign: isSidebarCollapsed ? "center" : "left" }}
           >
-          Finance Operations Platform
+            Branch Performance & Reminders
           </Typography>
         </Box>
       </Box>

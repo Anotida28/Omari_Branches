@@ -1,11 +1,9 @@
-import { listAlertLogs } from "./alerts";
 import { listBranches } from "./branches";
 import { listExpenses } from "./expenses";
 import { listMetrics } from "./metrics";
 import { isReminderDueWithinDays, isReminderOverdue } from "./reminders";
 import { toMoneyNumber } from "./format";
 import type {
-  AlertLog,
   Branch,
   BranchMetric,
   Expense,
@@ -29,7 +27,6 @@ export type TrendsKpis = {
   overdueAmount: number;
   overdueCount: number;
   dueNext7Amount: number;
-  alertFailureRate: number;
 };
 
 export type CashTrendPoint = {
@@ -60,20 +57,12 @@ export type ExpenseTypeMixPoint = {
   scheduledAmount: number;
 };
 
-export type AlertsHealthPoint = {
-  date: string;
-  sent: number;
-  failed: number;
-  skipped: number;
-};
-
 export type TrendsData = {
   kpis: TrendsKpis;
   cashTrend: CashTrendPoint[];
   dueByBranch: DueByBranchPoint[];
   dueRiskTimeline: DueRiskPoint[];
   expenseTypeMix: ExpenseTypeMixPoint[];
-  alertsHealthTrend: AlertsHealthPoint[];
 };
 
 async function fetchAllPages<T>(
@@ -255,44 +244,8 @@ function buildExpenseAnalytics(
   };
 }
 
-function buildAlertsHealthTrend(alertLogs: AlertLog[]): {
-  trend: AlertsHealthPoint[];
-  sentCount: number;
-  failedCount: number;
-} {
-  const byDate = new Map<string, AlertsHealthPoint>();
-  let sentCount = 0;
-  let failedCount = 0;
-
-  for (const log of alertLogs) {
-    const date = formatDateKey(toDateOnly(log.sentAt));
-    const current = byDate.get(date) ?? {
-      date,
-      sent: 0,
-      failed: 0,
-      skipped: 0,
-    };
-
-    if (log.status === "SENT") {
-      current.sent += 1;
-      sentCount += 1;
-    } else if (log.status === "FAILED") {
-      current.failed += 1;
-      failedCount += 1;
-    } else if (log.status === "SKIPPED") {
-      current.skipped += 1;
-    }
-
-    byDate.set(date, current);
-  }
-
-  const trend = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-
-  return { trend, sentCount, failedCount };
-}
-
 export async function fetchTrendsData(filters: TrendsFilters): Promise<TrendsData> {
-  const [branches, metrics, expenses, alertLogs] = await Promise.all([
+  const [branches, metrics, expenses] = await Promise.all([
     fetchAllPages((page, pageSize) => listBranches({ page, pageSize })),
     fetchAllPages((page, pageSize) =>
       listMetrics({
@@ -312,29 +265,12 @@ export async function fetchTrendsData(filters: TrendsFilters): Promise<TrendsDat
         dueTo: filters.dateTo,
       }),
     ),
-    fetchAllPages((page, pageSize) =>
-      listAlertLogs({
-        page,
-        pageSize,
-        branchId: filters.branchId,
-        dateFrom: filters.dateFrom,
-        dateTo: filters.dateTo,
-      }),
-    ),
   ]);
 
   const cashTrend = buildCashTrend(metrics);
   const latestCashPoint = cashTrend[cashTrend.length - 1];
 
   const expenseAnalytics = buildExpenseAnalytics(expenses, branches);
-  const alertsAnalytics = buildAlertsHealthTrend(alertLogs);
-
-  const alertFailureRate =
-    alertsAnalytics.sentCount + alertsAnalytics.failedCount > 0
-      ? (alertsAnalytics.failedCount /
-          (alertsAnalytics.sentCount + alertsAnalytics.failedCount)) *
-        100
-      : 0;
 
   return {
     kpis: {
@@ -343,12 +279,10 @@ export async function fetchTrendsData(filters: TrendsFilters): Promise<TrendsDat
       overdueAmount: expenseAnalytics.overdueAmount,
       overdueCount: expenseAnalytics.overdueCount,
       dueNext7Amount: expenseAnalytics.dueNext7Amount,
-      alertFailureRate,
     },
     cashTrend,
     dueByBranch: expenseAnalytics.dueByBranch,
     dueRiskTimeline: expenseAnalytics.dueRiskTimeline,
     expenseTypeMix: expenseAnalytics.expenseTypeMix,
-    alertsHealthTrend: alertsAnalytics.trend,
   };
 }

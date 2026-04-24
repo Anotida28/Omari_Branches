@@ -5,7 +5,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   Divider,
   MenuItem,
   Paper,
@@ -67,27 +66,6 @@ const INITIAL_EDIT_EXPENSE_FORM: UpdateExpenseInput = {
   vendor: "",
   notes: "",
 };
-
-type ReminderState = {
-  color: "default" | "warning" | "error";
-  label: string;
-};
-
-function getReminderState(dueDate: string): ReminderState {
-  const due = new Date(`${dueDate}T00:00:00.000Z`);
-  const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-
-  if (due.getTime() < today.getTime()) {
-    return { label: "OVERDUE", color: "error" };
-  }
-
-  if (due.getTime() === today.getTime()) {
-    return { label: "DUE TODAY", color: "warning" };
-  }
-
-  return { label: "UPCOMING", color: "default" };
-}
 
 export default function ExpensesPage() {
   const queryClient = useQueryClient();
@@ -371,20 +349,19 @@ export default function ExpensesPage() {
                 <TableCell>Period</TableCell>
                 <TableCell>Due Date</TableCell>
                 <TableCell align="right">Amount</TableCell>
-                <TableCell>Reminder State</TableCell>
                 <TableCell>Vendor</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {expensesQuery.isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
                     Loading reminders...
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} sx={{ py: 5 }}>
+                  <TableCell colSpan={6} sx={{ py: 5 }}>
                     <EmptyState
                       icon={<FileText size={18} />}
                       title="No reminder items found"
@@ -396,8 +373,6 @@ export default function ExpensesPage() {
                 </TableRow>
               ) : (
                 rows.map((expense) => {
-                  const reminderState = getReminderState(expense.dueDate);
-
                   return (
                     <TableRow
                       hover
@@ -413,9 +388,6 @@ export default function ExpensesPage() {
                       <TableCell>{formatDate(expense.dueDate)}</TableCell>
                       <TableCell align="right">
                         {formatCurrency(toMoneyNumber(expense.amount), expense.currency)}
-                      </TableCell>
-                      <TableCell>
-                        <Chip size="small" color={reminderState.color} label={reminderState.label} />
                       </TableCell>
                       <TableCell>{expense.vendor || "-"}</TableCell>
                     </TableRow>
@@ -584,7 +556,7 @@ export default function ExpensesPage() {
       >
         <Box component="form" onSubmit={submitEditExpense} className="space-y-4">
           <Typography variant="body2" color="text.secondary">
-            Update the reminder record without the old payment and document workflow.
+            Update the reminder record details, including due date, amount, vendor, and notes.
           </Typography>
 
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
@@ -782,19 +754,6 @@ export default function ExpensesPage() {
                     Due Date
                   </Typography>
                   <Typography variant="body2">{formatDate(detailQuery.data.dueDate)}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Reminder State
-                  </Typography>
-                  <Box sx={{ mt: 0.4 }}>
-                    {(() => {
-                      const reminderState = getReminderState(detailQuery.data.dueDate);
-                      return (
-                        <Chip size="small" color={reminderState.color} label={reminderState.label} />
-                      );
-                    })()}
-                  </Box>
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">

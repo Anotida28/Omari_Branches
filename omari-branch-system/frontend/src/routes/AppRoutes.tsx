@@ -1,19 +1,19 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import AlertsPage from "../features/alerts/AlertsPage";
-import BranchesPage from "../features/branches/BranchesPage";
-import DashboardPage from "../features/dashboard/DashboardPage";
-import ExpensesPage from "../features/expenses/ExpensesPage";
-import MetricsPage from "../features/metrics/MetricsPage";
-import ReportsPage from "../features/reports/ReportsPage";
-import SettingsPage from "../features/settings/SettingsPage";
 import { useAuth } from "../hooks/useAuth";
-import AppLayout from "../layout/AppShell";
+import AppLayout from "../layouts/AppLayout";
+import AlertsPage from "../pages/AlertsPage";
+import BranchesPage from "../pages/BranchesPage";
+import DashboardPage from "../pages/DashboardPage";
+import ExpensesPage from "../pages/ExpensesPage";
 import LoginPage from "../pages/LoginPage";
+import MetricsPage from "../pages/MetricsPage";
+import ReportsPage from "../pages/ReportsPage";
+import SettingsPage from "../pages/SettingsPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
-const TrendsPage = lazy(() => import("../features/trends/TrendsPage"));
+const TrendsPage = lazy(() => import("../pages/TrendsPage"));
 
 export function AppRoutes() {
   const { isReady, isAuthenticated } = useAuth();

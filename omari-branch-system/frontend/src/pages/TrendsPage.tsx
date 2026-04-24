@@ -19,7 +19,6 @@ import {
   YAxis,
 } from "recharts";
 import {
-  Alert,
   Box,
   Button,
   MenuItem,
@@ -270,21 +269,6 @@ export default function TrendsPage() {
               hint="All reminder amounts"
             />
             <StatCard
-              label="Overdue Amount"
-              value={formatCurrency(trendsQuery.data.kpis.overdueAmount)}
-              hint={`${trendsQuery.data.kpis.overdueCount} overdue expenses`}
-            />
-            <StatCard
-              label="Due in 7 Days"
-              value={formatCurrency(trendsQuery.data.kpis.dueNext7Amount)}
-              hint="Next 7-day exposure"
-            />
-            <StatCard
-              label="Alert Failure Rate"
-              value={`${trendsQuery.data.kpis.alertFailureRate.toFixed(1)}%`}
-              hint="FAILED / (FAILED + SENT)"
-            />
-            <StatCard
               label="Window"
               value={`${formatDateLabel(dateFrom)} - ${formatDateLabel(dateTo)}`}
               hint={branchName}
@@ -396,7 +380,7 @@ export default function TrendsPage() {
               )}
             </ChartCard>
 
-            <ChartCard title="Due by Branch" subtitle="Largest reminder totals by branch">
+            <ChartCard title="Scheduled Amount by Branch" subtitle="Largest reminder totals by branch">
               {trendsQuery.data.dueByBranch.length === 0 ? (
                 <ChartEmpty message="No reminder amounts." />
               ) : (
@@ -412,26 +396,6 @@ export default function TrendsPage() {
                       <YAxis type="category" dataKey="branchName" width={140} />
                       <Tooltip formatter={formatTooltipMoney} />
                       <Bar dataKey="scheduledAmount" fill={chartPalette.primary} name="Scheduled Amount" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Box>
-              )}
-            </ChartCard>
-
-            <ChartCard title="Due Risk Timeline" subtitle="Upcoming vs overdue by week">
-              {trendsQuery.data.dueRiskTimeline.length === 0 ? (
-                <ChartEmpty message="No due-date risk data." />
-              ) : (
-                <Box sx={{ height: 260 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={trendsQuery.data.dueRiskTimeline}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
-                      <XAxis dataKey="week" />
-                      <YAxis tickFormatter={formatCompactCurrency} />
-                      <Tooltip formatter={formatTooltipMoney} />
-                      <Legend />
-                      <Bar dataKey="upcomingAmount" stackId="risk" fill={chartPalette.secondary} name="Upcoming" />
-                      <Bar dataKey="overdueAmount" stackId="risk" fill={chartPalette.danger} name="Overdue" />
                     </BarChart>
                   </ResponsiveContainer>
                 </Box>
@@ -461,52 +425,6 @@ export default function TrendsPage() {
                       <Tooltip formatter={formatTooltipMoney} />
                       <Legend />
                     </PieChart>
-                  </ResponsiveContainer>
-                </Box>
-              )}
-            </ChartCard>
-
-            <ChartCard
-              title="Alerts Health Trend"
-              subtitle="SENT / FAILED / SKIPPED by day"
-              minHeight={320}
-            >
-              {trendsQuery.data.alertsHealthTrend.length === 0 ? (
-                <ChartEmpty message="No alert activity for selected filters." />
-              ) : (
-                <Box sx={{ height: 280 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendsQuery.data.alertsHealthTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
-                      <XAxis dataKey="date" tickFormatter={formatDateLabel} />
-                      <YAxis />
-                      <Tooltip labelFormatter={formatTooltipLabel} />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="sent"
-                        stroke={chartPalette.secondary}
-                        strokeWidth={2}
-                        dot={false}
-                        name="Sent"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="failed"
-                        stroke={chartPalette.danger}
-                        strokeWidth={2}
-                        dot={false}
-                        name="Failed"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="skipped"
-                        stroke={chartPalette.warning}
-                        strokeWidth={2}
-                        dot={false}
-                        name="Skipped"
-                      />
-                    </LineChart>
                   </ResponsiveContainer>
                 </Box>
               )}

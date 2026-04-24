@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertTriangle,
   Building2,
   DollarSign,
   FileText,
@@ -99,11 +98,6 @@ export default function DashboardPage() {
               label="Total Reminders"
               value={String(overviewQuery.data.totalExpenses)}
               icon={<FileText size={20} />}
-            />
-            <StatCard
-              label="Overdue Reminders"
-              value={String(overviewQuery.data.overdueExpenses)}
-              icon={<AlertTriangle size={20} />}
             />
             <StatCard
               label="Reminder Amount"

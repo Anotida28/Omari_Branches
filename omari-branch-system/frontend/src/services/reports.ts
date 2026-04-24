@@ -2,7 +2,6 @@ import { listBranches } from "./branches";
 import { listExpenses } from "./expenses";
 import { toMoneyNumber } from "./format";
 import { listMetrics } from "./metrics";
-import { getReminderState, isReminderDueWithinDays, isReminderOverdue, type ReminderState } from "./reminders";
 import type {
   Branch,
   BranchMetric,
@@ -24,16 +23,12 @@ export type ReportBranchSummary = {
   branchName: string;
   expenseCount: number;
   totalAmount: number;
-  overdueCount: number;
-  overdueAmount: number;
-  dueNext7Count: number;
 };
 
 export type ReportExpenseTypeSummary = {
   expenseType: ExpenseType;
   expenseCount: number;
   totalAmount: number;
-  overdueAmount: number;
 };
 
 export type ReportExpenseLine = {
@@ -44,7 +39,6 @@ export type ReportExpenseLine = {
   period: string;
   dueDate: string;
   amount: number;
-  reminderState: ReminderState;
   vendor: string | null;
   currency: string;
 };
@@ -52,9 +46,6 @@ export type ReportExpenseLine = {
 export type ReportTotals = {
   expenseCount: number;
   totalAmount: number;
-  overdueCount: number;
-  overdueAmount: number;
-  dueNext7Amount: number;
   metricsCount: number;
   totalCashInValue: number;
   totalCashOutValue: number;
@@ -77,16 +68,12 @@ type BranchSummaryAccumulator = {
   branchName: string;
   expenseCount: number;
   totalAmount: number;
-  overdueCount: number;
-  overdueAmount: number;
-  dueNext7Count: number;
 };
 
 type TypeSummaryAccumulator = {
   expenseType: ExpenseType;
   expenseCount: number;
   totalAmount: number;
-  overdueAmount: number;
 };
 
 async function fetchAllPages<T>(
@@ -133,7 +120,6 @@ function toExpenseLine(expense: Expense, branchNameById: Map<string, string>): R
     period: expense.period,
     dueDate: expense.dueDate,
     amount: toMoneyNumber(expense.amount),
-    reminderState: getReminderState(expense.dueDate),
     vendor: expense.vendor,
     currency: expense.currency,
   };
@@ -198,57 +184,28 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
   const typeSummaryMap = new Map<ExpenseType, TypeSummaryAccumulator>();
 
   let totalAmount = 0;
-  let overdueCount = 0;
-  let overdueAmount = 0;
-  let dueNext7Amount = 0;
 
   for (const expense of expensesInRange) {
     totalAmount += expense.amount;
-
-    const isOverdue = isReminderOverdue(expense.dueDate);
-    const isDueNext7 = isReminderDueWithinDays(expense.dueDate, 7);
-
-    if (isOverdue) {
-      overdueCount += 1;
-      overdueAmount += expense.amount;
-    }
-
-    if (isDueNext7) {
-      dueNext7Amount += expense.amount;
-    }
 
     const branchSummary = branchSummaryMap.get(expense.branchId) ?? {
       branchId: expense.branchId,
       branchName: expense.branchName,
       expenseCount: 0,
       totalAmount: 0,
-      overdueCount: 0,
-      overdueAmount: 0,
-      dueNext7Count: 0,
     };
 
     branchSummary.expenseCount += 1;
     branchSummary.totalAmount += expense.amount;
-    if (isOverdue) {
-      branchSummary.overdueCount += 1;
-      branchSummary.overdueAmount += expense.amount;
-    }
-    if (isDueNext7) {
-      branchSummary.dueNext7Count += 1;
-    }
     branchSummaryMap.set(expense.branchId, branchSummary);
 
     const typeSummary = typeSummaryMap.get(expense.expenseType) ?? {
       expenseType: expense.expenseType,
       expenseCount: 0,
       totalAmount: 0,
-      overdueAmount: 0,
     };
     typeSummary.expenseCount += 1;
     typeSummary.totalAmount += expense.amount;
-    if (isOverdue) {
-      typeSummary.overdueAmount += expense.amount;
-    }
     typeSummaryMap.set(expense.expenseType, typeSummary);
   }
 
@@ -282,9 +239,6 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
     totals: {
       expenseCount: expensesInRange.length,
       totalAmount,
-      overdueCount,
-      overdueAmount,
-      dueNext7Amount,
       metricsCount: metrics.length,
       totalCashInValue,
       totalCashOutValue,
@@ -308,9 +262,6 @@ export function buildReportSummaryCsv(data: ReportsData): string {
     ["KPI", "Value"],
     ["Reminder Count", String(data.totals.expenseCount)],
     ["Scheduled Amount", data.totals.totalAmount.toFixed(2)],
-    ["Overdue Reminder Count", String(data.totals.overdueCount)],
-    ["Overdue Reminder Amount", data.totals.overdueAmount.toFixed(2)],
-    ["Due in 7 Days", data.totals.dueNext7Amount.toFixed(2)],
     ["Metric Rows", String(data.totals.metricsCount)],
     ["Total Cash In Value", data.totals.totalCashInValue.toFixed(2)],
     ["Total Cash Out Value", data.totals.totalCashOutValue.toFixed(2)],
@@ -321,25 +272,18 @@ export function buildReportSummaryCsv(data: ReportsData): string {
       "Branch",
       "Reminder Count",
       "Scheduled Amount",
-      "Overdue Count",
-      "Overdue Amount",
-      "Due Next 7 Days",
     ],
     ...data.branchSummary.map((row) => [
       row.branchName,
       String(row.expenseCount),
       row.totalAmount.toFixed(2),
-      String(row.overdueCount),
-      row.overdueAmount.toFixed(2),
-      String(row.dueNext7Count),
     ]),
     [],
-    ["Expense Type", "Reminder Count", "Scheduled Amount", "Overdue Amount"],
+    ["Expense Type", "Reminder Count", "Scheduled Amount"],
     ...data.expenseTypeSummary.map((row) => [
       row.expenseType,
       String(row.expenseCount),
       row.totalAmount.toFixed(2),
-      row.overdueAmount.toFixed(2),
     ]),
   ];
 
@@ -354,7 +298,6 @@ export function buildReportExpensesCsv(data: ReportsData): string {
       "Expense Type",
       "Period",
       "Due Date",
-      "Reminder State",
       "Vendor",
       "Currency",
       "Amount",
@@ -365,7 +308,6 @@ export function buildReportExpensesCsv(data: ReportsData): string {
       expense.expenseType,
       expense.period,
       expense.dueDate,
-      expense.reminderState,
       expense.vendor || "",
       expense.currency,
       expense.amount.toFixed(2),

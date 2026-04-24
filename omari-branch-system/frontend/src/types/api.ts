@@ -102,18 +102,6 @@ export type MetricsListParams = {
   pageSize?: number;
 };
 
-export type UpsertMetricInput = {
-  agentLineId: string;
-  date: string;
-  cashBalance: number;
-  eFloatBalance: number;
-  cashInVault: number;
-  cashInVolume: number;
-  cashInValue: number;
-  cashOutVolume: number;
-  cashOutValue: number;
-};
-
 export type Expense = {
   id: string;
   branchId: string;

@@ -1,10 +1,8 @@
 import { api } from "./api";
 import type {
-  ApiDataResponse,
   BranchMetric,
   MetricsListParams,
   PaginatedResponse,
-  UpsertMetricInput,
 } from "../types/api";
 
 export async function listMetrics(
@@ -14,16 +12,4 @@ export async function listMetrics(
     params,
   });
   return data;
-}
-
-export async function upsertMetric(input: UpsertMetricInput): Promise<BranchMetric> {
-  const { data } = await api.post<ApiDataResponse<BranchMetric>>(
-    "/api/metrics/upsert",
-    input,
-  );
-  return data.data;
-}
-
-export async function deleteMetric(metricId: string): Promise<void> {
-  await api.delete(`/api/metrics/${metricId}`);
 }

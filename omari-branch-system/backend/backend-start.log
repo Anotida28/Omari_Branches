@@ -1,0 +1,6 @@
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
