@@ -70,6 +70,11 @@ const upsertMetricSchema = zod_1.z
     cashInValue: zod_1.z.coerce.number().min(0),
     cashOutVolume: zod_1.z.coerce.number().int().min(0),
     cashOutValue: zod_1.z.coerce.number().min(0),
+    totalTransactionVolume: zod_1.z.coerce.number().int().min(0),
+    totalTransactionValue: zod_1.z.coerce.number().min(0),
+    commissionOnDeposits: zod_1.z.coerce.number().min(0),
+    commissionOnWithdrawals: zod_1.z.coerce.number().min(0),
+    totalCommission: zod_1.z.coerce.number().min(0),
 })
     .strict();
 const listQuerySchema = zod_1.z.object({

@@ -91,6 +91,11 @@ const upsertMetricSchema = z
     cashInValue: z.coerce.number().min(0),
     cashOutVolume: z.coerce.number().int().min(0),
     cashOutValue: z.coerce.number().min(0),
+    totalTransactionVolume: z.coerce.number().int().min(0),
+    totalTransactionValue: z.coerce.number().min(0),
+    commissionOnDeposits: z.coerce.number().min(0),
+    commissionOnWithdrawals: z.coerce.number().min(0),
+    totalCommission: z.coerce.number().min(0),
   })
   .strict();
 

@@ -155,25 +155,30 @@ export default function MetricsPage() {
           <TableRow>
             <TableCell>Branch</TableCell>
             <TableCell>Date</TableCell>
-            <TableCell align="right">Cash Balance</TableCell>
             <TableCell align="right">E-Float</TableCell>
-            <TableCell align="right">Cash in Vault</TableCell>
-            <TableCell align="right">Cash on Branch</TableCell>
-            <TableCell align="right">Cash In / Out</TableCell>
-            <TableCell align="right">Net Cash</TableCell>
+            <TableCell align="right">Cash In Count</TableCell>
+            <TableCell align="right">Cash In Value</TableCell>
+            <TableCell align="right">Cash Out Count</TableCell>
+            <TableCell align="right">Cash Out Value</TableCell>
+            <TableCell align="right">Txn Count</TableCell>
+            <TableCell align="right">Txn Value</TableCell>
+            <TableCell align="right">Deposit Comm.</TableCell>
+            <TableCell align="right">Withdrawal Comm.</TableCell>
+            <TableCell align="right">Total Comm.</TableCell>
+            <TableCell align="right">Net Movement</TableCell>
             <TableCell align="right">Source Lines</TableCell>
           </TableRow>
         }
         body={
           metricsQuery.isLoading ? (
             <TableRow>
-              <TableCell colSpan={9} align="center" sx={{ py: 4, color: "text.secondary" }}>
+              <TableCell colSpan={14} align="center" sx={{ py: 4, color: "text.secondary" }}>
                 Loading metrics...
               </TableCell>
             </TableRow>
           ) : (metricsQuery.data?.items.length ?? 0) === 0 ? (
             <TableRow>
-              <TableCell colSpan={9} sx={{ py: 5 }}>
+              <TableCell colSpan={14} sx={{ py: 5 }}>
                 <EmptyState
                   title="No metrics found"
                   description="Metrics will appear here once source sync has imported branch data."
@@ -187,12 +192,23 @@ export default function MetricsPage() {
                   {branchMap.get(metric.branchId) ?? metric.branchId}
                 </TableCell>
                 <TableCell>{metric.date}</TableCell>
-                <TableCell align="right">{formatCurrency(toMoneyNumber(metric.cashBalance))}</TableCell>
                 <TableCell align="right">{formatCurrency(toMoneyNumber(metric.eFloatBalance))}</TableCell>
-                <TableCell align="right">{formatCurrency(toMoneyNumber(metric.cashInVault))}</TableCell>
-                <TableCell align="right">{formatCurrency(toMoneyNumber(metric.cashOnBranch))}</TableCell>
+                <TableCell align="right">{metric.cashInVolume}</TableCell>
+                <TableCell align="right">{formatCurrency(toMoneyNumber(metric.cashInValue))}</TableCell>
+                <TableCell align="right">{metric.cashOutVolume}</TableCell>
+                <TableCell align="right">{formatCurrency(toMoneyNumber(metric.cashOutValue))}</TableCell>
+                <TableCell align="right">{metric.totalTransactionVolume}</TableCell>
                 <TableCell align="right">
-                  {metric.cashInVolume}/{metric.cashOutVolume}
+                  {formatCurrency(toMoneyNumber(metric.totalTransactionValue))}
+                </TableCell>
+                <TableCell align="right">
+                  {formatCurrency(toMoneyNumber(metric.commissionOnDeposits))}
+                </TableCell>
+                <TableCell align="right">
+                  {formatCurrency(toMoneyNumber(metric.commissionOnWithdrawals))}
+                </TableCell>
+                <TableCell align="right">
+                  {formatCurrency(toMoneyNumber(metric.totalCommission))}
                 </TableCell>
                 <TableCell align="right">{formatCurrency(toMoneyNumber(metric.netCashValue))}</TableCell>
                 <TableCell align="right">{metric.sourceLineCount}</TableCell>

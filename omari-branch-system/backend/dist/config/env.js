@@ -71,6 +71,14 @@ const envSchema = zod_1.z.object({
         .string()
         .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_AGENT_SUMMARY_TABLE must be schema.table")
         .default("reporting.omari_agent_summary_since_launch_daily"),
+    SOURCE_SQL_AGENT_BALANCE_TABLE: zod_1.z
+        .string()
+        .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_AGENT_BALANCE_TABLE must be schema.table")
+        .default("reporting.omari_account_balances_usd"),
+    SOURCE_SQL_AGENT_BALANCE_CURRENT_TABLE: zod_1.z
+        .string()
+        .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_AGENT_BALANCE_CURRENT_TABLE must be schema.table")
+        .default("reporting.omari_account_balances_usd_current"),
     SOURCE_SQL_AGENT_LINE_MATCH_COLUMN: zod_1.z
         .enum(["agent_account", "customer_id"])
         .default("agent_account"),

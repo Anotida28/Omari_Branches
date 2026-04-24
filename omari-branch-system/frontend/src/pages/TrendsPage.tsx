@@ -1,18 +1,13 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   ComposedChart,
   Legend,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -37,14 +32,6 @@ import { fetchTrendsData } from "../services/trends";
 import { ErrorState } from "../shared/components/ErrorState";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
-
-const PIE_COLORS = [
-  chartPalette.primary,
-  chartPalette.secondary,
-  chartPalette.tertiary,
-  chartPalette.warning,
-  chartPalette.danger,
-];
 
 function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -254,19 +241,24 @@ export default function TrendsPage() {
               gridTemplateColumns: {
                 xs: "1fr",
                 md: "repeat(2, minmax(0, 1fr))",
-                xl: "repeat(3, minmax(0, 1fr))",
+                xl: "repeat(4, minmax(0, 1fr))",
               },
             }}
           >
             <StatCard
-              label="Total Cash on Branch"
-              value={formatCurrency(trendsQuery.data.kpis.totalCashOnBranch)}
+              label="Latest Total E-Float"
+              value={formatCurrency(trendsQuery.data.kpis.latestTotalEFloat)}
               hint={branchName}
             />
             <StatCard
-              label="Scheduled Amount"
-              value={formatCurrency(trendsQuery.data.kpis.totalScheduledAmount)}
-              hint="All reminder amounts"
+              label="Transaction Value"
+              value={formatCurrency(trendsQuery.data.kpis.totalTransactionValue)}
+              hint={`${trendsQuery.data.kpis.totalTransactionVolume} transactions`}
+            />
+            <StatCard
+              label="Total Commission"
+              value={formatCurrency(trendsQuery.data.kpis.totalCommission)}
+              hint={branchName}
             />
             <StatCard
               label="Window"
@@ -285,7 +277,7 @@ export default function TrendsPage() {
               },
             }}
           >
-            <ChartCard title="Cash on Branch Trend" subtitle="Daily total cash position">
+            <ChartCard title="E-Float Trend" subtitle="Daily closing line balances rolled up by branch">
               {trendsQuery.data.cashTrend.length === 0 ? (
                 <ChartEmpty message="No metrics for selected filters." />
               ) : (
@@ -298,11 +290,11 @@ export default function TrendsPage() {
                       <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
                       <Line
                         type="monotone"
-                        dataKey="cashOnBranch"
+                        dataKey="eFloatBalance"
                         stroke={chartPalette.primary}
                         strokeWidth={2}
                         dot={false}
-                        name="Cash on Branch"
+                        name="E-Float"
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -310,49 +302,7 @@ export default function TrendsPage() {
               )}
             </ChartCard>
 
-            <ChartCard title="Cash Composition" subtitle="Cash balance vs e-float vs vault">
-              {trendsQuery.data.cashTrend.length === 0 ? (
-                <ChartEmpty message="No metrics for selected filters." />
-              ) : (
-                <Box sx={{ height: 260 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={trendsQuery.data.cashTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
-                      <XAxis dataKey="date" tickFormatter={formatDateLabel} />
-                      <YAxis tickFormatter={formatCompactCurrency} />
-                      <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
-                      <Legend />
-                      <Area
-                        type="monotone"
-                        dataKey="cashBalance"
-                        stackId="cash"
-                        stroke={chartPalette.primary}
-                        fill="#9bd4b8"
-                        name="Cash Balance"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="eFloatBalance"
-                        stackId="cash"
-                        stroke={chartPalette.secondary}
-                        fill="#b5e0c9"
-                        name="E-Float"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="cashInVault"
-                        stackId="cash"
-                        stroke={chartPalette.tertiary}
-                        fill="#d0eadc"
-                        name="Cash in Vault"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </Box>
-              )}
-            </ChartCard>
-
-            <ChartCard title="Cash In / Out + Net" subtitle="Operational movement per day">
+            <ChartCard title="Cash In / Out Value" subtitle="Daily deposit and withdrawal values with exact total transaction value">
               {trendsQuery.data.cashTrend.length === 0 ? (
                 <ChartEmpty message="No metrics for selected filters." />
               ) : (
@@ -368,11 +318,11 @@ export default function TrendsPage() {
                       <Bar dataKey="cashOutValue" fill={chartPalette.warning} name="Cash Out" />
                       <Line
                         type="monotone"
-                        dataKey="netCashValue"
+                        dataKey="totalTransactionValue"
                         stroke={chartPalette.primary}
                         strokeWidth={2}
                         dot={false}
-                        name="Net Cash"
+                        name="Total Transaction Value"
                       />
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -380,51 +330,78 @@ export default function TrendsPage() {
               )}
             </ChartCard>
 
-            <ChartCard title="Scheduled Amount by Branch" subtitle="Largest reminder totals by branch">
-              {trendsQuery.data.dueByBranch.length === 0 ? (
-                <ChartEmpty message="No reminder amounts." />
+            <ChartCard title="Commission Trend" subtitle="Daily total commission from the source summary">
+              {trendsQuery.data.cashTrend.length === 0 ? (
+                <ChartEmpty message="No metrics for selected filters." />
+              ) : (
+                <Box sx={{ height: 260 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendsQuery.data.cashTrend}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                      <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                      <YAxis tickFormatter={formatCompactCurrency} />
+                      <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                      <Line
+                        type="monotone"
+                        dataKey="totalCommission"
+                        stroke={chartPalette.tertiary}
+                        strokeWidth={2}
+                        dot={false}
+                        name="Total Commission"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </ChartCard>
+
+            <ChartCard title="Branch Transaction Leaders" subtitle="Top branches in the selected window by transaction value">
+              {trendsQuery.data.branchPerformance.length === 0 ? (
+                <ChartEmpty message="No branch performance data." />
               ) : (
                 <Box sx={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={trendsQuery.data.dueByBranch}
+                      data={trendsQuery.data.branchPerformance}
                       layout="vertical"
                       margin={{ left: 10, right: 20 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
                       <XAxis type="number" tickFormatter={formatCompactCurrency} />
-                      <YAxis type="category" dataKey="branchName" width={140} />
+                      <YAxis type="category" dataKey="branchName" width={150} />
                       <Tooltip formatter={formatTooltipMoney} />
-                      <Bar dataKey="scheduledAmount" fill={chartPalette.primary} name="Scheduled Amount" />
+                      <Bar
+                        dataKey="totalTransactionValue"
+                        fill={chartPalette.primary}
+                        name="Transaction Value"
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </Box>
               )}
             </ChartCard>
 
-            <ChartCard title="Expense Type Mix" subtitle="Scheduled reminder amount by type">
-              {trendsQuery.data.expenseTypeMix.length === 0 ? (
-                <ChartEmpty message="No expense mix data." />
+            <ChartCard title="Branch Commission Leaders" subtitle="Top branches in the selected window by commission earned">
+              {trendsQuery.data.branchPerformance.length === 0 ? (
+                <ChartEmpty message="No branch performance data." />
               ) : (
                 <Box sx={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={trendsQuery.data.expenseTypeMix}
-                        dataKey="scheduledAmount"
-                        nameKey="expenseType"
-                        innerRadius={55}
-                        outerRadius={95}
-                        paddingAngle={2}
-                        label
-                      >
-                        {trendsQuery.data.expenseTypeMix.map((entry, index) => (
-                          <Cell key={entry.expenseType} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
+                    <BarChart
+                      data={trendsQuery.data.branchPerformance}
+                      layout="vertical"
+                      margin={{ left: 10, right: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                      <XAxis type="number" tickFormatter={formatCompactCurrency} />
+                      <YAxis type="category" dataKey="branchName" width={150} />
                       <Tooltip formatter={formatTooltipMoney} />
-                      <Legend />
-                    </PieChart>
+                      <Bar
+                        dataKey="totalCommission"
+                        fill={chartPalette.tertiary}
+                        name="Commission"
+                      />
+                    </BarChart>
                   </ResponsiveContainer>
                 </Box>
               )}

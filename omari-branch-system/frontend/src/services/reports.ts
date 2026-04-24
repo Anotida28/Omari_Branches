@@ -25,6 +25,17 @@ export type ReportBranchSummary = {
   totalAmount: number;
 };
 
+export type ReportPerformanceSummary = {
+  branchId: string;
+  branchName: string;
+  metricsCount: number;
+  totalCashInValue: number;
+  totalCashOutValue: number;
+  totalTransactionValue: number;
+  totalCommission: number;
+  latestEFloatBalance: number;
+};
+
 export type ReportExpenseTypeSummary = {
   expenseType: ExpenseType;
   expenseCount: number;
@@ -49,8 +60,9 @@ export type ReportTotals = {
   metricsCount: number;
   totalCashInValue: number;
   totalCashOutValue: number;
-  totalNetCashValue: number;
-  latestCashOnBranch: number;
+  totalTransactionValue: number;
+  totalCommission: number;
+  latestEFloatBalance: number;
 };
 
 export type ReportsData = {
@@ -59,6 +71,7 @@ export type ReportsData = {
   availableBranches: Array<{ id: string; displayName: string }>;
   totals: ReportTotals;
   branchSummary: ReportBranchSummary[];
+  performanceSummary: ReportPerformanceSummary[];
   expenseTypeSummary: ReportExpenseTypeSummary[];
   expenses: ReportExpenseLine[];
 };
@@ -68,6 +81,18 @@ type BranchSummaryAccumulator = {
   branchName: string;
   expenseCount: number;
   totalAmount: number;
+};
+
+type PerformanceSummaryAccumulator = {
+  branchId: string;
+  branchName: string;
+  metricsCount: number;
+  totalCashInValue: number;
+  totalCashOutValue: number;
+  totalTransactionValue: number;
+  totalCommission: number;
+  latestEFloatBalance: number;
+  latestMetricDate: string | null;
 };
 
 type TypeSummaryAccumulator = {
@@ -125,7 +150,7 @@ function toExpenseLine(expense: Expense, branchNameById: Map<string, string>): R
   };
 }
 
-function computeLatestCashOnBranch(metrics: BranchMetric[]): number {
+function computeLatestEFloatBalance(metrics: BranchMetric[]): number {
   if (metrics.length === 0) {
     return 0;
   }
@@ -137,7 +162,7 @@ function computeLatestCashOnBranch(metrics: BranchMetric[]): number {
 
   return metrics
     .filter((metric) => metric.date === latestDate)
-    .reduce((sum, metric) => sum + toMoneyNumber(metric.cashOnBranch), 0);
+    .reduce((sum, metric) => sum + toMoneyNumber(metric.eFloatBalance), 0);
 }
 
 function toCsv(rows: string[][]): string {
@@ -181,6 +206,7 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
     .sort((a, b) => b.dueDate.localeCompare(a.dueDate));
 
   const branchSummaryMap = new Map<string, BranchSummaryAccumulator>();
+  const performanceSummaryMap = new Map<string, PerformanceSummaryAccumulator>();
   const typeSummaryMap = new Map<ExpenseType, TypeSummaryAccumulator>();
 
   let totalAmount = 0;
@@ -209,9 +235,41 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
     typeSummaryMap.set(expense.expenseType, typeSummary);
   }
 
+  for (const metric of metrics) {
+    const branchName = branchNameById.get(metric.branchId) ?? metric.branchId;
+    const performanceSummary = performanceSummaryMap.get(metric.branchId) ?? {
+      branchId: metric.branchId,
+      branchName,
+      metricsCount: 0,
+      totalCashInValue: 0,
+      totalCashOutValue: 0,
+      totalTransactionValue: 0,
+      totalCommission: 0,
+      latestEFloatBalance: 0,
+      latestMetricDate: null,
+    };
+
+    performanceSummary.metricsCount += 1;
+    performanceSummary.totalCashInValue += toMoneyNumber(metric.cashInValue);
+    performanceSummary.totalCashOutValue += toMoneyNumber(metric.cashOutValue);
+    performanceSummary.totalTransactionValue += toMoneyNumber(metric.totalTransactionValue);
+    performanceSummary.totalCommission += toMoneyNumber(metric.totalCommission);
+
+    if (!performanceSummary.latestMetricDate || metric.date > performanceSummary.latestMetricDate) {
+      performanceSummary.latestMetricDate = metric.date;
+      performanceSummary.latestEFloatBalance = toMoneyNumber(metric.eFloatBalance);
+    }
+
+    performanceSummaryMap.set(metric.branchId, performanceSummary);
+  }
+
   const branchSummary = [...branchSummaryMap.values()].sort(
     (a, b) => b.totalAmount - a.totalAmount,
   );
+
+  const performanceSummary = [...performanceSummaryMap.values()]
+    .map(({ latestMetricDate: _latestMetricDate, ...row }) => row)
+    .sort((a, b) => b.totalTransactionValue - a.totalTransactionValue);
 
   const expenseTypeSummary = [...typeSummaryMap.values()].sort(
     (a, b) => b.totalAmount - a.totalAmount,
@@ -225,8 +283,12 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
     (sum, metric) => sum + toMoneyNumber(metric.cashOutValue),
     0,
   );
-  const totalNetCashValue = metrics.reduce(
-    (sum, metric) => sum + toMoneyNumber(metric.netCashValue),
+  const totalTransactionValue = metrics.reduce(
+    (sum, metric) => sum + toMoneyNumber(metric.totalTransactionValue),
+    0,
+  );
+  const totalCommission = metrics.reduce(
+    (sum, metric) => sum + toMoneyNumber(metric.totalCommission),
     0,
   );
 
@@ -242,10 +304,12 @@ export async function fetchReportsData(filters: ReportsFilters): Promise<Reports
       metricsCount: metrics.length,
       totalCashInValue,
       totalCashOutValue,
-      totalNetCashValue,
-      latestCashOnBranch: computeLatestCashOnBranch(metrics),
+      totalTransactionValue,
+      totalCommission,
+      latestEFloatBalance: computeLatestEFloatBalance(metrics),
     },
     branchSummary,
+    performanceSummary,
     expenseTypeSummary,
     expenses: expensesInRange,
   };
@@ -265,18 +329,34 @@ export function buildReportSummaryCsv(data: ReportsData): string {
     ["Metric Rows", String(data.totals.metricsCount)],
     ["Total Cash In Value", data.totals.totalCashInValue.toFixed(2)],
     ["Total Cash Out Value", data.totals.totalCashOutValue.toFixed(2)],
-    ["Total Net Cash Value", data.totals.totalNetCashValue.toFixed(2)],
-    ["Latest Cash On Branch", data.totals.latestCashOnBranch.toFixed(2)],
+    ["Total Transaction Value", data.totals.totalTransactionValue.toFixed(2)],
+    ["Total Commission", data.totals.totalCommission.toFixed(2)],
+    ["Latest E-Float Balance", data.totals.latestEFloatBalance.toFixed(2)],
     [],
-    [
-      "Branch",
-      "Reminder Count",
-      "Scheduled Amount",
-    ],
+    ["Branch", "Reminder Count", "Scheduled Amount"],
     ...data.branchSummary.map((row) => [
       row.branchName,
       String(row.expenseCount),
       row.totalAmount.toFixed(2),
+    ]),
+    [],
+    [
+      "Branch",
+      "Metric Rows",
+      "Cash In Value",
+      "Cash Out Value",
+      "Transaction Value",
+      "Total Commission",
+      "Latest E-Float",
+    ],
+    ...data.performanceSummary.map((row) => [
+      row.branchName,
+      String(row.metricsCount),
+      row.totalCashInValue.toFixed(2),
+      row.totalCashOutValue.toFixed(2),
+      row.totalTransactionValue.toFixed(2),
+      row.totalCommission.toFixed(2),
+      row.latestEFloatBalance.toFixed(2),
     ]),
     [],
     ["Expense Type", "Reminder Count", "Scheduled Amount"],

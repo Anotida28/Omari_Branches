@@ -81,6 +81,11 @@ async function main() {
         cashInValue: 0,
         cashOutVolume: 0,
         cashOutValue: 0,
+        totalTransactionVolume: 0,
+        totalTransactionValue: 0,
+        commissionOnDeposits: 0,
+        commissionOnWithdrawals: 0,
+        totalCommission: 0,
       },
     });
 

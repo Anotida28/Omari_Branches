@@ -1,19 +1,13 @@
 import { listBranches } from "./branches";
-import { listExpenses } from "./expenses";
-import { listMetrics } from "./metrics";
-import { isReminderDueWithinDays, isReminderOverdue } from "./reminders";
 import { toMoneyNumber } from "./format";
+import { listMetrics } from "./metrics";
 import type {
   Branch,
   BranchMetric,
-  Expense,
-  ExpenseType,
   PaginatedResponse,
 } from "../types/api";
 
 const PAGE_SIZE = 100;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const MS_PER_WEEK = 7 * MS_PER_DAY;
 
 export type TrendsFilters = {
   branchId?: string;
@@ -22,47 +16,37 @@ export type TrendsFilters = {
 };
 
 export type TrendsKpis = {
-  totalCashOnBranch: number;
-  totalScheduledAmount: number;
-  overdueAmount: number;
-  overdueCount: number;
-  dueNext7Amount: number;
+  latestTotalEFloat: number;
+  totalTransactionValue: number;
+  totalTransactionVolume: number;
+  totalCommission: number;
 };
 
 export type CashTrendPoint = {
   date: string;
-  cashOnBranch: number;
-  cashBalance: number;
   eFloatBalance: number;
-  cashInVault: number;
+  cashInVolume: number;
+  cashOutVolume: number;
+  totalTransactionVolume: number;
   cashInValue: number;
   cashOutValue: number;
+  totalTransactionValue: number;
+  totalCommission: number;
   netCashValue: number;
 };
 
-export type DueByBranchPoint = {
+export type BranchPerformancePoint = {
   branchId: string;
   branchName: string;
-  scheduledAmount: number;
-};
-
-export type DueRiskPoint = {
-  week: string;
-  upcomingAmount: number;
-  overdueAmount: number;
-};
-
-export type ExpenseTypeMixPoint = {
-  expenseType: ExpenseType;
-  scheduledAmount: number;
+  latestEFloatBalance: number;
+  totalTransactionValue: number;
+  totalCommission: number;
 };
 
 export type TrendsData = {
   kpis: TrendsKpis;
   cashTrend: CashTrendPoint[];
-  dueByBranch: DueByBranchPoint[];
-  dueRiskTimeline: DueRiskPoint[];
-  expenseTypeMix: ExpenseTypeMixPoint[];
+  branchPerformance: BranchPerformancePoint[];
 };
 
 async function fetchAllPages<T>(
@@ -82,36 +66,6 @@ async function fetchAllPages<T>(
   return items;
 }
 
-function toDateOnly(value: string | Date): Date {
-  const source = typeof value === "string" ? new Date(value) : value;
-  return new Date(
-    Date.UTC(
-      source.getUTCFullYear(),
-      source.getUTCMonth(),
-      source.getUTCDate(),
-    ),
-  );
-}
-
-function formatDateKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function startOfWeekUtc(date: Date): Date {
-  const normalized = toDateOnly(date);
-  const dayIndex = (normalized.getUTCDay() + 6) % 7;
-  normalized.setUTCDate(normalized.getUTCDate() - dayIndex);
-  return normalized;
-}
-
-function formatShortDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    timeZone: "UTC",
-  }).format(date);
-}
-
 function buildCashTrend(metrics: BranchMetric[]): CashTrendPoint[] {
   const byDate = new Map<string, CashTrendPoint>();
 
@@ -119,21 +73,25 @@ function buildCashTrend(metrics: BranchMetric[]): CashTrendPoint[] {
     const date = metric.date;
     const current = byDate.get(date) ?? {
       date,
-      cashOnBranch: 0,
-      cashBalance: 0,
       eFloatBalance: 0,
-      cashInVault: 0,
+      cashInVolume: 0,
+      cashOutVolume: 0,
+      totalTransactionVolume: 0,
       cashInValue: 0,
       cashOutValue: 0,
+      totalTransactionValue: 0,
+      totalCommission: 0,
       netCashValue: 0,
     };
 
-    current.cashOnBranch += toMoneyNumber(metric.cashOnBranch);
-    current.cashBalance += toMoneyNumber(metric.cashBalance);
     current.eFloatBalance += toMoneyNumber(metric.eFloatBalance);
-    current.cashInVault += toMoneyNumber(metric.cashInVault);
+    current.cashInVolume += metric.cashInVolume;
+    current.cashOutVolume += metric.cashOutVolume;
+    current.totalTransactionVolume += metric.totalTransactionVolume;
     current.cashInValue += toMoneyNumber(metric.cashInValue);
     current.cashOutValue += toMoneyNumber(metric.cashOutValue);
+    current.totalTransactionValue += toMoneyNumber(metric.totalTransactionValue);
+    current.totalCommission += toMoneyNumber(metric.totalCommission);
     current.netCashValue += toMoneyNumber(metric.netCashValue);
 
     byDate.set(date, current);
@@ -142,110 +100,60 @@ function buildCashTrend(metrics: BranchMetric[]): CashTrendPoint[] {
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function buildExpenseAnalytics(
-  expenses: Expense[],
+function computeLatestMetricByBranch(metrics: BranchMetric[]): Map<string, BranchMetric> {
+  const latestMetricByBranch = new Map<string, BranchMetric>();
+
+  for (const metric of metrics) {
+    const current = latestMetricByBranch.get(metric.branchId);
+    if (!current || metric.date > current.date) {
+      latestMetricByBranch.set(metric.branchId, metric);
+    }
+  }
+
+  return latestMetricByBranch;
+}
+
+function buildBranchPerformance(
+  metrics: BranchMetric[],
   branches: Branch[],
-): {
-  dueByBranch: DueByBranchPoint[];
-  dueRiskTimeline: DueRiskPoint[];
-  expenseTypeMix: ExpenseTypeMixPoint[];
-  totalScheduledAmount: number;
-  overdueAmount: number;
-  overdueCount: number;
-  dueNext7Amount: number;
-} {
+): BranchPerformancePoint[] {
   const branchNameById = new Map(branches.map((branch) => [branch.id, branch.displayName]));
+  const latestMetricByBranch = computeLatestMetricByBranch(metrics);
+  const totalsByBranch = new Map<
+    string,
+    {
+      totalTransactionValue: number;
+      totalCommission: number;
+    }
+  >();
 
-  const dueByBranchMap = new Map<string, number>();
-  const expenseTypeMap = new Map<ExpenseType, number>();
+  for (const metric of metrics) {
+    const current = totalsByBranch.get(metric.branchId) ?? {
+      totalTransactionValue: 0,
+      totalCommission: 0,
+    };
 
-  const now = toDateOnly(new Date());
-  const currentWeekStart = startOfWeekUtc(now);
-
-  let totalScheduledAmount = 0;
-  let overdueAmount = 0;
-  let overdueCount = 0;
-  let dueNext7Amount = 0;
-
-  const weekBuckets = new Map<string, DueRiskPoint>();
-
-  for (let offset = -4; offset <= 4; offset += 1) {
-    const weekStart = new Date(currentWeekStart.getTime() + offset * MS_PER_WEEK);
-    const weekKey = formatDateKey(weekStart);
-    weekBuckets.set(weekKey, {
-      week: formatShortDate(weekStart),
-      upcomingAmount: 0,
-      overdueAmount: 0,
-    });
+    current.totalTransactionValue += toMoneyNumber(metric.totalTransactionValue);
+    current.totalCommission += toMoneyNumber(metric.totalCommission);
+    totalsByBranch.set(metric.branchId, current);
   }
 
-  for (const expense of expenses) {
-    const amount = Math.max(0, toMoneyNumber(expense.amount));
-    totalScheduledAmount += amount;
-
-    if (isReminderOverdue(expense.dueDate, now)) {
-      overdueAmount += amount;
-      overdueCount += 1;
-    }
-
-    if (isReminderDueWithinDays(expense.dueDate, 7, now)) {
-      dueNext7Amount += amount;
-    }
-
-    dueByBranchMap.set(
-      expense.branchId,
-      (dueByBranchMap.get(expense.branchId) ?? 0) + amount,
-    );
-
-    expenseTypeMap.set(
-      expense.expenseType,
-      (expenseTypeMap.get(expense.expenseType) ?? 0) + amount,
-    );
-
-    const weekStart = startOfWeekUtc(toDateOnly(expense.dueDate));
-    const weekKey = formatDateKey(weekStart);
-    const bucket = weekBuckets.get(weekKey);
-    if (!bucket) {
-      continue;
-    }
-
-    if (isReminderOverdue(expense.dueDate, now)) {
-      bucket.overdueAmount += amount;
-    } else {
-      bucket.upcomingAmount += amount;
-    }
-  }
-
-  const dueByBranch: DueByBranchPoint[] = [...dueByBranchMap.entries()]
-    .map(([branchId, scheduledAmount]) => ({
+  return Array.from(totalsByBranch.entries())
+    .map(([branchId, totals]) => ({
       branchId,
       branchName: branchNameById.get(branchId) ?? branchId,
-      scheduledAmount,
+      latestEFloatBalance: toMoneyNumber(
+        latestMetricByBranch.get(branchId)?.eFloatBalance ?? 0,
+      ),
+      totalTransactionValue: totals.totalTransactionValue,
+      totalCommission: totals.totalCommission,
     }))
-    .sort((a, b) => b.scheduledAmount - a.scheduledAmount)
+    .sort((left, right) => right.totalTransactionValue - left.totalTransactionValue)
     .slice(0, 10);
-
-  const expenseTypeMix: ExpenseTypeMixPoint[] = [...expenseTypeMap.entries()]
-    .map(([expenseType, scheduledAmount]) => ({ expenseType, scheduledAmount }))
-    .sort((a, b) => b.scheduledAmount - a.scheduledAmount);
-
-  const dueRiskTimeline = [...weekBuckets.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, value]) => value);
-
-  return {
-    dueByBranch,
-    dueRiskTimeline,
-    expenseTypeMix,
-    totalScheduledAmount,
-    overdueAmount,
-    overdueCount,
-    dueNext7Amount,
-  };
 }
 
 export async function fetchTrendsData(filters: TrendsFilters): Promise<TrendsData> {
-  const [branches, metrics, expenses] = await Promise.all([
+  const [branches, metrics] = await Promise.all([
     fetchAllPages((page, pageSize) => listBranches({ page, pageSize })),
     fetchAllPages((page, pageSize) =>
       listMetrics({
@@ -256,33 +164,28 @@ export async function fetchTrendsData(filters: TrendsFilters): Promise<TrendsDat
         dateTo: filters.dateTo,
       }),
     ),
-    fetchAllPages((page, pageSize) =>
-      listExpenses({
-        page,
-        pageSize,
-        branchId: filters.branchId,
-        dueFrom: filters.dateFrom,
-        dueTo: filters.dateTo,
-      }),
-    ),
   ]);
 
   const cashTrend = buildCashTrend(metrics);
-  const latestCashPoint = cashTrend[cashTrend.length - 1];
-
-  const expenseAnalytics = buildExpenseAnalytics(expenses, branches);
+  const latestPoint = cashTrend[cashTrend.length - 1];
 
   return {
     kpis: {
-      totalCashOnBranch: latestCashPoint?.cashOnBranch ?? 0,
-      totalScheduledAmount: expenseAnalytics.totalScheduledAmount,
-      overdueAmount: expenseAnalytics.overdueAmount,
-      overdueCount: expenseAnalytics.overdueCount,
-      dueNext7Amount: expenseAnalytics.dueNext7Amount,
+      latestTotalEFloat: latestPoint?.eFloatBalance ?? 0,
+      totalTransactionValue: metrics.reduce(
+        (sum, metric) => sum + toMoneyNumber(metric.totalTransactionValue),
+        0,
+      ),
+      totalTransactionVolume: metrics.reduce(
+        (sum, metric) => sum + metric.totalTransactionVolume,
+        0,
+      ),
+      totalCommission: metrics.reduce(
+        (sum, metric) => sum + toMoneyNumber(metric.totalCommission),
+        0,
+      ),
     },
     cashTrend,
-    dueByBranch: expenseAnalytics.dueByBranch,
-    dueRiskTimeline: expenseAnalytics.dueRiskTimeline,
-    expenseTypeMix: expenseAnalytics.expenseTypeMix,
+    branchPerformance: buildBranchPerformance(metrics, branches),
   };
 }

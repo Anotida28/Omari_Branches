@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "../db/prisma";
 import {
+  fetchSourceAgentBalanceRows,
   fetchSourceAgentMetricRows,
   findSourceAgentsByLineNumbers,
   describeSourceMetricMapping,
@@ -114,6 +115,10 @@ function createSourceSyncNote(): string {
   return `SOURCE_SYNC:${formatDate(new Date())}`;
 }
 
+function createRowKey(lineNumber: string, metricDate: Date): string {
+  return `${lineNumber}::${formatDate(metricDate)}`;
+}
+
 async function createMetricRowsInBatches(
   tx: Prisma.TransactionClient,
   rows: Prisma.AgentLineMetricCreateManyInput[],
@@ -220,11 +225,18 @@ export async function syncSourceMetrics(
         branchName: item.branchName,
       }));
 
-    const sourceRows = await fetchSourceAgentMetricRows({
-      lineNumbers: uniqueLineNumbers,
-      dateFrom: params.dateFrom,
-      dateTo: params.dateTo,
-    });
+    const [sourceRows, balanceRows] = await Promise.all([
+      fetchSourceAgentMetricRows({
+        lineNumbers: uniqueLineNumbers,
+        dateFrom: params.dateFrom,
+        dateTo: params.dateTo,
+      }),
+      fetchSourceAgentBalanceRows({
+        lineNumbers: uniqueLineNumbers,
+        dateFrom: params.dateFrom,
+        dateTo: params.dateTo,
+      }),
+    ]);
 
     const agentLineIdByLineNumber = new Map(
       lineItems.map((item) => [item.lineNumber, item.agentLineId] as const),
@@ -232,28 +244,69 @@ export async function syncSourceMetrics(
     const agentLineIds = Array.from(
       new Set(lineItems.map((item) => item.agentLineId)),
     );
-    const createRows = sourceRows.flatMap((row) => {
+    const createRowsByKey = new Map<string, Prisma.AgentLineMetricCreateManyInput>();
+
+    for (const row of sourceRows) {
       const agentLineId = agentLineIdByLineNumber.get(row.lineNumber);
       if (!agentLineId) {
-        return [];
+        continue;
       }
 
-      return [
-        {
-          agentLineId,
-          metricDate: row.metricDate,
-          cashBalance: 0,
-          eFloatBalance: 0,
-          cashInVault: 0,
-          cashInVolume: row.cashInVolume,
-          cashInValue: row.cashInValue,
-          cashOutVolume: row.cashOutVolume,
-          cashOutValue: row.cashOutValue,
-          notes: createSourceSyncNote(),
-          createdBy: "SOURCE_SYNC",
-        } satisfies Prisma.AgentLineMetricCreateManyInput,
-      ];
-    });
+      createRowsByKey.set(createRowKey(row.lineNumber, row.metricDate), {
+        agentLineId,
+        metricDate: row.metricDate,
+        cashBalance: 0,
+        eFloatBalance: 0,
+        cashInVault: 0,
+        cashInVolume: row.cashInVolume,
+        cashInValue: row.cashInValue,
+        cashOutVolume: row.cashOutVolume,
+        cashOutValue: row.cashOutValue,
+        totalTransactionVolume: row.totalTransactionVolume,
+        totalTransactionValue: row.totalTransactionValue,
+        commissionOnDeposits: row.commissionOnDeposits,
+        commissionOnWithdrawals: row.commissionOnWithdrawals,
+        totalCommission: row.totalCommission,
+        notes: createSourceSyncNote(),
+        createdBy: "SOURCE_SYNC",
+      } satisfies Prisma.AgentLineMetricCreateManyInput);
+    }
+
+    for (const row of balanceRows) {
+      const agentLineId = agentLineIdByLineNumber.get(row.lineNumber);
+      if (!agentLineId) {
+        continue;
+      }
+
+      const key = createRowKey(row.lineNumber, row.metricDate);
+      const existing = createRowsByKey.get(key);
+
+      if (existing) {
+        existing.eFloatBalance = row.eFloatBalance;
+        continue;
+      }
+
+      createRowsByKey.set(key, {
+        agentLineId,
+        metricDate: row.metricDate,
+        cashBalance: 0,
+        eFloatBalance: row.eFloatBalance,
+        cashInVault: 0,
+        cashInVolume: 0,
+        cashInValue: 0,
+        cashOutVolume: 0,
+        cashOutValue: 0,
+        totalTransactionVolume: 0,
+        totalTransactionValue: 0,
+        commissionOnDeposits: 0,
+        commissionOnWithdrawals: 0,
+        totalCommission: 0,
+        notes: createSourceSyncNote(),
+        createdBy: "SOURCE_SYNC",
+      } satisfies Prisma.AgentLineMetricCreateManyInput);
+    }
+
+    const createRows = Array.from(createRowsByKey.values());
 
     await prisma.$transaction(async (tx) => {
       await tx.agentLineMetric.deleteMany({

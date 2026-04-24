@@ -72,6 +72,11 @@ model BranchMetric {
   cashInValue   Decimal @default(0.00) @db.Decimal(18, 2)
   cashOutVolume Int     @default(0)
   cashOutValue  Decimal @default(0.00) @db.Decimal(18, 2)
+  totalTransactionVolume Int     @default(0)
+  totalTransactionValue  Decimal @default(0.00) @db.Decimal(18, 2)
+  commissionOnDeposits   Decimal @default(0.00) @db.Decimal(18, 2)
+  commissionOnWithdrawals Decimal @default(0.00) @db.Decimal(18, 2)
+  totalCommission        Decimal @default(0.00) @db.Decimal(18, 2)
 
   notes     String?  @db.VarChar(500)
   createdBy String?  @db.VarChar(120)
@@ -97,6 +102,11 @@ model AgentLineMetric {
   cashInValue   Decimal @default(0.00) @db.Decimal(18, 2)
   cashOutVolume Int     @default(0)
   cashOutValue  Decimal @default(0.00) @db.Decimal(18, 2)
+  totalTransactionVolume Int     @default(0)
+  totalTransactionValue  Decimal @default(0.00) @db.Decimal(18, 2)
+  commissionOnDeposits   Decimal @default(0.00) @db.Decimal(18, 2)
+  commissionOnWithdrawals Decimal @default(0.00) @db.Decimal(18, 2)
+  totalCommission        Decimal @default(0.00) @db.Decimal(18, 2)
 
   notes     String?  @db.VarChar(500)
   createdBy String?  @db.VarChar(120)

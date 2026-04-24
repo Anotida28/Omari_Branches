@@ -22,6 +22,7 @@ import {
   FileSpreadsheet,
   TrendingUp,
   Wallet,
+  Coins,
 } from "lucide-react";
 
 import { formatCurrency, formatDate, formatDateTime } from "../services/format";
@@ -247,16 +248,28 @@ export default function ReportsPage() {
               icon={<TrendingUp size={18} />}
             />
             <StatCard
-              label="Total Net Cash"
-              value={formatCurrency(report.totals.totalNetCashValue)}
-              hint={`Cash out: ${formatCurrency(report.totals.totalCashOutValue)}`}
+              label="Total Cash Out"
+              value={formatCurrency(report.totals.totalCashOutValue)}
+              hint={`Transaction value: ${formatCurrency(report.totals.totalTransactionValue)}`}
               icon={<TrendingUp size={18} />}
             />
             <StatCard
-              label="Latest Cash on Branch"
-              value={formatCurrency(report.totals.latestCashOnBranch)}
+              label="Total Commission"
+              value={formatCurrency(report.totals.totalCommission)}
+              hint={`${report.totals.metricsCount} metric rows`}
+              icon={<Coins size={18} />}
+            />
+            <StatCard
+              label="Latest E-Float"
+              value={formatCurrency(report.totals.latestEFloatBalance)}
               hint="Latest available metric date snapshot"
               icon={<Building2 size={18} />}
+            />
+            <StatCard
+              label="Transaction Value"
+              value={formatCurrency(report.totals.totalTransactionValue)}
+              hint={`Cash out: ${formatCurrency(report.totals.totalCashOutValue)}`}
+              icon={<TrendingUp size={18} />}
             />
           </Box>
 
@@ -266,7 +279,7 @@ export default function ReportsPage() {
               gap: 2,
               gridTemplateColumns: {
                 xs: "1fr",
-                xl: "minmax(0, 2fr) minmax(0, 1fr)",
+                xl: "repeat(2, minmax(0, 1fr))",
               },
             }}
           >
@@ -309,6 +322,55 @@ export default function ReportsPage() {
             <Paper sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", overflow: "hidden" }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  Branch Performance Summary
+                </Typography>
+              </Box>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Branch</TableCell>
+                      <TableCell align="right">Txn Value</TableCell>
+                      <TableCell align="right">Commission</TableCell>
+                      <TableCell align="right">Latest E-Float</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {report.performanceSummary.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                          No performance metrics in selected range.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      report.performanceSummary.map((row) => (
+                        <TableRow key={row.branchId}>
+                          <TableCell sx={{ fontWeight: 600 }}>{row.branchName}</TableCell>
+                          <TableCell align="right">{formatCurrency(row.totalTransactionValue)}</TableCell>
+                          <TableCell align="right">{formatCurrency(row.totalCommission)}</TableCell>
+                          <TableCell align="right">{formatCurrency(row.latestEFloatBalance)}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          </Box>
+
+          <Box
+            sx={{
+              display: "grid",
+              gap: 2,
+              gridTemplateColumns: {
+                xs: "1fr",
+                xl: "repeat(2, minmax(0, 1fr))",
+              },
+            }}
+          >
+            <Paper sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", overflow: "hidden" }}>
+              <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                   Reminder Type Mix
                 </Typography>
               </Box>
@@ -334,6 +396,46 @@ export default function ReportsPage() {
                           <TableCell sx={{ fontWeight: 600 }}>{row.expenseType}</TableCell>
                           <TableCell align="right">{row.expenseCount}</TableCell>
                           <TableCell align="right">{formatCurrency(row.totalAmount)}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+
+            <Paper sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", overflow: "hidden" }}>
+              <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  Performance Detail Snapshot
+                </Typography>
+              </Box>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Branch</TableCell>
+                      <TableCell align="right">Cash In</TableCell>
+                      <TableCell align="right">Cash Out</TableCell>
+                      <TableCell align="right">Txn Value</TableCell>
+                      <TableCell align="right">Commission</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {report.performanceSummary.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                          No performance data.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      report.performanceSummary.slice(0, 10).map((row) => (
+                        <TableRow key={row.branchId}>
+                          <TableCell sx={{ fontWeight: 600 }}>{row.branchName}</TableCell>
+                          <TableCell align="right">{formatCurrency(row.totalCashInValue)}</TableCell>
+                          <TableCell align="right">{formatCurrency(row.totalCashOutValue)}</TableCell>
+                          <TableCell align="right">{formatCurrency(row.totalTransactionValue)}</TableCell>
+                          <TableCell align="right">{formatCurrency(row.totalCommission)}</TableCell>
                         </TableRow>
                       ))
                     )}

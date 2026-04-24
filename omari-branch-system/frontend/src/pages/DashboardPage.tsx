@@ -4,6 +4,7 @@ import {
   DollarSign,
   FileText,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 import {
   Area,
@@ -63,7 +64,7 @@ export default function DashboardPage() {
     );
   }
 
-  const rankings = overviewQuery.data?.rankings;
+  const leaders = overviewQuery.data?.leaders;
 
   return (
     <section className="space-y-5 motion-fade-up">
@@ -103,6 +104,12 @@ export default function DashboardPage() {
               label="Reminder Amount"
               value={formatCurrency(overviewQuery.data.totalReminderAmount)}
               icon={<DollarSign size={20} />}
+            />
+            <StatCard
+              label="Latest Total E-Float"
+              value={formatCurrency(overviewQuery.data.latestTotalEFloat)}
+              hint={overviewQuery.data.latestMetricDate ?? "No metric snapshot yet"}
+              icon={<Wallet size={20} />}
             />
           </>
         ) : null}
@@ -145,7 +152,7 @@ export default function DashboardPage() {
                   <Tooltip />
                   <Area
                     type="monotone"
-                    dataKey="cashOnBranch"
+                    dataKey="eFloatBalance"
                     stroke={chartPalette.primary}
                     fill="url(#cashArea)"
                     strokeWidth={2}
@@ -161,33 +168,35 @@ export default function DashboardPage() {
         </Paper>
 
         <Paper sx={{ p: 2.2, ...glassPanelSx }}>
-          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
-            Branch Performance Rankings
+            <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
+            Branch Leaders
           </Typography>
           <Stack spacing={1.2}>
             <RankingList
-              title="Best Performing Branches"
-              kind="top"
+              title="Highest E-Float Branches"
+              metricLabel="Latest e-float"
+              secondaryLabel="Window txn value"
               items={
-                (rankings?.top ?? []).map((item) => ({
+                (leaders?.byEFloat ?? []).map((item) => ({
                   branchId: item.branchId,
                   branchName: item.branchName,
                   city: item.city,
-                  score: item.performanceScore,
-                  netCashValue: item.netCashValue,
+                  metricValue: item.metricValue,
+                  secondaryValue: item.secondaryValue,
                 }))
               }
             />
             <RankingList
-              title="Lowest Performing Branches"
-              kind="bottom"
+              title="Highest Commission Branches"
+              metricLabel="Window commission"
+              secondaryLabel="Window txn value"
               items={
-                (rankings?.bottom ?? []).map((item) => ({
+                (leaders?.byCommission ?? []).map((item) => ({
                   branchId: item.branchId,
                   branchName: item.branchName,
                   city: item.city,
-                  score: item.performanceScore,
-                  netCashValue: item.netCashValue,
+                  metricValue: item.metricValue,
+                  secondaryValue: item.secondaryValue,
                 }))
               }
             />

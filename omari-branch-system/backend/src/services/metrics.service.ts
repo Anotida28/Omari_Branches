@@ -23,6 +23,11 @@ export type MetricUpsertInput = {
   cashInValue: number;
   cashOutVolume: number;
   cashOutValue: number;
+  totalTransactionVolume: number;
+  totalTransactionValue: number;
+  commissionOnDeposits: number;
+  commissionOnWithdrawals: number;
+  totalCommission: number;
 };
 
 export type MetricListParams = {
@@ -45,6 +50,11 @@ export type MetricResponse = {
   cashInValue: string;
   cashOutVolume: number;
   cashOutValue: string;
+  totalTransactionVolume: number;
+  totalTransactionValue: string;
+  commissionOnDeposits: string;
+  commissionOnWithdrawals: string;
+  totalCommission: string;
   netCashValue: string;
   netCashVolume: number;
   sourceLineCount: number;
@@ -90,6 +100,11 @@ function toMetricResponse(metric: BranchMetric): MetricResponse {
     cashInValue: decimalToString(metric.cashInValue),
     cashOutVolume: metric.cashOutVolume,
     cashOutValue: decimalToString(metric.cashOutValue),
+    totalTransactionVolume: metric.totalTransactionVolume,
+    totalTransactionValue: decimalToString(metric.totalTransactionValue),
+    commissionOnDeposits: decimalToString(metric.commissionOnDeposits),
+    commissionOnWithdrawals: decimalToString(metric.commissionOnWithdrawals),
+    totalCommission: decimalToString(metric.totalCommission),
     netCashValue: netCashValue.toString(),
     netCashVolume: metric.cashInVolume - metric.cashOutVolume,
     sourceLineCount: 0,
@@ -145,6 +160,11 @@ export async function recomputeBranchMetricForDate(
         cashInValue: true,
         cashOutVolume: true,
         cashOutValue: true,
+        totalTransactionVolume: true,
+        totalTransactionValue: true,
+        commissionOnDeposits: true,
+        commissionOnWithdrawals: true,
+        totalCommission: true,
       },
     }),
   ]);
@@ -174,6 +194,11 @@ export async function recomputeBranchMetricForDate(
       cashInValue: aggregate._sum.cashInValue ?? 0,
       cashOutVolume: aggregate._sum.cashOutVolume ?? 0,
       cashOutValue: aggregate._sum.cashOutValue ?? 0,
+      totalTransactionVolume: aggregate._sum.totalTransactionVolume ?? 0,
+      totalTransactionValue: aggregate._sum.totalTransactionValue ?? 0,
+      commissionOnDeposits: aggregate._sum.commissionOnDeposits ?? 0,
+      commissionOnWithdrawals: aggregate._sum.commissionOnWithdrawals ?? 0,
+      totalCommission: aggregate._sum.totalCommission ?? 0,
     },
     create: {
       branchId,
@@ -185,6 +210,11 @@ export async function recomputeBranchMetricForDate(
       cashInValue: aggregate._sum.cashInValue ?? 0,
       cashOutVolume: aggregate._sum.cashOutVolume ?? 0,
       cashOutValue: aggregate._sum.cashOutValue ?? 0,
+      totalTransactionVolume: aggregate._sum.totalTransactionVolume ?? 0,
+      totalTransactionValue: aggregate._sum.totalTransactionValue ?? 0,
+      commissionOnDeposits: aggregate._sum.commissionOnDeposits ?? 0,
+      commissionOnWithdrawals: aggregate._sum.commissionOnWithdrawals ?? 0,
+      totalCommission: aggregate._sum.totalCommission ?? 0,
     },
   });
 }
@@ -276,6 +306,11 @@ export async function upsertMetric(
         cashInValue: input.cashInValue,
         cashOutVolume: input.cashOutVolume,
         cashOutValue: input.cashOutValue,
+        totalTransactionVolume: input.totalTransactionVolume,
+        totalTransactionValue: input.totalTransactionValue,
+        commissionOnDeposits: input.commissionOnDeposits,
+        commissionOnWithdrawals: input.commissionOnWithdrawals,
+        totalCommission: input.totalCommission,
       },
       create: {
         agentLineId: input.agentLineId,
@@ -287,6 +322,11 @@ export async function upsertMetric(
         cashInValue: input.cashInValue,
         cashOutVolume: input.cashOutVolume,
         cashOutValue: input.cashOutValue,
+        totalTransactionVolume: input.totalTransactionVolume,
+        totalTransactionValue: input.totalTransactionValue,
+        commissionOnDeposits: input.commissionOnDeposits,
+        commissionOnWithdrawals: input.commissionOnWithdrawals,
+        totalCommission: input.totalCommission,
       },
     });
 

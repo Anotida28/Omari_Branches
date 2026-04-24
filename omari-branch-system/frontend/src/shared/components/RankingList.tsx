@@ -1,5 +1,5 @@
 import { Box, Chip, List, ListItem, Stack, Typography } from "@mui/material";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 import { formatCurrency } from "../../services/format";
 
@@ -7,19 +7,23 @@ export type RankingItem = {
   branchId: string;
   branchName: string;
   city: string;
-  score: number;
-  netCashValue: number;
+  metricValue: number;
+  secondaryValue?: number;
 };
 
 type RankingListProps = {
   title: string;
   items: RankingItem[];
-  kind: "top" | "bottom";
+  metricLabel: string;
+  secondaryLabel?: string;
 };
 
-export function RankingList({ title, items, kind }: RankingListProps) {
-  const isTop = kind === "top";
-
+export function RankingList({
+  title,
+  items,
+  metricLabel,
+  secondaryLabel,
+}: RankingListProps) {
   return (
     <Box
       sx={{
@@ -35,9 +39,9 @@ export function RankingList({ title, items, kind }: RankingListProps) {
         </Typography>
         <Chip
           size="small"
-          color={isTop ? "success" : "warning"}
-          icon={isTop ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-          label={isTop ? "Top 5" : "Bottom 5"}
+          color="success"
+          icon={<ArrowUpRight size={14} />}
+          label="Top 5"
         />
       </Stack>
 
@@ -74,10 +78,13 @@ export function RankingList({ title, items, kind }: RankingListProps) {
 
                 <Stack alignItems="flex-end" spacing={0.2}>
                   <Typography variant="body2" fontWeight={700}>
-                    {item.score.toFixed(1)}
+                    {formatCurrency(item.metricValue)}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {formatCurrency(item.netCashValue)}
+                    {metricLabel}
+                    {secondaryLabel && item.secondaryValue !== undefined
+                      ? ` | ${secondaryLabel}: ${formatCurrency(item.secondaryValue)}`
+                      : ""}
                   </Typography>
                 </Stack>
               </Stack>

@@ -87,6 +87,11 @@ export type BranchMetric = {
   cashInValue: string;
   cashOutVolume: number;
   cashOutValue: string;
+  totalTransactionVolume: number;
+  totalTransactionValue: string;
+  commissionOnDeposits: string;
+  commissionOnWithdrawals: string;
+  totalCommission: string;
   netCashValue: string;
   netCashVolume: number;
   sourceLineCount: number;
@@ -154,22 +159,23 @@ export type UpdateExpenseInput = {
 export type DashboardStats = {
   totalBranches: number;
   totalExpenses: number;
-  overdueExpenses: number;
   totalReminderAmount: number;
+  latestTotalEFloat: number;
+  latestMetricDate: string | null;
 };
 
 export type DashboardRankingItem = {
   branchId: string;
   branchName: string;
   city: string;
-  performanceScore: number;
-  netCashValue: number;
+  metricValue: number;
+  secondaryValue: number;
 };
 
 export type DashboardOverview = DashboardStats & {
-  rankings: {
-    top: DashboardRankingItem[];
-    bottom: DashboardRankingItem[];
+  leaders: {
+    byEFloat: DashboardRankingItem[];
+    byCommission: DashboardRankingItem[];
   };
 };
 

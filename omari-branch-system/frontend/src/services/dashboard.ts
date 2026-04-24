@@ -2,7 +2,6 @@ import { listBranches } from "./branches";
 import { listExpenses } from "./expenses";
 import { toMoneyNumber } from "./format";
 import { listMetrics } from "./metrics";
-import { isReminderOverdue } from "./reminders";
 import type {
   Branch,
   BranchMetric,
@@ -15,10 +14,9 @@ import type {
 
 const PAGE_SIZE = 100;
 
-type BranchRankingRaw = {
-  branch: Branch;
-  netCashValue: number;
-  cashOnBranch: number;
+type BranchWindowTotals = {
+  totalCommission: number;
+  totalTransactionValue: number;
 };
 
 async function fetchAllPages<T>(
@@ -39,36 +37,41 @@ async function fetchAllPages<T>(
 }
 
 function summarizeReminders(expenses: Expense[]): {
-  overdueExpenses: number;
   totalReminderAmount: number;
 } {
   return expenses.reduce(
     (summary, expense) => ({
-      overdueExpenses:
-        summary.overdueExpenses + (isReminderOverdue(expense.dueDate) ? 1 : 0),
       totalReminderAmount:
         summary.totalReminderAmount + toMoneyNumber(expense.amount),
     }),
     {
-      overdueExpenses: 0,
       totalReminderAmount: 0,
     },
   );
 }
 
 export async function fetchDashboardStats(): Promise<DashboardStats> {
-  const [branches, expenses] = await Promise.all([
+  const [branches, expenses, metrics] = await Promise.all([
     listBranches({ page: 1, pageSize: 1 }),
     fetchAllPages((page, pageSize) => listExpenses({ page, pageSize })),
+    fetchAllPages((page, pageSize) => listMetrics({ page, pageSize })),
   ]);
 
   const reminderSummary = summarizeReminders(expenses);
+  const latestMetricDate = metrics.reduce<string | null>(
+    (latest, metric) => (!latest || metric.date > latest ? metric.date : latest),
+    null,
+  );
+  const latestTotalEFloat = metrics
+    .filter((metric) => metric.date === latestMetricDate)
+    .reduce((sum, metric) => sum + toMoneyNumber(metric.eFloatBalance), 0);
 
   return {
     totalBranches: branches.total,
     totalExpenses: expenses.length,
-    overdueExpenses: reminderSummary.overdueExpenses,
     totalReminderAmount: reminderSummary.totalReminderAmount,
+    latestTotalEFloat,
+    latestMetricDate,
   };
 }
 
@@ -85,45 +88,40 @@ function computeLatestMetricByBranch(metrics: BranchMetric[]): Map<string, Branc
   return latestMetricByBranch;
 }
 
-function buildRankings(rawRows: BranchRankingRaw[]): {
-  top: DashboardRankingItem[];
-  bottom: DashboardRankingItem[];
-} {
-  if (rawRows.length === 0) {
-    return { top: [], bottom: [] };
+function computeWindowTotalsByBranch(metrics: BranchMetric[]): Map<string, BranchWindowTotals> {
+  const totalsByBranch = new Map<string, BranchWindowTotals>();
+
+  for (const metric of metrics) {
+    const current = totalsByBranch.get(metric.branchId) ?? {
+      totalCommission: 0,
+      totalTransactionValue: 0,
+    };
+
+    current.totalCommission += toMoneyNumber(metric.totalCommission);
+    current.totalTransactionValue += toMoneyNumber(metric.totalTransactionValue);
+    totalsByBranch.set(metric.branchId, current);
   }
 
-  const withRawScore = rawRows.map((row) => {
-    const rawScore = row.netCashValue * 0.7 + row.cashOnBranch * 0.3;
-    return { ...row, rawScore };
-  });
+  return totalsByBranch;
+}
 
-  const minRaw = Math.min(...withRawScore.map((row) => row.rawScore));
-  const maxRaw = Math.max(...withRawScore.map((row) => row.rawScore));
-
-  const normalize = (value: number) => {
-    if (maxRaw === minRaw) {
-      return 50;
-    }
-    return ((value - minRaw) / (maxRaw - minRaw)) * 100;
-  };
-
-  const scored = withRawScore.map((row) => ({
-    branchId: row.branch.id,
-    branchName: row.branch.displayName,
-    city: row.branch.city,
-    performanceScore: normalize(row.rawScore),
-    netCashValue: row.netCashValue,
-    rawScore: row.rawScore,
-  }));
-
-  const descending = [...scored].sort((a, b) => b.rawScore - a.rawScore);
-  const ascending = [...scored].sort((a, b) => a.rawScore - b.rawScore);
-
-  return {
-    top: descending.slice(0, 5).map(({ rawScore: _rawScore, ...item }) => item),
-    bottom: ascending.slice(0, 5).map(({ rawScore: _rawScore, ...item }) => item),
-  };
+function buildLeaderList(params: {
+  branches: Branch[];
+  windowTotalsByBranch: Map<string, BranchWindowTotals>;
+  metricValue: (branchId: string) => number;
+}): DashboardRankingItem[] {
+  return params.branches
+    .map((branch) => ({
+      branchId: branch.id,
+      branchName: branch.displayName,
+      city: branch.city,
+      metricValue: params.metricValue(branch.id),
+      secondaryValue:
+        params.windowTotalsByBranch.get(branch.id)?.totalTransactionValue ?? 0,
+    }))
+    .filter((item) => item.metricValue > 0 || item.secondaryValue > 0)
+    .sort((left, right) => right.metricValue - left.metricValue)
+    .slice(0, 5);
 }
 
 export async function fetchDashboardOverview(): Promise<DashboardOverview> {
@@ -144,22 +142,37 @@ export async function fetchDashboardOverview(): Promise<DashboardOverview> {
   ]);
 
   const latestMetricByBranch = computeLatestMetricByBranch(metrics);
+  const windowTotalsByBranch = computeWindowTotalsByBranch(metrics);
   const reminderSummary = summarizeReminders(expenses);
 
-  const rankingRows: BranchRankingRaw[] = branches.map((branch) => {
-    const latestMetric = latestMetricByBranch.get(branch.id);
-    return {
-      branch,
-      netCashValue: latestMetric ? toMoneyNumber(latestMetric.netCashValue) : 0,
-      cashOnBranch: latestMetric ? toMoneyNumber(latestMetric.cashOnBranch) : 0,
-    };
-  });
+  const latestMetricDate = metrics.reduce<string | null>(
+    (latest, metric) => (!latest || metric.date > latest ? metric.date : latest),
+    null,
+  );
+  const latestTotalEFloat = Array.from(latestMetricByBranch.values()).reduce(
+    (sum, metric) => sum + toMoneyNumber(metric.eFloatBalance),
+    0,
+  );
 
   return {
     totalBranches: branches.length,
     totalExpenses: expenses.length,
-    overdueExpenses: reminderSummary.overdueExpenses,
     totalReminderAmount: reminderSummary.totalReminderAmount,
-    rankings: buildRankings(rankingRows),
+    latestTotalEFloat,
+    latestMetricDate,
+    leaders: {
+      byEFloat: buildLeaderList({
+        branches,
+        windowTotalsByBranch,
+        metricValue: (branchId) =>
+          toMoneyNumber(latestMetricByBranch.get(branchId)?.eFloatBalance ?? 0),
+      }),
+      byCommission: buildLeaderList({
+        branches,
+        windowTotalsByBranch,
+        metricValue: (branchId) =>
+          windowTotalsByBranch.get(branchId)?.totalCommission ?? 0,
+      }),
+    },
   };
 }

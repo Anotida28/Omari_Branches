@@ -6,16 +6,23 @@
  * - Default match column: reporting.omari_agent_summary_since_launch_daily.agent_account
  * - Imported daily metrics come from reporting.omari_agent_summary_since_launch_daily
  *
- * Imported fields:
- * - number_of_deposits   -> AgentLineMetric.cashInVolume
- * - value_of_deposits    -> AgentLineMetric.cashInValue
- * - number_of_withdrawals -> AgentLineMetric.cashOutVolume
- * - value_of_withdrawals -> AgentLineMetric.cashOutValue
+ * Imported transaction fields:
+ * - number_of_deposits       -> AgentLineMetric.cashInVolume
+ * - value_of_deposits        -> AgentLineMetric.cashInValue
+ * - number_of_withdrawals    -> AgentLineMetric.cashOutVolume
+ * - value_of_withdrawals     -> AgentLineMetric.cashOutValue
+ * - total_volume             -> AgentLineMetric.totalTransactionVolume
+ * - total_value              -> AgentLineMetric.totalTransactionValue
+ * - commission_on_deposits   -> AgentLineMetric.commissionOnDeposits
+ * - commission_on_withdrawals -> AgentLineMetric.commissionOnWithdrawals
+ * - total_commission         -> AgentLineMetric.totalCommission
  *
- * Fields not currently available from the source summary and therefore default
- * to zero in the app:
+ * Imported balance field:
+ * - available_balance from the configured account balance views -> AgentLineMetric.eFloatBalance
+ *
+ * Fields not currently available from the configured source views and therefore
+ * default to zero in the app:
  * - cashBalance
- * - eFloatBalance
  * - cashInVault
  */
 
@@ -48,6 +55,17 @@ export type SourceAgentMetricRow = {
   cashInValue: number;
   cashOutVolume: number;
   cashOutValue: number;
+  totalTransactionVolume: number;
+  totalTransactionValue: number;
+  commissionOnDeposits: number;
+  commissionOnWithdrawals: number;
+  totalCommission: number;
+};
+
+export type SourceAgentBalanceRow = {
+  metricDate: Date;
+  lineNumber: string;
+  eFloatBalance: number;
 };
 
 export type SourceMetricMappingDescription = {
@@ -56,6 +74,8 @@ export type SourceMetricMappingDescription = {
   database: string | null;
   tlsServerName: string | null;
   summaryTable: string;
+  balanceTable: string;
+  currentBalanceTable: string;
   lineMatchColumn: "agent_account" | "customer_id";
   importedFields: Array<{ source: string; target: string }>;
   defaultedFields: string[];
@@ -109,6 +129,14 @@ function parseQualifiedTableName(value: string): QualifiedTableName {
 
 function getSourceSummaryTable(): QualifiedTableName {
   return parseQualifiedTableName(env.SOURCE_SQL_AGENT_SUMMARY_TABLE);
+}
+
+function getSourceBalanceTable(): QualifiedTableName {
+  return parseQualifiedTableName(env.SOURCE_SQL_AGENT_BALANCE_TABLE);
+}
+
+function getSourceCurrentBalanceTable(): QualifiedTableName {
+  return parseQualifiedTableName(env.SOURCE_SQL_AGENT_BALANCE_CURRENT_TABLE);
 }
 
 function getMatchColumnSql(): "[agent_account]" | "[customer_id]" {
@@ -172,6 +200,8 @@ export function describeSourceMetricMapping(): SourceMetricMappingDescription {
     database: env.SOURCE_SQL_DATABASE ?? null,
     tlsServerName: env.SOURCE_SQL_TLS_SERVER_NAME ?? null,
     summaryTable: env.SOURCE_SQL_AGENT_SUMMARY_TABLE,
+    balanceTable: env.SOURCE_SQL_AGENT_BALANCE_TABLE,
+    currentBalanceTable: env.SOURCE_SQL_AGENT_BALANCE_CURRENT_TABLE,
     lineMatchColumn: env.SOURCE_SQL_AGENT_LINE_MATCH_COLUMN,
     importedFields: [
       {
@@ -190,8 +220,32 @@ export function describeSourceMetricMapping(): SourceMetricMappingDescription {
         source: "value_of_withdrawals",
         target: "AgentLineMetric.cashOutValue",
       },
+      {
+        source: "total_volume",
+        target: "AgentLineMetric.totalTransactionVolume",
+      },
+      {
+        source: "total_value",
+        target: "AgentLineMetric.totalTransactionValue",
+      },
+      {
+        source: "commission_on_deposits",
+        target: "AgentLineMetric.commissionOnDeposits",
+      },
+      {
+        source: "commission_on_withdrawals",
+        target: "AgentLineMetric.commissionOnWithdrawals",
+      },
+      {
+        source: "total_commission",
+        target: "AgentLineMetric.totalCommission",
+      },
+      {
+        source: "available_balance",
+        target: "AgentLineMetric.eFloatBalance",
+      },
     ],
-    defaultedFields: ["cashBalance", "eFloatBalance", "cashInVault"],
+    defaultedFields: ["cashBalance", "cashInVault"],
   };
 }
 
@@ -305,7 +359,12 @@ export async function fetchSourceAgentMetricRows(params: {
         SUM(COALESCE([number_of_deposits], 0)) AS cashInVolume,
         SUM(COALESCE([value_of_deposits], 0)) AS cashInValue,
         SUM(COALESCE([number_of_withdrawals], 0)) AS cashOutVolume,
-        SUM(COALESCE([value_of_withdrawals], 0)) AS cashOutValue
+        SUM(COALESCE([value_of_withdrawals], 0)) AS cashOutValue,
+        SUM(COALESCE([total_volume], 0)) AS totalTransactionVolume,
+        SUM(COALESCE([total_value], 0)) AS totalTransactionValue,
+        SUM(COALESCE([commission_on_deposits], 0)) AS commissionOnDeposits,
+        SUM(COALESCE([commission_on_withdrawals], 0)) AS commissionOnWithdrawals,
+        SUM(COALESCE([total_commission], 0)) AS totalCommission
       FROM [${schema}].[${table}]
       WHERE [date_id] >= @dateFrom
         AND [date_id] <= @dateTo
@@ -335,9 +394,134 @@ export async function fetchSourceAgentMetricRows(params: {
         cashInValue: Math.max(0, toNumericValue(row.cashInValue)),
         cashOutVolume: Math.max(0, Math.trunc(toNumericValue(row.cashOutVolume))),
         cashOutValue: Math.max(0, toNumericValue(row.cashOutValue)),
+        totalTransactionVolume: Math.max(
+          0,
+          Math.trunc(toNumericValue(row.totalTransactionVolume)),
+        ),
+        totalTransactionValue: Math.max(0, toNumericValue(row.totalTransactionValue)),
+        commissionOnDeposits: Math.max(0, toNumericValue(row.commissionOnDeposits)),
+        commissionOnWithdrawals: Math.max(
+          0,
+          toNumericValue(row.commissionOnWithdrawals),
+        ),
+        totalCommission: Math.max(0, toNumericValue(row.totalCommission)),
       });
     }
   }
 
   return importedRows;
+}
+
+async function fetchBalanceRowsFromTable(params: {
+  pool: sql.ConnectionPool;
+  tableName: QualifiedTableName;
+  lineNumbers: string[];
+  dateFrom: Date;
+  dateTo: Date;
+}): Promise<SourceAgentBalanceRow[]> {
+  const rows: SourceAgentBalanceRow[] = [];
+
+  for (const batch of chunkValues(params.lineNumbers, PARAM_BATCH_SIZE)) {
+    const request = params.pool.request();
+    request.input("dateFrom", sql.Date, params.dateFrom);
+    request.input("dateTo", sql.Date, params.dateTo);
+
+    const inClause = buildInClause(request, batch, "balanceLine");
+    const query = `
+      WITH ranked_balances AS (
+        SELECT
+          CAST([balance_date] AS DATE) AS metricDate,
+          LTRIM(RTRIM(CAST([account_number] AS VARCHAR(120)))) AS lineNumber,
+          COALESCE([available_balance], 0) AS eFloatBalance,
+          ROW_NUMBER() OVER (
+            PARTITION BY
+              CAST([balance_date] AS DATE),
+              LTRIM(RTRIM(CAST([account_number] AS VARCHAR(120))))
+            ORDER BY
+              TRY_CAST([date_id] AS DATE) DESC,
+              [balance_date] DESC
+          ) AS rowNumber
+        FROM [${params.tableName.schema}].[${params.tableName.table}]
+        WHERE [balance_date] >= @dateFrom
+          AND [balance_date] <= @dateTo
+          AND LTRIM(RTRIM(CAST([account_number] AS VARCHAR(120)))) IN (${inClause})
+      )
+      SELECT
+        metricDate,
+        lineNumber,
+        eFloatBalance
+      FROM ranked_balances
+      WHERE rowNumber = 1
+      ORDER BY metricDate ASC, lineNumber ASC
+    `;
+
+    const result = await request.query(query);
+    for (const row of result.recordset as Array<Record<string, unknown>>) {
+      const lineNumber = normalizeSourceValue(row.lineNumber);
+      if (!lineNumber) {
+        continue;
+      }
+
+      rows.push({
+        metricDate: normalizeDateOnly(row.metricDate),
+        lineNumber,
+        eFloatBalance: Math.max(0, toNumericValue(row.eFloatBalance)),
+      });
+    }
+  }
+
+  return rows;
+}
+
+export async function fetchSourceAgentBalanceRows(params: {
+  lineNumbers: string[];
+  dateFrom: Date;
+  dateTo: Date;
+}): Promise<SourceAgentBalanceRow[]> {
+  const normalizedLineNumbers = Array.from(
+    new Set(
+      params.lineNumbers
+        .map((lineNumber) => lineNumber.trim())
+        .filter((lineNumber) => lineNumber.length > 0),
+    ),
+  );
+
+  if (normalizedLineNumbers.length === 0 || !isSourceMetricsConfigured()) {
+    return [];
+  }
+
+  const pool = await getPool();
+  const [historicalRows, currentRows] = await Promise.all([
+    fetchBalanceRowsFromTable({
+      pool,
+      tableName: getSourceBalanceTable(),
+      lineNumbers: normalizedLineNumbers,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
+    }),
+    fetchBalanceRowsFromTable({
+      pool,
+      tableName: getSourceCurrentBalanceTable(),
+      lineNumbers: normalizedLineNumbers,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
+    }),
+  ]);
+
+  const byLineAndDate = new Map<string, SourceAgentBalanceRow>();
+  for (const row of [...historicalRows, ...currentRows]) {
+    byLineAndDate.set(
+      `${row.lineNumber}::${row.metricDate.toISOString().slice(0, 10)}`,
+      row,
+    );
+  }
+
+  return Array.from(byLineAndDate.values()).sort((left, right) => {
+    const dateCompare = left.metricDate.getTime() - right.metricDate.getTime();
+    if (dateCompare !== 0) {
+      return dateCompare;
+    }
+
+    return left.lineNumber.localeCompare(right.lineNumber);
+  });
 }

@@ -72,9 +72,14 @@ async function main() {
                 cashInVolume: 0,
                 cashInValue: 0,
                 cashOutVolume: 0,
-                cashOutValue: 0
-            }
-        });
+                cashOutValue: 0,
+                totalTransactionVolume: 0,
+                totalTransactionValue: 0,
+                commissionOnDeposits: 0,
+                commissionOnWithdrawals: 0,
+                totalCommission: 0
+              }
+            });
         const existingExpense = await prisma.expense.findFirst({
             where: {
                 branchId: branch.id,
