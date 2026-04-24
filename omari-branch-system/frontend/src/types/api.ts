@@ -174,8 +174,8 @@ export type DashboardRankingItem = {
 
 export type DashboardOverview = DashboardStats & {
   leaders: {
+    byPerformance: DashboardRankingItem[];
     byEFloat: DashboardRankingItem[];
-    byCommission: DashboardRankingItem[];
   };
 };
 

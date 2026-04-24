@@ -161,17 +161,22 @@ export async function fetchDashboardOverview(): Promise<DashboardOverview> {
     latestTotalEFloat,
     latestMetricDate,
     leaders: {
+      byPerformance: buildLeaderList({
+        branches,
+        windowTotalsByBranch,
+        metricValue: (branchId) =>
+          windowTotalsByBranch.get(branchId)?.totalTransactionValue ?? 0,
+      }).map((item) => ({
+        ...item,
+        secondaryValue: toMoneyNumber(
+          latestMetricByBranch.get(item.branchId)?.eFloatBalance ?? 0,
+        ),
+      })),
       byEFloat: buildLeaderList({
         branches,
         windowTotalsByBranch,
         metricValue: (branchId) =>
           toMoneyNumber(latestMetricByBranch.get(branchId)?.eFloatBalance ?? 0),
-      }),
-      byCommission: buildLeaderList({
-        branches,
-        windowTotalsByBranch,
-        metricValue: (branchId) =>
-          windowTotalsByBranch.get(branchId)?.totalCommission ?? 0,
       }),
     },
   };
