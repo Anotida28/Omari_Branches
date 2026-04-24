@@ -1,8 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box,
   Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Paper,
   Stack,
@@ -35,6 +38,7 @@ import { EmptyState } from "../shared/components/EmptyState";
 import { ErrorState } from "../shared/components/ErrorState";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
+import { FocusDialog } from "../shared/components/FocusDialog";
 
 function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -57,6 +61,9 @@ function downloadCsv(content: string, filename: string): void {
 }
 
 export default function ReportsPage() {
+  const [focusedTable, setFocusedTable] = useState<
+    "branch" | "performance" | "type" | "detail" | null
+  >(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const defaultDateTo = toInputDate(new Date());
@@ -285,9 +292,12 @@ export default function ReportsPage() {
           >
             <Paper sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", overflow: "hidden" }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Branch Summary
-                </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" gap={2}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Branch Summary
+                  </Typography>
+                  <Button size="small" variant="outlined" onClick={() => setFocusedTable("branch")}>Expand</Button>
+                </Stack>
               </Box>
               <TableContainer>
                 <Table size="small">
@@ -321,9 +331,12 @@ export default function ReportsPage() {
 
             <Paper sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", overflow: "hidden" }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Branch Performance Summary
-                </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" gap={2}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Branch Performance Summary
+                  </Typography>
+                  <Button size="small" variant="outlined" onClick={() => setFocusedTable("performance")}>Expand</Button>
+                </Stack>
               </Box>
               <TableContainer>
                 <Table size="small">
@@ -370,9 +383,12 @@ export default function ReportsPage() {
           >
             <Paper sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", overflow: "hidden" }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Reminder Type Mix
-                </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" gap={2}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Reminder Type Mix
+                  </Typography>
+                  <Button size="small" variant="outlined" onClick={() => setFocusedTable("type")}>Expand</Button>
+                </Stack>
               </Box>
               <TableContainer>
                 <Table size="small">
@@ -406,9 +422,12 @@ export default function ReportsPage() {
 
             <Paper sx={{ border: "1px solid rgba(15, 23, 42, 0.1)", overflow: "hidden" }}>
               <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Performance Detail Snapshot
-                </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" gap={2}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Performance Detail Snapshot
+                  </Typography>
+                  <Button size="small" variant="outlined" onClick={() => setFocusedTable("detail")}>Expand</Button>
+                </Stack>
               </Box>
               <TableContainer>
                 <Table size="small">
@@ -489,6 +508,134 @@ export default function ReportsPage() {
               </Table>
             </TableContainer>
           </Paper>
+
+          {report ? (
+            <FocusDialog
+              open={focusedTable !== null}
+              onClose={() => setFocusedTable(null)}
+              title={
+                focusedTable === "branch"
+                  ? "Branch Summary"
+                  : focusedTable === "performance"
+                    ? "Branch Performance Summary"
+                    : focusedTable === "type"
+                      ? "Reminder Type Mix"
+                      : "Performance Detail Snapshot"
+              }
+              subtitle="Expanded view with more rows and less visual clipping."
+            >
+              <Stack spacing={2}>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gap: 1,
+                    gridTemplateColumns: {
+                      xs: "repeat(2, minmax(0, 1fr))",
+                      md: "repeat(3, minmax(0, 1fr))",
+                    },
+                  }}
+                >
+                  <StatCard label="Reminders" value={String(report.totals.expenseCount)} hint={formatCurrency(report.totals.totalAmount)} />
+                  <StatCard label="Cash In" value={formatCurrency(report.totals.totalCashInValue)} hint={`${report.totals.metricsCount} metric rows`} />
+                  <StatCard label="Commission" value={formatCurrency(report.totals.totalCommission)} hint={formatCurrency(report.totals.latestEFloatBalance)} />
+                </Box>
+
+                {focusedTable === "branch" ? (
+                  <TableContainer sx={{ maxHeight: "62vh" }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Branch</TableCell>
+                          <TableCell align="right">Reminders</TableCell>
+                          <TableCell align="right">Amount</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {report.branchSummary.map((row) => (
+                          <TableRow key={row.branchId}>
+                            <TableCell sx={{ fontWeight: 600 }}>{row.branchName}</TableCell>
+                            <TableCell align="right">{row.expenseCount}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.totalAmount)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                ) : focusedTable === "performance" ? (
+                  <TableContainer sx={{ maxHeight: "62vh" }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Branch</TableCell>
+                          <TableCell align="right">Txn Value</TableCell>
+                          <TableCell align="right">Commission</TableCell>
+                          <TableCell align="right">Latest E-Float</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {report.performanceSummary.map((row) => (
+                          <TableRow key={row.branchId}>
+                            <TableCell sx={{ fontWeight: 600 }}>{row.branchName}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.totalTransactionValue)}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.totalCommission)}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.latestEFloatBalance)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                ) : focusedTable === "type" ? (
+                  <TableContainer sx={{ maxHeight: "62vh" }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Type</TableCell>
+                          <TableCell align="right">Count</TableCell>
+                          <TableCell align="right">Amount</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {report.expenseTypeSummary.map((row) => (
+                          <TableRow key={row.expenseType}>
+                            <TableCell sx={{ fontWeight: 600 }}>{row.expenseType}</TableCell>
+                            <TableCell align="right">{row.expenseCount}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.totalAmount)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                ) : (
+                  <TableContainer sx={{ maxHeight: "62vh" }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Branch</TableCell>
+                          <TableCell>Cash In</TableCell>
+                          <TableCell>Cash Out</TableCell>
+                          <TableCell>Txn Value</TableCell>
+                          <TableCell>Commission</TableCell>
+                          <TableCell>Latest E-Float</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {report.performanceSummary.map((row) => (
+                          <TableRow key={row.branchId}>
+                            <TableCell sx={{ fontWeight: 600 }}>{row.branchName}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.totalCashInValue)}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.totalCashOutValue)}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.totalTransactionValue)}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.totalCommission)}</TableCell>
+                            <TableCell align="right">{formatCurrency(row.latestEFloatBalance)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Stack>
+            </FocusDialog>
+          ) : null}
         </>
       )}
     </section>

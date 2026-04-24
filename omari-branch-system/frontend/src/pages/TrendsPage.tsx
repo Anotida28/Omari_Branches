@@ -1,11 +1,12 @@
 import { useMemo } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  ComposedChart,
   Legend,
+  ComposedChart,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -16,6 +17,8 @@ import {
 import {
   Box,
   Button,
+  ButtonGroup,
+  Divider,
   MenuItem,
   Paper,
   Stack,
@@ -32,6 +35,7 @@ import { fetchTrendsData } from "../services/trends";
 import { ErrorState } from "../shared/components/ErrorState";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
+import { FocusDialog } from "../shared/components/FocusDialog";
 
 function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -77,21 +81,32 @@ function ChartCard({
   title,
   subtitle,
   children,
+  onExpand,
   minHeight = 300,
 }: {
   title: string;
   subtitle: string;
   children: React.ReactNode;
+  onExpand?: () => void;
   minHeight?: number;
 }) {
   return (
     <Paper sx={{ p: 2.2, ...glassPanelSx, minHeight }}>
-      <Typography variant="subtitle1" fontWeight={700}>
-        {title}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.3 }}>
-        {subtitle}
-      </Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2} sx={{ mb: 1.3 }}>
+        <Box>
+          <Typography variant="subtitle1" fontWeight={700}>
+            {title}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {subtitle}
+          </Typography>
+        </Box>
+        {onExpand ? (
+          <Button size="small" variant="outlined" onClick={onExpand}>
+            Expand
+          </Button>
+        ) : null}
+      </Stack>
       {children}
     </Paper>
   );
@@ -114,7 +129,41 @@ function ChartEmpty({ message }: { message: string }) {
   );
 }
 
+type ChartMode = "line" | "bar";
+
+function ChartModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: ChartMode;
+  onChange: (mode: ChartMode) => void;
+}) {
+  return (
+    <ButtonGroup size="small" variant="outlined" aria-label="Chart type toggle">
+      <Button variant={mode === "line" ? "contained" : "outlined"} onClick={() => onChange("line")}>
+        Line
+      </Button>
+      <Button variant={mode === "bar" ? "contained" : "outlined"} onClick={() => onChange("bar")}>
+        Bar
+      </Button>
+    </ButtonGroup>
+  );
+}
+
 export default function TrendsPage() {
+  const [focusedChart, setFocusedChart] = useState<
+    | "efloat"
+    | "cash"
+    | "commission"
+    | "tx"
+    | "commission-leaders"
+    | null
+  >(null);
+  const [efloatMode, setEfloatMode] = useState<ChartMode>("line");
+  const [cashMode, setCashMode] = useState<ChartMode>("line");
+  const [commissionMode, setCommissionMode] = useState<ChartMode>("line");
+  const [txMode, setTxMode] = useState<ChartMode>("bar");
+  const [commissionLeaderMode, setCommissionLeaderMode] = useState<ChartMode>("bar");
   const [searchParams, setSearchParams] = useSearchParams();
 
   const initialDateTo = toInputDate(new Date());
@@ -277,137 +326,359 @@ export default function TrendsPage() {
               },
             }}
           >
-            <ChartCard title="E-Float Trend" subtitle="Daily closing line balances rolled up by branch">
+            <ChartCard
+              title="E-Float Trend"
+              subtitle="Daily closing line balances rolled up by branch"
+              onExpand={() => setFocusedChart("efloat")}
+            >
+              <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+                <ChartModeToggle mode={efloatMode} onChange={setEfloatMode} />
+              </Stack>
               {trendsQuery.data.cashTrend.length === 0 ? (
                 <ChartEmpty message="No metrics for selected filters." />
               ) : (
                 <Box sx={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendsQuery.data.cashTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
-                      <XAxis dataKey="date" tickFormatter={formatDateLabel} />
-                      <YAxis tickFormatter={formatCompactCurrency} />
-                      <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
-                      <Line
-                        type="monotone"
-                        dataKey="eFloatBalance"
-                        stroke={chartPalette.primary}
-                        strokeWidth={2}
-                        dot={false}
-                        name="E-Float"
-                      />
-                    </LineChart>
+                    {efloatMode === "line" ? (
+                      <LineChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Line type="monotone" dataKey="eFloatBalance" stroke={chartPalette.primary} strokeWidth={2} dot={false} name="E-Float" />
+                      </LineChart>
+                    ) : (
+                      <BarChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Bar dataKey="eFloatBalance" fill={chartPalette.primary} name="E-Float" />
+                      </BarChart>
+                    )}
                   </ResponsiveContainer>
                 </Box>
               )}
             </ChartCard>
 
-            <ChartCard title="Cash In / Out Value" subtitle="Daily deposit and withdrawal values with exact total transaction value">
+            <ChartCard
+              title="Cash In / Out Value"
+              subtitle="Daily deposit and withdrawal values with exact total transaction value"
+              onExpand={() => setFocusedChart("cash")}
+            >
+              <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+                <ChartModeToggle mode={cashMode} onChange={setCashMode} />
+              </Stack>
               {trendsQuery.data.cashTrend.length === 0 ? (
                 <ChartEmpty message="No metrics for selected filters." />
               ) : (
                 <Box sx={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={trendsQuery.data.cashTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
-                      <XAxis dataKey="date" tickFormatter={formatDateLabel} />
-                      <YAxis tickFormatter={formatCompactCurrency} />
-                      <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
-                      <Legend />
-                      <Bar dataKey="cashInValue" fill={chartPalette.secondary} name="Cash In" />
-                      <Bar dataKey="cashOutValue" fill={chartPalette.warning} name="Cash Out" />
-                      <Line
-                        type="monotone"
-                        dataKey="totalTransactionValue"
-                        stroke={chartPalette.primary}
-                        strokeWidth={2}
-                        dot={false}
-                        name="Total Transaction Value"
-                      />
-                    </ComposedChart>
+                    {cashMode === "line" ? (
+                      <ComposedChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Legend />
+                        <Bar dataKey="cashInValue" fill={chartPalette.secondary} name="Cash In" />
+                        <Bar dataKey="cashOutValue" fill={chartPalette.warning} name="Cash Out" />
+                        <Line type="monotone" dataKey="totalTransactionValue" stroke={chartPalette.primary} strokeWidth={2} dot={false} name="Total Transaction Value" />
+                      </ComposedChart>
+                    ) : (
+                      <BarChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Legend />
+                        <Bar dataKey="cashInValue" fill={chartPalette.secondary} name="Cash In" />
+                        <Bar dataKey="cashOutValue" fill={chartPalette.warning} name="Cash Out" />
+                        <Bar dataKey="totalTransactionValue" fill={chartPalette.primary} name="Total Transaction Value" />
+                      </BarChart>
+                    )}
                   </ResponsiveContainer>
                 </Box>
               )}
             </ChartCard>
 
-            <ChartCard title="Commission Trend" subtitle="Daily total commission from the source summary">
+            <ChartCard
+              title="Commission Trend"
+              subtitle="Daily total commission from the source summary"
+              onExpand={() => setFocusedChart("commission")}
+            >
+              <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+                <ChartModeToggle mode={commissionMode} onChange={setCommissionMode} />
+              </Stack>
               {trendsQuery.data.cashTrend.length === 0 ? (
                 <ChartEmpty message="No metrics for selected filters." />
               ) : (
                 <Box sx={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendsQuery.data.cashTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
-                      <XAxis dataKey="date" tickFormatter={formatDateLabel} />
-                      <YAxis tickFormatter={formatCompactCurrency} />
-                      <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
-                      <Line
-                        type="monotone"
-                        dataKey="totalCommission"
-                        stroke={chartPalette.tertiary}
-                        strokeWidth={2}
-                        dot={false}
-                        name="Total Commission"
-                      />
-                    </LineChart>
+                    {commissionMode === "line" ? (
+                      <LineChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Line type="monotone" dataKey="totalCommission" stroke={chartPalette.tertiary} strokeWidth={2} dot={false} name="Total Commission" />
+                      </LineChart>
+                    ) : (
+                      <BarChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Bar dataKey="totalCommission" fill={chartPalette.tertiary} name="Total Commission" />
+                      </BarChart>
+                    )}
                   </ResponsiveContainer>
                 </Box>
               )}
             </ChartCard>
 
-            <ChartCard title="Branch Transaction Leaders" subtitle="Top branches in the selected window by transaction value">
+            <ChartCard
+              title="Branch Transaction Leaders"
+              subtitle="Top branches in the selected window by transaction value"
+              onExpand={() => setFocusedChart("tx")}
+            >
+              <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+                <ChartModeToggle mode={txMode} onChange={setTxMode} />
+              </Stack>
               {trendsQuery.data.branchPerformance.length === 0 ? (
                 <ChartEmpty message="No branch performance data." />
               ) : (
                 <Box sx={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={trendsQuery.data.branchPerformance}
-                      layout="vertical"
-                      margin={{ left: 10, right: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
-                      <XAxis type="number" tickFormatter={formatCompactCurrency} />
-                      <YAxis type="category" dataKey="branchName" width={150} />
-                      <Tooltip formatter={formatTooltipMoney} />
-                      <Bar
-                        dataKey="totalTransactionValue"
-                        fill={chartPalette.primary}
-                        name="Transaction Value"
-                      />
-                    </BarChart>
+                    {txMode === "bar" ? (
+                      <BarChart data={trendsQuery.data.branchPerformance} layout="vertical" margin={{ left: 10, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis type="number" tickFormatter={formatCompactCurrency} />
+                        <YAxis type="category" dataKey="branchName" width={150} />
+                        <Tooltip formatter={formatTooltipMoney} />
+                        <Bar dataKey="totalTransactionValue" fill={chartPalette.primary} name="Transaction Value" />
+                      </BarChart>
+                    ) : (
+                      <LineChart data={trendsQuery.data.branchPerformance}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis type="category" dataKey="branchName" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} />
+                        <Line type="monotone" dataKey="totalTransactionValue" stroke={chartPalette.primary} strokeWidth={2} dot={false} name="Transaction Value" />
+                      </LineChart>
+                    )}
                   </ResponsiveContainer>
                 </Box>
               )}
             </ChartCard>
 
-            <ChartCard title="Branch Commission Leaders" subtitle="Top branches in the selected window by commission earned">
+            <ChartCard
+              title="Branch Commission Leaders"
+              subtitle="Top branches in the selected window by commission earned"
+              onExpand={() => setFocusedChart("commission-leaders")}
+            >
+              <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+                <ChartModeToggle mode={commissionLeaderMode} onChange={setCommissionLeaderMode} />
+              </Stack>
               {trendsQuery.data.branchPerformance.length === 0 ? (
                 <ChartEmpty message="No branch performance data." />
               ) : (
                 <Box sx={{ height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={trendsQuery.data.branchPerformance}
-                      layout="vertical"
-                      margin={{ left: 10, right: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
-                      <XAxis type="number" tickFormatter={formatCompactCurrency} />
-                      <YAxis type="category" dataKey="branchName" width={150} />
-                      <Tooltip formatter={formatTooltipMoney} />
-                      <Bar
-                        dataKey="totalCommission"
-                        fill={chartPalette.tertiary}
-                        name="Commission"
-                      />
-                    </BarChart>
+                    {commissionLeaderMode === "bar" ? (
+                      <BarChart data={trendsQuery.data.branchPerformance} layout="vertical" margin={{ left: 10, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis type="number" tickFormatter={formatCompactCurrency} />
+                        <YAxis type="category" dataKey="branchName" width={150} />
+                        <Tooltip formatter={formatTooltipMoney} />
+                        <Bar dataKey="totalCommission" fill={chartPalette.tertiary} name="Commission" />
+                      </BarChart>
+                    ) : (
+                      <LineChart data={trendsQuery.data.branchPerformance}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis type="category" dataKey="branchName" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} />
+                        <Line type="monotone" dataKey="totalCommission" stroke={chartPalette.tertiary} strokeWidth={2} dot={false} name="Commission" />
+                      </LineChart>
+                    )}
                   </ResponsiveContainer>
                 </Box>
               )}
             </ChartCard>
           </Box>
         </>
+      ) : null}
+
+      {trendsQuery.data ? (
+        <FocusDialog
+          open={focusedChart !== null}
+          onClose={() => setFocusedChart(null)}
+          title={
+            focusedChart === "efloat"
+              ? "E-Float Trend"
+              : focusedChart === "cash"
+                ? "Cash In / Out Value"
+                : focusedChart === "commission"
+                  ? "Commission Trend"
+                  : focusedChart === "tx"
+                    ? "Branch Transaction Leaders"
+                    : "Branch Commission Leaders"
+          }
+          subtitle="Expanded view with larger canvas and the same selected date range."
+        >
+          <Stack spacing={2}>
+            <Box
+              sx={{
+                display: "grid",
+                gap: 1,
+                gridTemplateColumns: {
+                  xs: "repeat(2, minmax(0, 1fr))",
+                  md: "repeat(4, minmax(0, 1fr))",
+                },
+              }}
+            >
+              <StatCard label="Latest E-Float" value={formatCurrency(trendsQuery.data.kpis.latestTotalEFloat)} />
+              <StatCard label="Transaction Value" value={formatCurrency(trendsQuery.data.kpis.totalTransactionValue)} />
+              <StatCard label="Transaction Volume" value={trendsQuery.data.kpis.totalTransactionVolume.toLocaleString()} />
+              <StatCard label="Commission" value={formatCurrency(trendsQuery.data.kpis.totalCommission)} />
+            </Box>
+
+            <Paper sx={{ p: 2, ...glassPanelSx }}>
+              {focusedChart === "efloat" ? (
+                <Box sx={{ height: "68vh" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    {efloatMode === "line" ? (
+                      <LineChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Line type="monotone" dataKey="eFloatBalance" stroke={chartPalette.primary} strokeWidth={2} dot={false} name="E-Float" />
+                      </LineChart>
+                    ) : (
+                      <BarChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Bar dataKey="eFloatBalance" fill={chartPalette.primary} name="E-Float" />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </Box>
+              ) : focusedChart === "cash" ? (
+                <Box sx={{ height: "68vh" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    {cashMode === "line" ? (
+                      <ComposedChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Legend />
+                        <Bar dataKey="cashInValue" fill={chartPalette.secondary} name="Cash In" />
+                        <Bar dataKey="cashOutValue" fill={chartPalette.warning} name="Cash Out" />
+                        <Line type="monotone" dataKey="totalTransactionValue" stroke={chartPalette.primary} strokeWidth={2} dot={false} name="Total Transaction Value" />
+                      </ComposedChart>
+                    ) : (
+                      <BarChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Legend />
+                        <Bar dataKey="cashInValue" fill={chartPalette.secondary} name="Cash In" />
+                        <Bar dataKey="cashOutValue" fill={chartPalette.warning} name="Cash Out" />
+                        <Bar dataKey="totalTransactionValue" fill={chartPalette.primary} name="Total Transaction Value" />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </Box>
+              ) : focusedChart === "commission" ? (
+                <Box sx={{ height: "68vh" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    {commissionMode === "line" ? (
+                      <LineChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Line type="monotone" dataKey="totalCommission" stroke={chartPalette.tertiary} strokeWidth={2} dot={false} name="Total Commission" />
+                      </LineChart>
+                    ) : (
+                      <BarChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} labelFormatter={formatTooltipLabel} />
+                        <Bar dataKey="totalCommission" fill={chartPalette.tertiary} name="Total Commission" />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </Box>
+              ) : focusedChart === "tx" ? (
+                <Box sx={{ height: "68vh" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    {txMode === "bar" ? (
+                      <BarChart data={trendsQuery.data.branchPerformance} layout="vertical" margin={{ left: 10, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis type="number" tickFormatter={formatCompactCurrency} />
+                        <YAxis type="category" dataKey="branchName" width={180} />
+                        <Tooltip formatter={formatTooltipMoney} />
+                        <Bar dataKey="totalTransactionValue" fill={chartPalette.primary} name="Transaction Value" />
+                      </BarChart>
+                    ) : (
+                      <LineChart data={trendsQuery.data.branchPerformance}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis type="category" dataKey="branchName" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} />
+                        <Line type="monotone" dataKey="totalTransactionValue" stroke={chartPalette.primary} strokeWidth={2} dot={false} name="Transaction Value" />
+                      </LineChart>
+                    )}
+                  </ResponsiveContainer>
+                </Box>
+              ) : (
+                <Box sx={{ height: "68vh" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    {commissionLeaderMode === "bar" ? (
+                      <BarChart data={trendsQuery.data.branchPerformance} layout="vertical" margin={{ left: 10, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis type="number" tickFormatter={formatCompactCurrency} />
+                        <YAxis type="category" dataKey="branchName" width={180} />
+                        <Tooltip formatter={formatTooltipMoney} />
+                        <Bar dataKey="totalCommission" fill={chartPalette.tertiary} name="Commission" />
+                      </BarChart>
+                    ) : (
+                      <LineChart data={trendsQuery.data.branchPerformance}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis type="category" dataKey="branchName" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={formatTooltipMoney} />
+                        <Line type="monotone" dataKey="totalCommission" stroke={chartPalette.tertiary} strokeWidth={2} dot={false} name="Commission" />
+                      </LineChart>
+                    )}
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </Paper>
+
+            <Divider />
+
+            <Stack spacing={1.2}>
+              <Typography variant="subtitle2" fontWeight={700}>Daily detail</Typography>
+              {trendsQuery.data.cashTrend.slice(-8).map((point) => (
+                <Paper key={point.date} variant="outlined" sx={{ p: 1.5 }}>
+                  <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={1}>
+                    <Typography variant="body2" fontWeight={700}>{point.date}</Typography>
+                    <Typography variant="body2">E-Float {formatCurrency(point.eFloatBalance)} | Txn {formatCurrency(point.totalTransactionValue)} | Commission {formatCurrency(point.totalCommission)}</Typography>
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
+          </Stack>
+        </FocusDialog>
       ) : null}
     </section>
   );

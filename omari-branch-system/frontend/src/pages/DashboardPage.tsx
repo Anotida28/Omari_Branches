@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   Building2,
   DollarSign,
@@ -11,6 +12,8 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Bar,
+  BarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -19,6 +22,8 @@ import {
 import {
   Alert,
   Box,
+  Button,
+  ButtonGroup,
   Chip,
   Divider,
   Paper,
@@ -33,6 +38,7 @@ import { fetchDashboardOverview } from "../services/dashboard";
 import { formatCurrency } from "../services/format";
 import { fetchTrendsData } from "../services/trends";
 import { ErrorState } from "../shared/components/ErrorState";
+import { FocusDialog } from "../shared/components/FocusDialog";
 import { RankingList } from "../shared/components/RankingList";
 import { StatCard } from "../shared/components/StatCard";
 
@@ -85,7 +91,30 @@ function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+type ChartMode = "line" | "bar";
+
+function ChartModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: ChartMode;
+  onChange: (mode: ChartMode) => void;
+}) {
+  return (
+    <ButtonGroup size="small" variant="outlined" aria-label="Chart type toggle">
+      <Button variant={mode === "line" ? "contained" : "outlined"} onClick={() => onChange("line")}>
+        Line
+      </Button>
+      <Button variant={mode === "bar" ? "contained" : "outlined"} onClick={() => onChange("bar")}>
+        Bar
+      </Button>
+    </ButtonGroup>
+  );
+}
+
 export default function DashboardPage() {
+  const [performanceExpanded, setPerformanceExpanded] = useState(false);
+  const [performanceMode, setPerformanceMode] = useState<ChartMode>("line");
   const overviewQuery = useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: fetchDashboardOverview,
@@ -177,7 +206,13 @@ export default function DashboardPage() {
             <Typography variant="subtitle1" fontWeight={700}>
               Performance Snapshot
             </Typography>
-            <Chip size="small" icon={<TrendingUp size={14} />} label="30 days" color="success" />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip size="small" icon={<TrendingUp size={14} />} label="30 days" color="success" />
+              <ChartModeToggle mode={performanceMode} onChange={setPerformanceMode} />
+              <Button size="small" variant="outlined" onClick={() => setPerformanceExpanded(true)}>
+                Expand
+              </Button>
+            </Stack>
           </Stack>
           {trendsQuery.data ? (
             <Box
@@ -240,25 +275,29 @@ export default function DashboardPage() {
           ) : trendsQuery.data?.cashTrend.length ? (
             <Box sx={{ height: 300 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendsQuery.data.cashTrend}>
-                  <defs>
-                    <linearGradient id="cashArea" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={chartPalette.primary} stopOpacity={0.34} />
-                      <stop offset="95%" stopColor={chartPalette.primary} stopOpacity={0.04} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip content={<PerformanceTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="eFloatBalance"
-                    stroke={chartPalette.primary}
-                    fill="url(#cashArea)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
+                {performanceMode === "line" ? (
+                  <AreaChart data={trendsQuery.data.cashTrend}>
+                    <defs>
+                      <linearGradient id="cashArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={chartPalette.primary} stopOpacity={0.34} />
+                        <stop offset="95%" stopColor={chartPalette.primary} stopOpacity={0.04} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip content={<PerformanceTooltip />} />
+                    <Area type="monotone" dataKey="eFloatBalance" stroke={chartPalette.primary} fill="url(#cashArea)" strokeWidth={2} />
+                  </AreaChart>
+                ) : (
+                  <BarChart data={trendsQuery.data.cashTrend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip content={<PerformanceTooltip />} />
+                    <Bar dataKey="eFloatBalance" fill={chartPalette.primary} />
+                  </BarChart>
+                )}
               </ResponsiveContainer>
             </Box>
           ) : (
@@ -301,6 +340,71 @@ export default function DashboardPage() {
             </>
           ) : null}
         </Paper>
+
+        {trendsQuery.data ? (
+          <FocusDialog
+            open={performanceExpanded}
+            onClose={() => setPerformanceExpanded(false)}
+            title="Performance Snapshot"
+            subtitle="Expanded analytics view with more room for the chart and daily breakdown."
+          >
+            <Stack spacing={2}>
+              <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", md: "repeat(4, minmax(0, 1fr))" } }}>
+                <StatCard label="Latest E-Float" value={formatCurrency(trendsQuery.data.kpis.latestTotalEFloat)} />
+                <StatCard label="Transaction Value" value={formatCurrency(trendsQuery.data.kpis.totalTransactionValue)} />
+                <StatCard label="Transaction Volume" value={trendsQuery.data.kpis.totalTransactionVolume.toLocaleString()} />
+                <StatCard label="Commission" value={formatCurrency(trendsQuery.data.kpis.totalCommission)} />
+              </Box>
+
+              <Paper sx={{ p: 2, ...glassPanelSx }}>
+                <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+                  <ChartModeToggle mode={performanceMode} onChange={setPerformanceMode} />
+                </Stack>
+                <Box sx={{ height: "62vh" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    {performanceMode === "line" ? (
+                      <AreaChart data={trendsQuery.data.cashTrend}>
+                        <defs>
+                          <linearGradient id="cashAreaExpand" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={chartPalette.primary} stopOpacity={0.34} />
+                            <stop offset="95%" stopColor={chartPalette.primary} stopOpacity={0.04} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip content={<PerformanceTooltip />} />
+                        <Area type="monotone" dataKey="eFloatBalance" stroke={chartPalette.primary} fill="url(#cashAreaExpand)" strokeWidth={2} />
+                      </AreaChart>
+                    ) : (
+                      <BarChart data={trendsQuery.data.cashTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} />
+                        <Tooltip content={<PerformanceTooltip />} />
+                        <Bar dataKey="eFloatBalance" fill={chartPalette.primary} />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </Box>
+              </Paper>
+
+              <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
+                {trendsQuery.data.cashTrend.slice(-8).map((point) => (
+                  <Paper key={point.date} variant="outlined" sx={{ p: 1.4 }}>
+                    <Stack spacing={0.4}>
+                      <Typography variant="subtitle2" fontWeight={700}>{point.date}</Typography>
+                      <Typography variant="body2">E-Float: {formatCurrency(point.eFloatBalance)}</Typography>
+                      <Typography variant="body2">Cash In: {formatCurrency(point.cashInValue)} | Cash Out: {formatCurrency(point.cashOutValue)}</Typography>
+                      <Typography variant="body2">Txn Value: {formatCurrency(point.totalTransactionValue)} | Commission: {formatCurrency(point.totalCommission)}</Typography>
+                      <Typography variant="body2">Net Cash: {formatCurrency(point.netCashValue)}</Typography>
+                    </Stack>
+                  </Paper>
+                ))}
+              </Box>
+            </Stack>
+          </FocusDialog>
+        ) : null}
 
         <Paper sx={{ p: 2.2, ...glassPanelSx }}>
             <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
