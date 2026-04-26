@@ -11,7 +11,14 @@ import LoginPage from "../pages/LoginPage";
 import MetricsPage from "../pages/MetricsPage";
 import ReportsPage from "../pages/ReportsPage";
 import SettingsPage from "../pages/SettingsPage";
+import WalletCustomer360Page from "../pages/WalletCustomer360Page";
+import WalletCustomerActivityPage from "../pages/WalletCustomerActivityPage";
+import WalletInsightsAlertsPage from "../pages/WalletInsightsAlertsPage";
+import WalletLiquidityPage from "../pages/WalletLiquidityPage";
 import WalletOverviewPage from "../pages/WalletOverviewPage";
+import WalletRetentionDormancyPage from "../pages/WalletRetentionDormancyPage";
+import WalletRevenuePerformancePage from "../pages/WalletRevenuePerformancePage";
+import WalletTransactionPerformancePage from "../pages/WalletTransactionPerformancePage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 const TrendsPage = lazy(() => import("../pages/TrendsPage"));
@@ -63,6 +70,14 @@ export function AppRoutes() {
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/wallet/overview" element={<WalletOverviewPage />} />
+        <Route path="/wallet/customer-activity" element={<WalletCustomerActivityPage />} />
+        <Route path="/wallet/retention-dormancy" element={<WalletRetentionDormancyPage />} />
+        <Route path="/wallet/transaction-performance" element={<WalletTransactionPerformancePage />} />
+        <Route path="/wallet/revenue" element={<WalletRevenuePerformancePage />} />
+        <Route path="/wallet/revenue-performance" element={<Navigate to="/wallet/revenue" replace />} />
+        <Route path="/wallet/liquidity" element={<WalletLiquidityPage />} />
+        <Route path="/wallet/customer-360" element={<WalletCustomer360Page />} />
+        <Route path="/wallet/insights-alerts" element={<WalletInsightsAlertsPage />} />
       </Route>
 
       <Route

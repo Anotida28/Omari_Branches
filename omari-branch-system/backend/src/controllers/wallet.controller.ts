@@ -3,7 +3,15 @@ import { z } from "zod";
 
 import {
   WalletServiceError,
+  getWalletCustomer360Detail,
+  getWalletCustomerActivityGrowth,
+  getWalletInsightsAlerts,
+  getWalletLiquidity,
+  getWalletRetentionDormancy,
   getWalletOverview,
+  getWalletRevenuePerformance,
+  getWalletTransactionPerformance,
+  listWalletCustomer360,
 } from "../services/wallet.service";
 import { runWalletCustomerActivitySyncJobWithLock } from "../jobs/wallet-customer-activity-sync.job";
 
@@ -80,6 +88,69 @@ const overviewQuerySchema = z
   })
   .strict();
 
+const customerActivityQuerySchema = z
+  .object({
+    dateFrom: dateSchema,
+    dateTo: dateSchema,
+  })
+  .strict();
+
+const retentionQuerySchema = z
+  .object({
+    dateFrom: dateSchema,
+    dateTo: dateSchema,
+    asOfDate: dateSchema.optional(),
+  })
+  .strict();
+
+const transactionPerformanceQuerySchema = z
+  .object({
+    dateFrom: dateSchema,
+    dateTo: dateSchema,
+  })
+  .strict();
+
+const revenuePerformanceQuerySchema = z
+  .object({
+    dateFrom: dateSchema,
+    dateTo: dateSchema,
+  })
+  .strict();
+
+const liquidityQuerySchema = z
+  .object({
+    dateFrom: dateSchema,
+    dateTo: dateSchema,
+    asOfDate: dateSchema.optional(),
+  })
+  .strict();
+
+const customer360ListQuerySchema = z
+  .object({
+    search: z.string().trim().max(120).optional(),
+    status: z.enum(["all", "active_a30", "dormant_90"]).optional(),
+    page: z.coerce.number().int().min(1).max(10000).default(1),
+    pageSize: z.coerce.number().int().min(5).max(100).default(25),
+    asOfDate: dateSchema.optional(),
+  })
+  .strict();
+
+const customer360DetailQuerySchema = z
+  .object({
+    dateFrom: dateSchema,
+    dateTo: dateSchema,
+    asOfDate: dateSchema.optional(),
+  })
+  .strict();
+
+const insightsAlertsQuerySchema = z
+  .object({
+    dateFrom: dateSchema,
+    dateTo: dateSchema,
+    asOfDate: dateSchema.optional(),
+  })
+  .strict();
+
 function handleServiceError(res: Response, error: unknown): boolean {
   if (error instanceof WalletServiceError) {
     res.status(error.status).json({ error: error.message });
@@ -125,6 +196,334 @@ export async function getWalletOverviewHandler(
       compare: parsedQuery.data.compare ?? true,
     });
 
+    res.json({ data });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+
+    next(error);
+  }
+}
+
+export async function getWalletCustomerActivityGrowthHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const queryInput = {
+    dateFrom: normalizeQueryValue(req.query.dateFrom),
+    dateTo: normalizeQueryValue(req.query.dateTo),
+  };
+
+  const parsedQuery = customerActivityQuerySchema.safeParse(queryInput);
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  if (parsedQuery.data.dateFrom > parsedQuery.data.dateTo) {
+    res.status(400).json({
+      error: "dateFrom must be less than or equal to dateTo",
+    });
+    return;
+  }
+
+  try {
+    const data = await getWalletCustomerActivityGrowth(parsedQuery.data);
+    res.json({ data });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+
+    next(error);
+  }
+}
+
+export async function getWalletRetentionDormancyHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const queryInput = {
+    dateFrom: normalizeQueryValue(req.query.dateFrom),
+    dateTo: normalizeQueryValue(req.query.dateTo),
+    asOfDate: normalizeQueryValue(req.query.asOfDate),
+  };
+
+  const parsedQuery = retentionQuerySchema.safeParse(queryInput);
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  if (parsedQuery.data.dateFrom > parsedQuery.data.dateTo) {
+    res.status(400).json({
+      error: "dateFrom must be less than or equal to dateTo",
+    });
+    return;
+  }
+
+  try {
+    const data = await getWalletRetentionDormancy({
+      dateFrom: parsedQuery.data.dateFrom,
+      dateTo: parsedQuery.data.dateTo,
+      asOfDate: parsedQuery.data.asOfDate ?? parsedQuery.data.dateTo,
+    });
+    res.json({ data });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+
+    next(error);
+  }
+}
+
+export async function getWalletTransactionPerformanceHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const queryInput = {
+    dateFrom: normalizeQueryValue(req.query.dateFrom),
+    dateTo: normalizeQueryValue(req.query.dateTo),
+  };
+
+  const parsedQuery = transactionPerformanceQuerySchema.safeParse(queryInput);
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  if (parsedQuery.data.dateFrom > parsedQuery.data.dateTo) {
+    res.status(400).json({
+      error: "dateFrom must be less than or equal to dateTo",
+    });
+    return;
+  }
+
+  try {
+    const data = await getWalletTransactionPerformance(parsedQuery.data);
+    res.json({ data });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+
+    next(error);
+  }
+}
+
+export async function getWalletRevenuePerformanceHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const queryInput = {
+    dateFrom: normalizeQueryValue(req.query.dateFrom),
+    dateTo: normalizeQueryValue(req.query.dateTo),
+  };
+
+  const parsedQuery = revenuePerformanceQuerySchema.safeParse(queryInput);
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  if (parsedQuery.data.dateFrom > parsedQuery.data.dateTo) {
+    res.status(400).json({
+      error: "dateFrom must be less than or equal to dateTo",
+    });
+    return;
+  }
+
+  try {
+    const data = await getWalletRevenuePerformance(parsedQuery.data);
+    res.json({ data });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+
+    next(error);
+  }
+}
+
+export async function getWalletLiquidityHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const queryInput = {
+    dateFrom: normalizeQueryValue(req.query.dateFrom),
+    dateTo: normalizeQueryValue(req.query.dateTo),
+    asOfDate: normalizeQueryValue(req.query.asOfDate),
+  };
+
+  const parsedQuery = liquidityQuerySchema.safeParse(queryInput);
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  if (parsedQuery.data.dateFrom > parsedQuery.data.dateTo) {
+    res.status(400).json({
+      error: "dateFrom must be less than or equal to dateTo",
+    });
+    return;
+  }
+
+  try {
+    const data = await getWalletLiquidity({
+      dateFrom: parsedQuery.data.dateFrom,
+      dateTo: parsedQuery.data.dateTo,
+      asOfDate: parsedQuery.data.asOfDate ?? parsedQuery.data.dateTo,
+    });
+    res.json({ data });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+
+    next(error);
+  }
+}
+
+export async function listWalletCustomer360Handler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const queryInput = {
+    search: normalizeQueryValue(req.query.search),
+    status: normalizeQueryValue(req.query.status),
+    page: normalizeQueryValue(req.query.page),
+    pageSize: normalizeQueryValue(req.query.pageSize),
+    asOfDate: normalizeQueryValue(req.query.asOfDate),
+  };
+
+  const parsedQuery = customer360ListQuerySchema.safeParse(queryInput);
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  try {
+    const data = await listWalletCustomer360({
+      search: parsedQuery.data.search,
+      status: parsedQuery.data.status ?? "all",
+      page: parsedQuery.data.page,
+      pageSize: parsedQuery.data.pageSize,
+      asOfDate: parsedQuery.data.asOfDate ?? new Date(),
+    });
+    res.json({ data });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+
+    next(error);
+  }
+}
+
+export async function getWalletCustomer360DetailHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const customerId = typeof req.params.customerId === "string" ? req.params.customerId : "";
+  const queryInput = {
+    dateFrom: normalizeQueryValue(req.query.dateFrom),
+    dateTo: normalizeQueryValue(req.query.dateTo),
+    asOfDate: normalizeQueryValue(req.query.asOfDate),
+  };
+
+  const parsedQuery = customer360DetailQuerySchema.safeParse(queryInput);
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  if (parsedQuery.data.dateFrom > parsedQuery.data.dateTo) {
+    res.status(400).json({
+      error: "dateFrom must be less than or equal to dateTo",
+    });
+    return;
+  }
+
+  try {
+    const data = await getWalletCustomer360Detail({
+      customerId,
+      dateFrom: parsedQuery.data.dateFrom,
+      dateTo: parsedQuery.data.dateTo,
+      asOfDate: parsedQuery.data.asOfDate ?? parsedQuery.data.dateTo,
+    });
+    res.json({ data });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+
+    next(error);
+  }
+}
+
+export async function getWalletInsightsAlertsHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const queryInput = {
+    dateFrom: normalizeQueryValue(req.query.dateFrom),
+    dateTo: normalizeQueryValue(req.query.dateTo),
+    asOfDate: normalizeQueryValue(req.query.asOfDate),
+  };
+
+  const parsedQuery = insightsAlertsQuerySchema.safeParse(queryInput);
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  if (parsedQuery.data.dateFrom > parsedQuery.data.dateTo) {
+    res.status(400).json({
+      error: "dateFrom must be less than or equal to dateTo",
+    });
+    return;
+  }
+
+  try {
+    const data = await getWalletInsightsAlerts({
+      dateFrom: parsedQuery.data.dateFrom,
+      dateTo: parsedQuery.data.dateTo,
+      asOfDate: parsedQuery.data.asOfDate ?? parsedQuery.data.dateTo,
+    });
     res.json({ data });
   } catch (error) {
     if (handleServiceError(res, error)) {
