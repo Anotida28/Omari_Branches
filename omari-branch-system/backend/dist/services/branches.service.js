@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BranchServiceError = void 0;
+exports.validateBranchAgentLine = validateBranchAgentLine;
 exports.listBranches = listBranches;
 exports.getBranchById = getBranchById;
 exports.createBranch = createBranch;
@@ -129,6 +130,58 @@ async function assertAgentLinesAreSafe(agentLineNumbers, currentBranchId) {
             .slice(0, 10)
             .join(", ")}`, 400);
     }
+}
+async function validateBranchAgentLine(lineNumberInput, currentBranchId) {
+    const lineNumber = lineNumberInput.trim();
+    if (!lineNumber) {
+        throw new BranchServiceError("Agent line number is required.", 400);
+    }
+    const sourceConfigured = (0, source_agent_metrics_service_1.isSourceMetricsConfigured)();
+    const [conflicts, sourceAgents] = await Promise.all([
+        findActiveLineConflicts([lineNumber], currentBranchId),
+        sourceConfigured
+            ? (0, source_agent_metrics_service_1.findSourceAgentsByLineNumbers)([lineNumber])
+            : Promise.resolve(new Map()),
+    ]);
+    const sourceAgent = sourceAgents.get(lineNumber) ?? null;
+    if (conflicts.length > 0) {
+        return {
+            lineNumber,
+            isAvailable: false,
+            status: "already_assigned",
+            message: `This line is already assigned to ${conflicts[0].branchName}.`,
+            conflictingBranchName: conflicts[0].branchName,
+            sourceAgent,
+        };
+    }
+    if (!sourceConfigured) {
+        return {
+            lineNumber,
+            isAvailable: true,
+            status: "unverified",
+            message: "Source metrics database is not configured, so this line could not be verified there.",
+            conflictingBranchName: null,
+            sourceAgent: null,
+        };
+    }
+    if (!sourceAgent) {
+        return {
+            lineNumber,
+            isAvailable: false,
+            status: "not_found",
+            message: "This line was not found in the source metrics database.",
+            conflictingBranchName: null,
+            sourceAgent: null,
+        };
+    }
+    return {
+        lineNumber,
+        isAvailable: true,
+        status: "available",
+        message: "This line is available and ready to add.",
+        conflictingBranchName: null,
+        sourceAgent,
+    };
 }
 function toBranchResponse(branch) {
     return {

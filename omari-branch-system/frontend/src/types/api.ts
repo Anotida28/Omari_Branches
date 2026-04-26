@@ -75,6 +75,29 @@ export type CreateBranchInput = {
 
 export type UpdateBranchInput = Partial<CreateBranchInput>;
 
+export type SourceAgentReference = {
+  lineNumber: string;
+  agentAccount: string;
+  customerId: string | null;
+  fullName: string | null;
+  mobileNumber: string | null;
+};
+
+export type BranchAgentLineValidationStatus =
+  | "available"
+  | "already_assigned"
+  | "not_found"
+  | "unverified";
+
+export type BranchAgentLineValidation = {
+  lineNumber: string;
+  isAvailable: boolean;
+  status: BranchAgentLineValidationStatus;
+  message: string;
+  conflictingBranchName: string | null;
+  sourceAgent: SourceAgentReference | null;
+};
+
 export type BranchMetric = {
   id: string;
   branchId: string;

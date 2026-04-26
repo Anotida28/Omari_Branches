@@ -4,6 +4,7 @@ import { prisma } from "../db/prisma";
 import {
   findSourceAgentsByLineNumbers,
   isSourceMetricsConfigured,
+  type SourceAgentReference,
 } from "./source-agent-metrics.service";
 
 export class BranchServiceError extends Error {
@@ -65,6 +66,21 @@ export type BranchListResult = {
   page: number;
   pageSize: number;
   total: number;
+};
+
+export type BranchAgentLineValidationStatus =
+  | "available"
+  | "already_assigned"
+  | "not_found"
+  | "unverified";
+
+export type BranchAgentLineValidationResult = {
+  lineNumber: string;
+  isAvailable: boolean;
+  status: BranchAgentLineValidationStatus;
+  message: string;
+  conflictingBranchName: string | null;
+  sourceAgent: SourceAgentReference | null;
 };
 
 function normalizeAgentLineNumbers(
@@ -235,6 +251,70 @@ async function assertAgentLinesAreSafe(
       400,
     );
   }
+}
+
+export async function validateBranchAgentLine(
+  lineNumberInput: string,
+  currentBranchId?: bigint,
+): Promise<BranchAgentLineValidationResult> {
+  const lineNumber = lineNumberInput.trim();
+
+  if (!lineNumber) {
+    throw new BranchServiceError("Agent line number is required.", 400);
+  }
+
+  const sourceConfigured = isSourceMetricsConfigured();
+  const [conflicts, sourceAgents] = await Promise.all([
+    findActiveLineConflicts([lineNumber], currentBranchId),
+    sourceConfigured
+      ? findSourceAgentsByLineNumbers([lineNumber])
+      : Promise.resolve(new Map<string, SourceAgentReference>()),
+  ]);
+
+  const sourceAgent = sourceAgents.get(lineNumber) ?? null;
+
+  if (conflicts.length > 0) {
+    return {
+      lineNumber,
+      isAvailable: false,
+      status: "already_assigned",
+      message: `This line is already assigned to ${conflicts[0].branchName}.`,
+      conflictingBranchName: conflicts[0].branchName,
+      sourceAgent,
+    };
+  }
+
+  if (!sourceConfigured) {
+    return {
+      lineNumber,
+      isAvailable: true,
+      status: "unverified",
+      message:
+        "Source metrics database is not configured, so this line could not be verified there.",
+      conflictingBranchName: null,
+      sourceAgent: null,
+    };
+  }
+
+  if (!sourceAgent) {
+    return {
+      lineNumber,
+      isAvailable: false,
+      status: "not_found",
+      message: "This line was not found in the source metrics database.",
+      conflictingBranchName: null,
+      sourceAgent: null,
+    };
+  }
+
+  return {
+    lineNumber,
+    isAvailable: true,
+    status: "available",
+    message: "This line is available and ready to add.",
+    conflictingBranchName: null,
+    sourceAgent,
+  };
 }
 
 function toBranchResponse(branch: BranchWithAgentLines): BranchResponse {

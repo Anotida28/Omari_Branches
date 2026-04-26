@@ -5,6 +5,7 @@ const branches_controller_1 = require("../controllers/branches.controller");
 const router = (0, express_1.Router)();
 router.post("/", branches_controller_1.createBranchHandler);
 router.get("/", branches_controller_1.listBranchesHandler);
+router.get("/validate-agent-line", branches_controller_1.validateBranchAgentLineHandler);
 router.get("/:id", branches_controller_1.getBranchByIdHandler);
 router.patch("/:id", branches_controller_1.updateBranchHandler);
 router.delete("/:id", branches_controller_1.deleteBranchHandler);

@@ -1,6 +1,7 @@
 import { api } from "./api";
 import type {
   ApiDataResponse,
+  BranchAgentLineValidation,
   Branch,
   BranchListParams,
   CreateBranchInput,
@@ -21,6 +22,22 @@ export async function createBranch(
   input: CreateBranchInput,
 ): Promise<Branch> {
   const { data } = await api.post<ApiDataResponse<Branch>>("/api/branches", input);
+  return data.data;
+}
+
+export async function validateBranchAgentLine(
+  lineNumber: string,
+  branchId?: string,
+): Promise<BranchAgentLineValidation> {
+  const { data } = await api.get<ApiDataResponse<BranchAgentLineValidation>>(
+    "/api/branches/validate-agent-line",
+    {
+      params: {
+        lineNumber,
+        branchId,
+      },
+    },
+  );
   return data.data;
 }
 

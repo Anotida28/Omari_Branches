@@ -28,20 +28,35 @@ import { Pagination } from "../components/ui/Pagination";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useAuth } from "../hooks/useAuth";
 import { getErrorMessage } from "../services/api";
-import { createBranch, deleteBranch, listBranches, updateBranch } from "../services/branches";
+import {
+  createBranch,
+  deleteBranch,
+  listBranches,
+  updateBranch,
+  validateBranchAgentLine,
+} from "../services/branches";
 import { ConfirmDialog } from "../shared/components/ConfirmDialog";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
-import type { Branch, CreateBranchInput } from "../types/api";
+import type { Branch, CreateBranchInput, SourceAgentReference } from "../types/api";
 
 const PAGE_SIZE = 10;
 
-const INITIAL_FORM: CreateBranchInput = {
-  city: "",
-  label: "",
-  address: "",
-  isActive: true,
-  agentLineNumbers: [],
+function createInitialForm(): CreateBranchInput {
+  return {
+    city: "",
+    label: "",
+    address: "",
+    isActive: true,
+    agentLineNumbers: [],
+  };
+}
+
+type AgentLineFeedback = {
+  severity: "success" | "warning" | "error" | "info";
+  message: string;
+  lineNumber?: string;
+  sourceAgent?: SourceAgentReference | null;
 };
 
 export default function BranchesPage() {
@@ -58,8 +73,11 @@ export default function BranchesPage() {
   const [search, setSearch] = useState(initialSearch);
   const [page, setPage] = useState(initialPage);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [form, setForm] = useState<CreateBranchInput>(INITIAL_FORM);
-  const [agentLinesText, setAgentLinesText] = useState("");
+  const [form, setForm] = useState<CreateBranchInput>(createInitialForm);
+  const [agentLineInput, setAgentLineInput] = useState("");
+  const [agentLineFeedback, setAgentLineFeedback] = useState<AgentLineFeedback | null>(
+    null,
+  );
   const [formError, setFormError] = useState("");
   const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
 
@@ -94,11 +112,13 @@ export default function BranchesPage() {
     mutationFn: createBranch,
     onSuccess: () => {
       setIsCreateOpen(false);
-      setForm(INITIAL_FORM);
-      setAgentLinesText("");
-      setFormError("");
+      resetCreateForm();
       queryClient.invalidateQueries({ queryKey: ["branches"] });
     },
+  });
+
+  const validateLineMutation = useMutation({
+    mutationFn: (lineNumber: string) => validateBranchAgentLine(lineNumber),
   });
 
   const toggleMutation = useMutation({
@@ -118,6 +138,18 @@ export default function BranchesPage() {
   });
 
   const rows = branchesQuery.data?.items ?? [];
+
+  const resetCreateForm = () => {
+    setForm(createInitialForm());
+    setAgentLineInput("");
+    setAgentLineFeedback(null);
+    setFormError("");
+  };
+
+  const closeCreateModal = () => {
+    setIsCreateOpen(false);
+    resetCreateForm();
+  };
 
   const errorMessage = useMemo(() => {
     if (branchesQuery.isError) {
@@ -152,16 +184,9 @@ export default function BranchesPage() {
       return;
     }
 
-    const parsedAgentLines = Array.from(
-      new Set(
-        agentLinesText
-          .split(",")
-          .map((lineNumber) => lineNumber.trim())
-          .filter((lineNumber) => lineNumber.length > 0),
-      ),
-    );
+    const approvedAgentLines = form.agentLineNumbers ?? [];
 
-    if (parsedAgentLines.length === 0) {
+    if (approvedAgentLines.length === 0) {
       setFormError("At least one agent line number is required.");
       return;
     }
@@ -172,8 +197,72 @@ export default function BranchesPage() {
       label: form.label.trim(),
       address: form.address?.trim() || undefined,
       isActive: form.isActive,
-      agentLineNumbers: parsedAgentLines,
+      agentLineNumbers: approvedAgentLines,
     });
+  };
+
+  const handleCheckAndAddAgentLine = async () => {
+    const lineNumber = agentLineInput.trim();
+
+    if (!lineNumber) {
+      setAgentLineFeedback({
+        severity: "warning",
+        message: "Enter one agent line number to check.",
+      });
+      return;
+    }
+
+    if ((form.agentLineNumbers ?? []).includes(lineNumber)) {
+      setAgentLineFeedback({
+        severity: "warning",
+        lineNumber,
+        message: "This line has already been added to the branch.",
+      });
+      return;
+    }
+
+    setFormError("");
+
+    try {
+      const result = await validateLineMutation.mutateAsync(lineNumber);
+      if (!result.isAvailable) {
+        setAgentLineFeedback({
+          severity:
+            result.status === "already_assigned" ? "warning" : "error",
+          lineNumber: result.lineNumber,
+          message: result.message,
+          sourceAgent: result.sourceAgent,
+        });
+        return;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        agentLineNumbers: [...(prev.agentLineNumbers ?? []), result.lineNumber],
+      }));
+      setAgentLineInput("");
+      setAgentLineFeedback({
+        severity: result.status === "unverified" ? "info" : "success",
+        lineNumber: result.lineNumber,
+        message: result.message,
+        sourceAgent: result.sourceAgent,
+      });
+    } catch (error) {
+      setAgentLineFeedback({
+        severity: "error",
+        lineNumber,
+        message: getErrorMessage(error),
+      });
+    }
+  };
+
+  const removeAgentLine = (lineNumber: string) => {
+    setForm((prev) => ({
+      ...prev,
+      agentLineNumbers: (prev.agentLineNumbers ?? []).filter(
+        (currentLine) => currentLine !== lineNumber,
+      ),
+    }));
   };
 
   return (
@@ -183,7 +272,10 @@ export default function BranchesPage() {
           variant="contained"
           startIcon={<Plus size={16} />}
           disabled={!canWrite}
-          onClick={() => setIsCreateOpen(true)}
+          onClick={() => {
+            resetCreateForm();
+            setIsCreateOpen(true);
+          }}
         >
           Create Branch
         </Button>
@@ -321,29 +413,17 @@ export default function BranchesPage() {
       <Modal
         open={isCreateOpen}
         title="Create Branch"
-        onClose={() => {
-          setIsCreateOpen(false);
-          setAgentLinesText("");
-          setFormError("");
-        }}
+        onClose={closeCreateModal}
         footer={
           <>
-            <Button
-              variant="text"
-              color="secondary"
-              onClick={() => {
-                setIsCreateOpen(false);
-                setAgentLinesText("");
-                setFormError("");
-              }}
-            >
+            <Button variant="text" color="secondary" onClick={closeCreateModal}>
               Cancel
             </Button>
             <Button
               type="submit"
               form="create-branch-form"
               variant="contained"
-              disabled={!canWrite || createMutation.isPending}
+              disabled={!canWrite || createMutation.isPending || validateLineMutation.isPending}
             >
               {createMutation.isPending ? "Saving..." : "Save Branch"}
             </Button>
@@ -380,15 +460,89 @@ export default function BranchesPage() {
           />
 
           <TextField
-            label="Agent Line Numbers"
-            placeholder="e.g. 263771001, 263771002"
-            value={agentLinesText}
+            label="Add Agent Line"
+            placeholder="Enter one agent line number"
+            value={agentLineInput}
             disabled={!canWrite}
-            onChange={(event) => setAgentLinesText(event.target.value)}
-            helperText="Comma-separated. A branch can have multiple agent lines."
+            onChange={(event) => setAgentLineInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void handleCheckAndAddAgentLine();
+              }
+            }}
+            helperText="Add one line at a time. The system checks the source DB before approving it."
             fullWidth
             size="small"
           />
+
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            alignItems={{ sm: "center" }}
+          >
+            <Button
+              type="button"
+              variant="outlined"
+              disabled={!canWrite || validateLineMutation.isPending}
+              onClick={() => {
+                void handleCheckAndAddAgentLine();
+              }}
+            >
+              {validateLineMutation.isPending ? "Checking..." : "Check & Add Line"}
+            </Button>
+            <Box sx={{ color: "text.secondary", fontSize: 13 }}>
+              Approved lines: {(form.agentLineNumbers ?? []).length}
+            </Box>
+          </Stack>
+
+          {agentLineFeedback ? (
+            <Alert severity={agentLineFeedback.severity}>
+              <Stack spacing={0.5}>
+                <span>{agentLineFeedback.message}</span>
+                {agentLineFeedback.sourceAgent ? (
+                  <Box sx={{ fontSize: 13 }}>
+                    Account: {agentLineFeedback.sourceAgent.agentAccount}
+                    {agentLineFeedback.sourceAgent.fullName
+                      ? ` | Name: ${agentLineFeedback.sourceAgent.fullName}`
+                      : ""}
+                    {agentLineFeedback.sourceAgent.mobileNumber
+                      ? ` | Mobile: ${agentLineFeedback.sourceAgent.mobileNumber}`
+                      : ""}
+                  </Box>
+                ) : null}
+              </Stack>
+            </Alert>
+          ) : null}
+
+          <Stack spacing={1}>
+            <Box sx={{ color: "text.secondary", fontSize: 13, fontWeight: 600 }}>
+              Approved agent lines
+            </Box>
+            {(form.agentLineNumbers ?? []).length > 0 ? (
+              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                {(form.agentLineNumbers ?? []).map((lineNumber) => (
+                  <Chip
+                    key={lineNumber}
+                    label={lineNumber}
+                    color="success"
+                    variant="outlined"
+                    onDelete={
+                      canWrite
+                        ? () => {
+                            removeAgentLine(lineNumber);
+                          }
+                        : undefined
+                    }
+                  />
+                ))}
+              </Stack>
+            ) : (
+              <Box sx={{ color: "text.secondary", fontSize: 13 }}>
+                No agent lines have been approved yet.
+              </Box>
+            )}
+          </Stack>
 
           <FormControlLabel
             control={

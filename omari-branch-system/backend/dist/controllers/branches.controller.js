@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listBranchesHandler = listBranchesHandler;
 exports.getBranchByIdHandler = getBranchByIdHandler;
+exports.validateBranchAgentLineHandler = validateBranchAgentLineHandler;
 exports.createBranchHandler = createBranchHandler;
 exports.updateBranchHandler = updateBranchHandler;
 exports.deleteBranchHandler = deleteBranchHandler;
@@ -33,6 +34,10 @@ const listQuerySchema = zod_1.z.object({
     search: zod_1.z.string().min(1).optional(),
     page: zod_1.z.coerce.number().int().min(1).optional().default(1),
     pageSize: zod_1.z.coerce.number().int().min(1).max(100).optional().default(10),
+});
+const validateAgentLineQuerySchema = zod_1.z.object({
+    lineNumber: zod_1.z.string().trim().min(1),
+    branchId: zod_1.z.string().regex(/^\d+$/, "Invalid branch id").optional(),
 });
 function normalizeQueryValue(value) {
     if (typeof value === "string") {
@@ -88,6 +93,29 @@ async function getBranchByIdHandler(req, res, next) {
             return;
         }
         res.json({ data: branch });
+    }
+    catch (error) {
+        if (handleServiceError(res, error)) {
+            return;
+        }
+        next(error);
+    }
+}
+async function validateBranchAgentLineHandler(req, res, next) {
+    const parsedQuery = validateAgentLineQuerySchema.safeParse({
+        lineNumber: normalizeQueryValue(req.query.lineNumber),
+        branchId: normalizeQueryValue(req.query.branchId),
+    });
+    if (!parsedQuery.success) {
+        res.status(400).json({
+            error: "Validation error",
+            details: parsedQuery.error.flatten(),
+        });
+        return;
+    }
+    try {
+        const result = await (0, branches_service_1.validateBranchAgentLine)(parsedQuery.data.lineNumber, parsedQuery.data.branchId ? BigInt(parsedQuery.data.branchId) : undefined);
+        res.json({ data: result });
     }
     catch (error) {
         if (handleServiceError(res, error)) {

@@ -8,6 +8,7 @@ import {
   getBranchById,
   listBranches,
   updateBranch,
+  validateBranchAgentLine,
 } from "../services/branches.service";
 
 const idSchema = z.string().regex(/^\d+$/, "Invalid id");
@@ -39,6 +40,11 @@ const listQuerySchema = z.object({
   search: z.string().min(1).optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(10),
+});
+
+const validateAgentLineQuerySchema = z.object({
+  lineNumber: z.string().trim().min(1),
+  branchId: z.string().regex(/^\d+$/, "Invalid branch id").optional(),
 });
 
 function normalizeQueryValue(value: unknown): string | undefined {
@@ -108,6 +114,38 @@ export async function getBranchByIdHandler(
       return;
     }
     res.json({ data: branch });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+    next(error);
+  }
+}
+
+export async function validateBranchAgentLineHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const parsedQuery = validateAgentLineQuerySchema.safeParse({
+    lineNumber: normalizeQueryValue(req.query.lineNumber),
+    branchId: normalizeQueryValue(req.query.branchId),
+  });
+
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  try {
+    const result = await validateBranchAgentLine(
+      parsedQuery.data.lineNumber,
+      parsedQuery.data.branchId ? BigInt(parsedQuery.data.branchId) : undefined,
+    );
+    res.json({ data: result });
   } catch (error) {
     if (handleServiceError(res, error)) {
       return;
