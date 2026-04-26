@@ -1,9 +1,13 @@
 import { Router } from "express";
 
-import { getWalletOverviewHandler } from "../controllers/wallet.controller";
+import {
+  getWalletOverviewHandler,
+  syncWalletCustomerActivityHandler,
+} from "../controllers/wallet.controller";
 
 const router = Router();
 
 router.get("/overview", getWalletOverviewHandler);
+router.post("/customer-activity/sync", syncWalletCustomerActivityHandler);
 
 export default router;

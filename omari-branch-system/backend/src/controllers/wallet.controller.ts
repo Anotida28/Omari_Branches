@@ -5,6 +5,7 @@ import {
   WalletServiceError,
   getWalletOverview,
 } from "../services/wallet.service";
+import { runWalletCustomerActivitySyncJobWithLock } from "../jobs/wallet-customer-activity-sync.job";
 
 function normalizeDateInput(value: string): Date | null {
   const trimmed = value.trim();
@@ -130,6 +131,35 @@ export async function getWalletOverviewHandler(
       return;
     }
 
+    next(error);
+  }
+}
+
+export async function syncWalletCustomerActivityHandler(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { executed, result, error } =
+      await runWalletCustomerActivitySyncJobWithLock();
+
+    if (!executed) {
+      res.status(409).json({
+        error: "Wallet customer activity sync is already running on another instance",
+      });
+      return;
+    }
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      message: "Wallet customer activity snapshot sync completed",
+      data: result,
+    });
+  } catch (error) {
     next(error);
   }
 }

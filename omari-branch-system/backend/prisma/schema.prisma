@@ -60,6 +60,28 @@ model ReminderRecipient {
   @@index([isActive])
 }
 
+model WalletCustomerActivitySnapshot {
+  id                         BigInt   @id @default(autoincrement())
+  customerId                 String   @unique(map: "uq_wallet_customer_activity_customer_id") @db.VarChar(120)
+  fullName                   String?  @db.VarChar(255)
+  mobileNumber               String?  @db.VarChar(120)
+  firstSeenDate              DateTime @db.Date
+  lastSeenDate               DateTime @db.Date
+  lifetimeTransactionValue   Decimal  @default(0.00) @db.Decimal(18, 2)
+  lifetimeTransactionVolume  Int      @default(0)
+  lifetimeCommission         Decimal  @default(0.00) @db.Decimal(18, 2)
+  last30DayTransactionValue  Decimal  @default(0.00) @db.Decimal(18, 2)
+  last60DayTransactionValue  Decimal  @default(0.00) @db.Decimal(18, 2)
+  sourceRowCount             Int      @default(0)
+  refreshedAt                DateTime @default(now())
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@index([lastSeenDate])
+  @@index([firstSeenDate])
+  @@index([mobileNumber])
+}
+
 model BranchMetric {
   id         BigInt   @id @default(autoincrement())
   branchId   BigInt

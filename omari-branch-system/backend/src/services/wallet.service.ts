@@ -1,6 +1,7 @@
 import sql from "mssql";
 
 import { env } from "../config/env";
+import { prisma } from "../db/prisma";
 
 export class WalletServiceError extends Error {
   status: number;
@@ -105,6 +106,19 @@ function toNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function getPrismaErrorCode(error: unknown): string | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+
+  return null;
+}
+
 function getSourceConfig(): sql.config {
   return {
     server: env.SOURCE_SQL_SERVER ?? "",
@@ -180,6 +194,56 @@ async function queryTransactionKpis(params: {
 }
 
 async function queryCustomerKpis(params: {
+  table: QualifiedTableName;
+  dateFrom: Date;
+  dateTo: Date;
+  asOfDate: Date;
+}): Promise<Pick<WalletKpis, "activeCustomersA30" | "activeCustomersA60" | "newCustomers" | "dormantCustomers90Plus">> {
+  try {
+    return await queryCustomerKpisFromSnapshot(params);
+  } catch (error) {
+    if (getPrismaErrorCode(error) !== "P2010") {
+      throw error;
+    }
+
+    return queryCustomerKpisFromSource(params);
+  }
+}
+
+async function queryCustomerKpisFromSnapshot(params: {
+  dateFrom: Date;
+  dateTo: Date;
+  asOfDate: Date;
+}): Promise<Pick<WalletKpis, "activeCustomersA30" | "activeCustomersA60" | "newCustomers" | "dormantCustomers90Plus">> {
+  const a30Date = addDays(params.asOfDate, -29);
+  const a60Date = addDays(params.asOfDate, -59);
+  const dormantCutoff = addDays(params.asOfDate, -90);
+
+  const rows = await prisma.$queryRaw<Array<{
+    activeCustomersA30: bigint | number;
+    activeCustomersA60: bigint | number;
+    newCustomers: bigint | number;
+    dormantCustomers90Plus: bigint | number;
+  }>>`
+    SELECT
+      SUM(CASE WHEN [lastSeenDate] >= ${a30Date} AND [lastSeenDate] <= ${params.asOfDate} THEN 1 ELSE 0 END) AS [activeCustomersA30],
+      SUM(CASE WHEN [lastSeenDate] >= ${a60Date} AND [lastSeenDate] <= ${params.asOfDate} THEN 1 ELSE 0 END) AS [activeCustomersA60],
+      SUM(CASE WHEN [firstSeenDate] >= ${params.dateFrom} AND [firstSeenDate] <= ${params.dateTo} THEN 1 ELSE 0 END) AS [newCustomers],
+      SUM(CASE WHEN [lastSeenDate] < ${dormantCutoff} THEN 1 ELSE 0 END) AS [dormantCustomers90Plus]
+    FROM [WalletCustomerActivitySnapshot]
+    WHERE [firstSeenDate] <= ${params.asOfDate}
+  `;
+
+  const row = rows[0] ?? {};
+  return {
+    activeCustomersA30: Math.trunc(toNumber(row.activeCustomersA30)),
+    activeCustomersA60: Math.trunc(toNumber(row.activeCustomersA60)),
+    newCustomers: Math.trunc(toNumber(row.newCustomers)),
+    dormantCustomers90Plus: Math.trunc(toNumber(row.dormantCustomers90Plus)),
+  };
+}
+
+async function queryCustomerKpisFromSource(params: {
   table: QualifiedTableName;
   dateFrom: Date;
   dateTo: Date;
@@ -411,7 +475,14 @@ export async function getWalletOverview(
           kpis.newCustomers,
           previousKpis.newCustomers,
         ),
-        dormantCustomers90Plus: null,
+        dormantCustomers90Plus:
+          kpis.dormantCustomers90Plus === null ||
+          previousKpis.dormantCustomers90Plus === null
+            ? null
+            : buildComparisonKpi(
+                kpis.dormantCustomers90Plus,
+                previousKpis.dormantCustomers90Plus,
+              ),
         latestTotalEFloat: buildComparisonKpi(
           kpis.latestTotalEFloat,
           previousKpis.latestTotalEFloat,
