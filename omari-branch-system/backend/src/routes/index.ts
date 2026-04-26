@@ -5,6 +5,7 @@ import branchesRoutes from "./branches.routes";
 import expensesRoutes from "./expenses.routes";
 import metricsRoutes from "./metrics.routes";
 import recipientsRoutes from "./recipients.routes";
+import walletRoutes from "./wallet.routes";
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use("/branches", branchesRoutes);
 router.use("/expenses", expensesRoutes);
 router.use("/metrics", metricsRoutes);
 router.use("/recipients", recipientsRoutes);
+router.use("/wallet", walletRoutes);
 
 export default router;

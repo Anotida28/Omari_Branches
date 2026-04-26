@@ -11,6 +11,7 @@ import LoginPage from "../pages/LoginPage";
 import MetricsPage from "../pages/MetricsPage";
 import ReportsPage from "../pages/ReportsPage";
 import SettingsPage from "../pages/SettingsPage";
+import WalletOverviewPage from "../pages/WalletOverviewPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 const TrendsPage = lazy(() => import("../pages/TrendsPage"));
@@ -61,6 +62,7 @@ export function AppRoutes() {
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/wallet/overview" element={<WalletOverviewPage />} />
       </Route>
 
       <Route

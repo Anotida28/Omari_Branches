@@ -285,3 +285,57 @@ export type AlertStats = {
   sentThisWeek: number;
 };
 
+export type WalletOverviewKpis = {
+  totalTransactionValue: number;
+  totalTransactionVolume: number;
+  totalCommission: number;
+  activeCustomersA30: number;
+  activeCustomersA60: number;
+  newCustomers: number;
+  dormantCustomers90Plus: number | null;
+  latestTotalEFloat: number;
+  latestEFloatDate: string | null;
+};
+
+export type WalletComparisonKpi = {
+  previousValue: number;
+  absoluteChange: number;
+  percentChange: number | null;
+};
+
+export type WalletOverviewResponse = {
+  period: {
+    dateFrom: string;
+    dateTo: string;
+    asOfDate: string;
+  };
+  kpis: WalletOverviewKpis;
+  comparison: {
+    previousPeriodDateFrom: string;
+    previousPeriodDateTo: string;
+    kpis: {
+      totalTransactionValue: WalletComparisonKpi;
+      totalTransactionVolume: WalletComparisonKpi;
+      totalCommission: WalletComparisonKpi;
+      activeCustomersA30: WalletComparisonKpi;
+      activeCustomersA60: WalletComparisonKpi;
+      newCustomers: WalletComparisonKpi;
+      dormantCustomers90Plus: WalletComparisonKpi | null;
+      latestTotalEFloat: WalletComparisonKpi;
+    };
+  } | null;
+  metadata: {
+    currency: string;
+    dataFreshnessTimestamp: string;
+    sourceSummaryTable: string;
+    sourceBalanceTable: string;
+    sourceBalanceCurrentTable: string;
+  };
+};
+
+export type WalletOverviewParams = {
+  dateFrom: string;
+  dateTo: string;
+  asOfDate?: string;
+  compare?: boolean;
+};

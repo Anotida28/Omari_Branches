@@ -120,7 +120,14 @@ const navSections: NavSection[] = [
     id: "wallet",
     label: "Wallet",
     icon: Wallet,
-    items: [],
+    items: [
+      {
+        to: "/wallet/overview",
+        label: "Wallet Overview",
+        subtitle: "Executive wallet and customer activity KPIs",
+        icon: Wallet,
+      },
+    ],
   },
 ];
 

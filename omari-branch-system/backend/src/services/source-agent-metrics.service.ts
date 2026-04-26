@@ -184,6 +184,20 @@ function buildInClause(
     .join(", ");
 }
 
+function buildRequestedLineCte(
+  request: sql.Request,
+  values: string[],
+  prefix: string,
+): string {
+  return values
+    .map((value, index) => {
+      const name = `${prefix}${index}`;
+      request.input(name, sql.VarChar(120), value);
+      return `SELECT @${name} AS lineNumber`;
+    })
+    .join("\n      UNION ALL\n      ");
+}
+
 export function isSourceMetricsConfigured(): boolean {
   return Boolean(
     env.SOURCE_SQL_SERVER &&
@@ -288,17 +302,29 @@ export async function findSourceAgentsByLineNumbers(
 
   for (const batch of chunkValues(normalizedLineNumbers, PARAM_BATCH_SIZE)) {
     const request = pool.request();
-    const inClause = buildInClause(request, batch, "line");
+    const requestedLinesSql = buildRequestedLineCte(request, batch, "line");
     const query = `
+      WITH requested_lines AS (
+        ${requestedLinesSql}
+      )
       SELECT
-        LTRIM(RTRIM(CAST(${matchColumnSql} AS VARCHAR(120)))) AS lineNumber,
-        MAX(LTRIM(RTRIM(CAST([agent_account] AS VARCHAR(120))))) AS agentAccount,
-        MAX(NULLIF(LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))), '')) AS customerId,
-        MAX(NULLIF(LTRIM(RTRIM(CAST([full_name] AS VARCHAR(255)))), '')) AS fullName,
-        MAX(NULLIF(LTRIM(RTRIM(CAST([mobile_number] AS VARCHAR(120)))), '')) AS mobileNumber
-      FROM [${schema}].[${table}]
-      WHERE ${matchColumnSql} IN (${inClause})
-      GROUP BY LTRIM(RTRIM(CAST(${matchColumnSql} AS VARCHAR(120))))
+        r.lineNumber,
+        sourceAgent.agentAccount,
+        sourceAgent.customerId,
+        sourceAgent.fullName,
+        sourceAgent.mobileNumber
+      FROM requested_lines r
+      OUTER APPLY (
+        SELECT TOP 1
+          LTRIM(RTRIM(CAST([agent_account] AS VARCHAR(120)))) AS agentAccount,
+          NULLIF(LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))), '') AS customerId,
+          NULLIF(LTRIM(RTRIM(CAST([full_name] AS VARCHAR(255)))), '') AS fullName,
+          NULLIF(LTRIM(RTRIM(CAST([mobile_number] AS VARCHAR(120)))), '') AS mobileNumber
+        FROM [${schema}].[${table}] WITH (NOLOCK)
+        WHERE ${matchColumnSql} = r.lineNumber
+        ORDER BY [date_id] DESC
+      ) sourceAgent
+      WHERE sourceAgent.agentAccount IS NOT NULL
     `;
 
     const result = await request.query(query);
