@@ -22,6 +22,8 @@ import {
   Bell,
   Building2,
   ChartColumn,
+  ChevronDown,
+  ChevronUp,
   DollarSign,
   LayoutDashboard,
   LineChart,
@@ -31,7 +33,9 @@ import {
   Shield,
   SidebarClose,
   SidebarOpen,
+  Wallet,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
@@ -40,7 +44,21 @@ import logoImage from "../assets/logo.png";
 import { useAuth } from "../hooks/useAuth";
 import { ReadOnlyBanner } from "../shared/components/RoleGuardWrapper";
 
-const navItems = [
+type NavItem = {
+  to: string;
+  label: string;
+  subtitle: string;
+  icon: LucideIcon;
+};
+
+type NavSection = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  items: NavItem[];
+};
+
+const remittanceCenterItems: NavItem[] = [
   {
     to: "/",
     label: "Dashboard",
@@ -91,63 +109,182 @@ const navItems = [
   },
 ];
 
+const navSections: NavSection[] = [
+  {
+    id: "remittance-center",
+    label: "Remittance Center",
+    icon: Building2,
+    items: remittanceCenterItems,
+  },
+  {
+    id: "wallet",
+    label: "Wallet",
+    icon: Wallet,
+    items: [],
+  },
+];
+
+const navItems = navSections.flatMap((section) => section.items);
+
 const EXPANDED_WIDTH = 280;
 const COLLAPSED_WIDTH = 88;
 
 function SidebarLinks({
   collapsed,
+  expandedSections,
+  onToggleSection,
   onNavigate,
 }: {
   collapsed: boolean;
+  expandedSections: Record<string, boolean>;
+  onToggleSection: (sectionId: string) => void;
   onNavigate?: () => void;
 }) {
-  return (
-    <List sx={{ px: 1, py: 1.2 }}>
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        return (
-          <ListItemButton
-            key={item.to}
-            component={NavLink}
-            to={item.to}
-            onClick={onNavigate}
-            sx={{
-              mb: 0.7,
-              minHeight: 44,
-              borderRadius: 2.5,
-              px: collapsed ? 1.2 : 1.6,
-              justifyContent: collapsed ? "center" : "flex-start",
-              color: "text.secondary",
-              "&.active": {
-                bgcolor: "primary.main",
-                color: "primary.contrastText",
-                boxShadow: "0 10px 20px rgba(12, 95, 63, 0.26)",
-                "& .MuiListItemIcon-root": {
-                  color: "primary.contrastText",
-                },
-              },
-              "&:not(.active):hover": {
-                bgcolor: "rgba(12, 95, 63, 0.11)",
-                color: "text.primary",
-              },
-            }}
-          >
-            <ListItemIcon
+  if (collapsed) {
+    return (
+      <List sx={{ px: 1, py: 1.2 }}>
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <ListItemButton
+              key={item.to}
+              component={NavLink}
+              to={item.to}
+              onClick={onNavigate}
               sx={{
-                minWidth: collapsed ? 0 : 34,
+                mb: 0.7,
+                minHeight: 44,
+                borderRadius: 2.5,
+                px: 1.2,
                 justifyContent: "center",
-                color: "inherit",
+                color: "text.secondary",
+                "&.active": {
+                  bgcolor: "primary.main",
+                  color: "primary.contrastText",
+                  boxShadow: "0 10px 20px rgba(12, 95, 63, 0.26)",
+                  "& .MuiListItemIcon-root": {
+                    color: "primary.contrastText",
+                  },
+                },
+                "&:not(.active):hover": {
+                  bgcolor: "rgba(12, 95, 63, 0.11)",
+                  color: "text.primary",
+                },
               }}
             >
-              <Icon size={18} />
-            </ListItemIcon>
-            {!collapsed ? (
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  justifyContent: "center",
+                  color: "inherit",
+                }}
+              >
+                <Icon size={18} />
+              </ListItemIcon>
+            </ListItemButton>
+          );
+        })}
+      </List>
+    );
+  }
+
+  return (
+    <List sx={{ px: 1, py: 1.2 }}>
+      {navSections.map((section) => {
+        const SectionIcon = section.icon;
+        const isOpen = expandedSections[section.id] ?? false;
+        const hasItems = section.items.length > 0;
+
+        return (
+          <Box key={section.id} sx={{ mb: 0.8 }}>
+            <ListItemButton
+              onClick={() => onToggleSection(section.id)}
+              sx={{
+                mb: 0.4,
+                minHeight: 44,
+                borderRadius: 2.5,
+                px: 1.6,
+                color: "text.secondary",
+                "&:hover": {
+                  bgcolor: "rgba(12, 95, 63, 0.11)",
+                  color: "text.primary",
+                },
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  minWidth: 34,
+                  justifyContent: "center",
+                  color: "inherit",
+                }}
+              >
+                <SectionIcon size={18} />
+              </ListItemIcon>
               <ListItemText
-                primary={item.label}
+                primary={section.label}
                 primaryTypographyProps={{ fontSize: 14, fontWeight: 600 }}
               />
+              {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </ListItemButton>
+
+            {isOpen && hasItems
+              ? section.items.map((item) => {
+                  const ItemIcon = item.icon;
+                  return (
+                    <ListItemButton
+                      key={item.to}
+                      component={NavLink}
+                      to={item.to}
+                      onClick={onNavigate}
+                      sx={{
+                        mb: 0.5,
+                        ml: 1.2,
+                        minHeight: 40,
+                        borderRadius: 2,
+                        px: 1.4,
+                        color: "text.secondary",
+                        "&.active": {
+                          bgcolor: "primary.main",
+                          color: "primary.contrastText",
+                          boxShadow: "0 10px 20px rgba(12, 95, 63, 0.26)",
+                          "& .MuiListItemIcon-root": {
+                            color: "primary.contrastText",
+                          },
+                        },
+                        "&:not(.active):hover": {
+                          bgcolor: "rgba(12, 95, 63, 0.11)",
+                          color: "text.primary",
+                        },
+                      }}
+                    >
+                      <ListItemIcon
+                        sx={{
+                          minWidth: 30,
+                          justifyContent: "center",
+                          color: "inherit",
+                        }}
+                      >
+                        <ItemIcon size={16} />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={item.label}
+                        primaryTypographyProps={{ fontSize: 13.5, fontWeight: 600 }}
+                      />
+                    </ListItemButton>
+                  );
+                })
+              : null}
+
+            {isOpen && !hasItems ? (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", ml: 7, mt: 0.2, mb: 0.6 }}
+              >
+                Wallet modules coming soon
+              </Typography>
             ) : null}
-          </ListItemButton>
+          </Box>
         );
       })}
     </List>
@@ -162,6 +299,10 @@ export default function AppLayout() {
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    "remittance-center": true,
+    wallet: false,
+  });
   const isSidebarCollapsed = collapsed && !isMobile;
 
   const drawerWidth = useMemo(
@@ -178,6 +319,10 @@ export default function AppLayout() {
   const handleLogout = async () => {
     await logout();
     navigate("/login", { replace: true });
+  };
+
+  const handleToggleSection = (sectionId: string) => {
+    setExpandedSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
   };
 
   const sidebarContent = (
@@ -200,6 +345,8 @@ export default function AppLayout() {
       <Divider />
       <SidebarLinks
         collapsed={isSidebarCollapsed}
+        expandedSections={expandedSections}
+        onToggleSection={handleToggleSection}
         onNavigate={isMobile ? () => setMobileOpen(false) : undefined}
       />
       <Box sx={{ mt: "auto" }}>
