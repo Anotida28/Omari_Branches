@@ -14,10 +14,6 @@ import {
   runSourceMetricsSyncJobWithLock,
   shouldEnableSourceMetricsSync,
 } from "./source-metrics-sync.job";
-import {
-  runWalletCustomerActivitySyncJobWithLock,
-  shouldEnableWalletCustomerActivitySync,
-} from "./wallet-customer-activity-sync.job";
 
 // ============================================================================
 // Types
@@ -45,7 +41,6 @@ const scheduledJobs: ScheduledJob[] = [];
  */
 const DAILY_ALERT_CRON = "0 6 * * *"; // 06:00 UTC = 08:00 Harare (UTC+2)
 const SOURCE_METRICS_SYNC_CRON = env.SOURCE_SQL_SYNC_CRON;
-const WALLET_CUSTOMER_ACTIVITY_SYNC_CRON = "45 7 * * *";
 
 // ============================================================================
 // Job Handlers
@@ -109,38 +104,6 @@ async function runDailySourceMetricsSync(): Promise<void> {
   }
 }
 
-async function runDailyWalletCustomerActivitySync(): Promise<void> {
-  console.log(
-    `[Scheduler] Running wallet customer activity sync at ${new Date().toISOString()}`,
-  );
-
-  const { executed, result, error } =
-    await runWalletCustomerActivitySyncJobWithLock();
-
-  if (!executed) {
-    console.log(
-      `[Scheduler] Wallet customer activity sync skipped - another instance is running`,
-    );
-    return;
-  }
-
-  if (error) {
-    console.error(
-      `[Scheduler] Wallet customer activity sync failed with error:`,
-      error,
-    );
-    return;
-  }
-
-  if (result) {
-    console.log(`[Scheduler] Wallet customer activity sync completed:`, {
-      asOfDate: result.asOfDate,
-      customers: result.refreshedCustomerCount,
-      refreshedAt: result.refreshedAt,
-    });
-  }
-}
-
 // ============================================================================
 // Scheduler Management
 // ============================================================================
@@ -174,23 +137,6 @@ export function startScheduler(): void {
   } else {
     console.log(
       `[Scheduler] Source metrics sync job is disabled or not configured`,
-    );
-  }
-
-  if (shouldEnableWalletCustomerActivitySync()) {
-    const walletCustomerActivityTask = cron.schedule(
-      WALLET_CUSTOMER_ACTIVITY_SYNC_CRON,
-      runDailyWalletCustomerActivitySync,
-    );
-
-    scheduledJobs.push({
-      name: "wallet-customer-activity-sync",
-      cronExpression: WALLET_CUSTOMER_ACTIVITY_SYNC_CRON,
-      task: walletCustomerActivityTask,
-    });
-  } else {
-    console.log(
-      `[Scheduler] Wallet customer activity sync job is disabled or not configured`,
     );
   }
 

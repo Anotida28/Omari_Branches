@@ -131,6 +131,7 @@ export default function WalletCustomerActivityPage() {
   const initialDateFrom = toInputDate(shiftDays(new Date(), -29));
   const dateFrom = searchParams.get("dateFrom") ?? initialDateFrom;
   const dateTo = searchParams.get("dateTo") ?? initialDateTo;
+  const currency = (searchParams.get("currency") ?? "USD") as "USD" | "ZWL";
 
   const updateParams = (updates: Record<string, string | undefined>) => {
     const next = new URLSearchParams(searchParams);
@@ -142,14 +143,19 @@ export default function WalletCustomerActivityPage() {
   };
 
   const activityQuery = useQuery({
-    queryKey: ["wallet", "customer-activity", { dateFrom, dateTo }],
-    queryFn: () => fetchWalletCustomerActivityGrowth({ dateFrom, dateTo }),
+    queryKey: ["wallet", "customer-activity", { dateFrom, dateTo, currency }],
+    queryFn: () => fetchWalletCustomerActivityGrowth({ dateFrom, dateTo, currency }),
   });
 
   return (
     <section className="space-y-5 motion-fade-up">
       <FilterBar>
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1.2} alignItems={{ xs: "stretch", lg: "center" }}>
+          <ButtonGroup size="small" variant="outlined">
+            {(["USD", "ZWL"] as const).map((c) => (
+              <Button key={c} variant={currency === c ? "contained" : "outlined"} onClick={() => updateParams({ currency: c })}>{c}</Button>
+            ))}
+          </ButtonGroup>
           <ButtonGroup size="small" variant="outlined" sx={{ flexWrap: "wrap" }}>
             {presets.map((preset) => (
               <Button key={preset.label} onClick={() => updateParams(preset.getRange())}>{preset.label}</Button>
@@ -272,9 +278,6 @@ export default function WalletCustomerActivityPage() {
 
           <Alert severity="info" icon={<CalendarClock size={16} />}>
             Period: {formatDate(activityQuery.data.period.dateFrom)} to {formatDate(activityQuery.data.period.dateTo)}.
-            Snapshot refreshed: {activityQuery.data.metadata.snapshotRefreshedAt
-              ? new Date(activityQuery.data.metadata.snapshotRefreshedAt).toLocaleString("en-US")
-              : "not available"}.
           </Alert>
         </>
       ) : null}

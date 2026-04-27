@@ -13,8 +13,6 @@ import {
   getWalletTransactionPerformance,
   listWalletCustomer360,
 } from "../services/wallet.service";
-import { runWalletCustomerActivitySyncJobWithLock } from "../jobs/wallet-customer-activity-sync.job";
-
 function normalizeDateInput(value: string): Date | null {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -76,6 +74,8 @@ const dateSchema = z.string().transform((value, ctx) => {
   return parsed;
 });
 
+const currencySchema = z.enum(["USD", "ZWL"]).optional().default("USD");
+
 const overviewQuerySchema = z
   .object({
     dateFrom: dateSchema,
@@ -85,6 +85,7 @@ const overviewQuerySchema = z
       .enum(["true", "false"])
       .optional()
       .transform((value) => value !== "false"),
+    currency: currencySchema,
   })
   .strict();
 
@@ -92,6 +93,7 @@ const customerActivityQuerySchema = z
   .object({
     dateFrom: dateSchema,
     dateTo: dateSchema,
+    currency: currencySchema,
   })
   .strict();
 
@@ -100,6 +102,7 @@ const retentionQuerySchema = z
     dateFrom: dateSchema,
     dateTo: dateSchema,
     asOfDate: dateSchema.optional(),
+    currency: currencySchema,
   })
   .strict();
 
@@ -107,6 +110,7 @@ const transactionPerformanceQuerySchema = z
   .object({
     dateFrom: dateSchema,
     dateTo: dateSchema,
+    currency: currencySchema,
   })
   .strict();
 
@@ -114,6 +118,7 @@ const revenuePerformanceQuerySchema = z
   .object({
     dateFrom: dateSchema,
     dateTo: dateSchema,
+    currency: currencySchema,
   })
   .strict();
 
@@ -122,6 +127,7 @@ const liquidityQuerySchema = z
     dateFrom: dateSchema,
     dateTo: dateSchema,
     asOfDate: dateSchema.optional(),
+    currency: currencySchema,
   })
   .strict();
 
@@ -132,6 +138,7 @@ const customer360ListQuerySchema = z
     page: z.coerce.number().int().min(1).max(10000).default(1),
     pageSize: z.coerce.number().int().min(5).max(100).default(25),
     asOfDate: dateSchema.optional(),
+    currency: currencySchema,
   })
   .strict();
 
@@ -140,6 +147,7 @@ const customer360DetailQuerySchema = z
     dateFrom: dateSchema,
     dateTo: dateSchema,
     asOfDate: dateSchema.optional(),
+    currency: currencySchema,
   })
   .strict();
 
@@ -148,6 +156,7 @@ const insightsAlertsQuerySchema = z
     dateFrom: dateSchema,
     dateTo: dateSchema,
     asOfDate: dateSchema.optional(),
+    currency: currencySchema,
   })
   .strict();
 
@@ -170,6 +179,7 @@ export async function getWalletOverviewHandler(
     dateTo: normalizeQueryValue(req.query.dateTo),
     asOfDate: normalizeQueryValue(req.query.asOfDate),
     compare: normalizeQueryValue(req.query.compare),
+    currency: normalizeQueryValue(req.query.currency),
   };
 
   const parsedQuery = overviewQuerySchema.safeParse(queryInput);
@@ -194,6 +204,7 @@ export async function getWalletOverviewHandler(
       dateTo: parsedQuery.data.dateTo,
       asOfDate: parsedQuery.data.asOfDate ?? new Date(),
       compare: parsedQuery.data.compare ?? true,
+      currency: parsedQuery.data.currency,
     });
 
     res.json({ data });
@@ -214,6 +225,7 @@ export async function getWalletCustomerActivityGrowthHandler(
   const queryInput = {
     dateFrom: normalizeQueryValue(req.query.dateFrom),
     dateTo: normalizeQueryValue(req.query.dateTo),
+    currency: normalizeQueryValue(req.query.currency),
   };
 
   const parsedQuery = customerActivityQuerySchema.safeParse(queryInput);
@@ -253,6 +265,7 @@ export async function getWalletRetentionDormancyHandler(
     dateFrom: normalizeQueryValue(req.query.dateFrom),
     dateTo: normalizeQueryValue(req.query.dateTo),
     asOfDate: normalizeQueryValue(req.query.asOfDate),
+    currency: normalizeQueryValue(req.query.currency),
   };
 
   const parsedQuery = retentionQuerySchema.safeParse(queryInput);
@@ -276,6 +289,7 @@ export async function getWalletRetentionDormancyHandler(
       dateFrom: parsedQuery.data.dateFrom,
       dateTo: parsedQuery.data.dateTo,
       asOfDate: parsedQuery.data.asOfDate ?? parsedQuery.data.dateTo,
+      currency: parsedQuery.data.currency,
     });
     res.json({ data });
   } catch (error) {
@@ -295,6 +309,7 @@ export async function getWalletTransactionPerformanceHandler(
   const queryInput = {
     dateFrom: normalizeQueryValue(req.query.dateFrom),
     dateTo: normalizeQueryValue(req.query.dateTo),
+    currency: normalizeQueryValue(req.query.currency),
   };
 
   const parsedQuery = transactionPerformanceQuerySchema.safeParse(queryInput);
@@ -333,6 +348,7 @@ export async function getWalletRevenuePerformanceHandler(
   const queryInput = {
     dateFrom: normalizeQueryValue(req.query.dateFrom),
     dateTo: normalizeQueryValue(req.query.dateTo),
+    currency: normalizeQueryValue(req.query.currency),
   };
 
   const parsedQuery = revenuePerformanceQuerySchema.safeParse(queryInput);
@@ -372,6 +388,7 @@ export async function getWalletLiquidityHandler(
     dateFrom: normalizeQueryValue(req.query.dateFrom),
     dateTo: normalizeQueryValue(req.query.dateTo),
     asOfDate: normalizeQueryValue(req.query.asOfDate),
+    currency: normalizeQueryValue(req.query.currency),
   };
 
   const parsedQuery = liquidityQuerySchema.safeParse(queryInput);
@@ -395,6 +412,7 @@ export async function getWalletLiquidityHandler(
       dateFrom: parsedQuery.data.dateFrom,
       dateTo: parsedQuery.data.dateTo,
       asOfDate: parsedQuery.data.asOfDate ?? parsedQuery.data.dateTo,
+      currency: parsedQuery.data.currency,
     });
     res.json({ data });
   } catch (error) {
@@ -417,6 +435,7 @@ export async function listWalletCustomer360Handler(
     page: normalizeQueryValue(req.query.page),
     pageSize: normalizeQueryValue(req.query.pageSize),
     asOfDate: normalizeQueryValue(req.query.asOfDate),
+    currency: normalizeQueryValue(req.query.currency),
   };
 
   const parsedQuery = customer360ListQuerySchema.safeParse(queryInput);
@@ -435,6 +454,7 @@ export async function listWalletCustomer360Handler(
       page: parsedQuery.data.page,
       pageSize: parsedQuery.data.pageSize,
       asOfDate: parsedQuery.data.asOfDate ?? new Date(),
+      currency: parsedQuery.data.currency,
     });
     res.json({ data });
   } catch (error) {
@@ -456,6 +476,7 @@ export async function getWalletCustomer360DetailHandler(
     dateFrom: normalizeQueryValue(req.query.dateFrom),
     dateTo: normalizeQueryValue(req.query.dateTo),
     asOfDate: normalizeQueryValue(req.query.asOfDate),
+    currency: normalizeQueryValue(req.query.currency),
   };
 
   const parsedQuery = customer360DetailQuerySchema.safeParse(queryInput);
@@ -480,6 +501,7 @@ export async function getWalletCustomer360DetailHandler(
       dateFrom: parsedQuery.data.dateFrom,
       dateTo: parsedQuery.data.dateTo,
       asOfDate: parsedQuery.data.asOfDate ?? parsedQuery.data.dateTo,
+      currency: parsedQuery.data.currency,
     });
     res.json({ data });
   } catch (error) {
@@ -500,6 +522,7 @@ export async function getWalletInsightsAlertsHandler(
     dateFrom: normalizeQueryValue(req.query.dateFrom),
     dateTo: normalizeQueryValue(req.query.dateTo),
     asOfDate: normalizeQueryValue(req.query.asOfDate),
+    currency: normalizeQueryValue(req.query.currency),
   };
 
   const parsedQuery = insightsAlertsQuerySchema.safeParse(queryInput);
@@ -523,6 +546,7 @@ export async function getWalletInsightsAlertsHandler(
       dateFrom: parsedQuery.data.dateFrom,
       dateTo: parsedQuery.data.dateTo,
       asOfDate: parsedQuery.data.asOfDate ?? parsedQuery.data.dateTo,
+      currency: parsedQuery.data.currency,
     });
     res.json({ data });
   } catch (error) {
@@ -534,31 +558,3 @@ export async function getWalletInsightsAlertsHandler(
   }
 }
 
-export async function syncWalletCustomerActivityHandler(
-  _req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    const { executed, result, error } =
-      await runWalletCustomerActivitySyncJobWithLock();
-
-    if (!executed) {
-      res.status(409).json({
-        error: "Wallet customer activity sync is already running on another instance",
-      });
-      return;
-    }
-
-    if (error) {
-      throw error;
-    }
-
-    res.json({
-      message: "Wallet customer activity snapshot sync completed",
-      data: result,
-    });
-  } catch (error) {
-    next(error);
-  }
-}

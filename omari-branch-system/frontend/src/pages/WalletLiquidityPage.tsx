@@ -147,6 +147,7 @@ export default function WalletLiquidityPage() {
   const initialDateFrom = toInputDate(shiftDays(new Date(), -29));
   const dateFrom = searchParams.get("dateFrom") ?? initialDateFrom;
   const dateTo = searchParams.get("dateTo") ?? initialDateTo;
+  const currency = (searchParams.get("currency") ?? "USD") as "USD" | "ZWL";
 
   const updateParams = (updates: Record<string, string | undefined>) => {
     const next = new URLSearchParams(searchParams);
@@ -158,8 +159,8 @@ export default function WalletLiquidityPage() {
   };
 
   const liquidityQuery = useQuery({
-    queryKey: ["wallet", "liquidity", { dateFrom, dateTo }],
-    queryFn: () => fetchWalletLiquidity({ dateFrom, dateTo, asOfDate: dateTo }),
+    queryKey: ["wallet", "liquidity", { dateFrom, dateTo, currency }],
+    queryFn: () => fetchWalletLiquidity({ dateFrom, dateTo, asOfDate: dateTo, currency }),
   });
 
   const focusTitle =
@@ -171,6 +172,11 @@ export default function WalletLiquidityPage() {
     <section className="space-y-5 motion-fade-up">
       <FilterBar>
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1.2} alignItems={{ xs: "stretch", lg: "center" }}>
+          <ButtonGroup size="small" variant="outlined">
+            {(["USD", "ZWL"] as const).map((c) => (
+              <Button key={c} variant={currency === c ? "contained" : "outlined"} onClick={() => updateParams({ currency: c })}>{c}</Button>
+            ))}
+          </ButtonGroup>
           <ButtonGroup size="small" variant="outlined" sx={{ flexWrap: "wrap" }}>
             {presets.map((preset) => (
               <Button key={preset.label} onClick={() => updateParams(preset.getRange())}>{preset.label}</Button>

@@ -10,7 +10,6 @@ import {
   getWalletRevenuePerformanceHandler,
   getWalletTransactionPerformanceHandler,
   listWalletCustomer360Handler,
-  syncWalletCustomerActivityHandler,
 } from "../controllers/wallet.controller";
 
 const router = Router();
@@ -24,6 +23,5 @@ router.get("/liquidity", getWalletLiquidityHandler);
 router.get("/customer-360", listWalletCustomer360Handler);
 router.get("/customer-360/:customerId", getWalletCustomer360DetailHandler);
 router.get("/insights-alerts", getWalletInsightsAlertsHandler);
-router.post("/customer-activity/sync", syncWalletCustomerActivityHandler);
 
 export default router;

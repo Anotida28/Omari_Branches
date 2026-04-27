@@ -338,6 +338,7 @@ export type WalletOverviewParams = {
   dateTo: string;
   asOfDate?: string;
   compare?: boolean;
+  currency?: "USD" | "ZWL";
 };
 
 export type WalletCustomerActivityTrendPoint = {
@@ -370,7 +371,6 @@ export type WalletCustomerActivityGrowthResponse = {
   frequencyBuckets: WalletCustomerFrequencyBucket[];
   metadata: {
     dataFreshnessTimestamp: string;
-    snapshotRefreshedAt: string | null;
     sourceSummaryTable: string;
   };
 };
@@ -378,6 +378,7 @@ export type WalletCustomerActivityGrowthResponse = {
 export type WalletCustomerActivityParams = {
   dateFrom: string;
   dateTo: string;
+  currency?: "USD" | "ZWL";
 };
 
 export type WalletInactivityBucket = {
@@ -416,7 +417,6 @@ export type WalletRetentionDormancyResponse = {
   cohorts: WalletRetentionCohort[];
   metadata: {
     dataFreshnessTimestamp: string;
-    snapshotRefreshedAt: string | null;
   };
 };
 
@@ -424,6 +424,7 @@ export type WalletRetentionDormancyParams = {
   dateFrom: string;
   dateTo: string;
   asOfDate?: string;
+  currency?: "USD" | "ZWL";
 };
 
 export type WalletTransactionTrendPoint = {
@@ -468,6 +469,7 @@ export type WalletTransactionPerformanceResponse = {
 export type WalletTransactionPerformanceParams = {
   dateFrom: string;
   dateTo: string;
+  currency?: "USD" | "ZWL";
 };
 
 export type WalletRevenueTrendPoint = {
@@ -510,6 +512,7 @@ export type WalletRevenuePerformanceResponse = {
 export type WalletRevenuePerformanceParams = {
   dateFrom: string;
   dateTo: string;
+  currency?: "USD" | "ZWL";
 };
 
 export type WalletLiquidityTrendPoint = {
@@ -558,6 +561,7 @@ export type WalletLiquidityParams = {
   dateFrom: string;
   dateTo: string;
   asOfDate?: string;
+  currency?: "USD" | "ZWL";
 };
 
 export type WalletCustomer360Summary = {
@@ -582,7 +586,6 @@ export type WalletCustomer360ListResponse = {
   total: number;
   metadata: {
     dataFreshnessTimestamp: string;
-    snapshotRefreshedAt: string | null;
   };
 };
 
@@ -609,7 +612,6 @@ export type WalletCustomer360DetailResponse = {
   metadata: {
     dataFreshnessTimestamp: string;
     sourceSummaryTable: string;
-    snapshotRefreshedAt: string | null;
   };
 };
 
@@ -619,6 +621,7 @@ export type WalletCustomer360ListParams = {
   page?: number;
   pageSize?: number;
   asOfDate?: string;
+  currency?: "USD" | "ZWL";
 };
 
 export type WalletCustomer360DetailParams = {
@@ -626,6 +629,7 @@ export type WalletCustomer360DetailParams = {
   dateFrom: string;
   dateTo: string;
   asOfDate?: string;
+  currency?: "USD" | "ZWL";
 };
 
 export type WalletInsightAlertSeverity = "critical" | "warning" | "positive" | "info";
@@ -674,4 +678,5 @@ export type WalletInsightsAlertsParams = {
   dateFrom: string;
   dateTo: string;
   asOfDate?: string;
+  currency?: "USD" | "ZWL";
 };

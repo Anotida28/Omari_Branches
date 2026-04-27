@@ -128,6 +128,30 @@ const envSchema = z.object({
   SOURCE_SQL_AGENT_LINE_MATCH_COLUMN: z
     .enum(["agent_account", "customer_id"])
     .default("agent_account"),
+  SOURCE_SQL_TRANSACTIONS_TABLE: z
+    .string()
+    .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_TRANSACTIONS_TABLE must be schema.table")
+    .default("reporting.transactions_aggregate"),
+  SOURCE_SQL_CUSTOMER_TABLE: z
+    .string()
+    .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_CUSTOMER_TABLE must be schema.table")
+    .default("reporting.dim_customer"),
+  SOURCE_SQL_USD_ACCOUNTS_TABLE: z
+    .string()
+    .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_USD_ACCOUNTS_TABLE must be schema.table")
+    .default("reporting.df_usd_accounts"),
+  SOURCE_SQL_ZWL_ACCOUNTS_TABLE: z
+    .string()
+    .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_ZWL_ACCOUNTS_TABLE must be schema.table")
+    .default("reporting.df_zwl_accounts"),
+  SOURCE_SQL_USD_BALANCE_CURRENT_TABLE: z
+    .string()
+    .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_USD_BALANCE_CURRENT_TABLE must be schema.table")
+    .default("reporting.omari_account_balances_usd_current"),
+  SOURCE_SQL_ZWL_BALANCE_TABLE: z
+    .string()
+    .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_ZWL_BALANCE_TABLE must be schema.table")
+    .default("reporting.omari_account_balances_zwl"),
   SOURCE_SQL_SYNC_ENABLED: z.preprocess(
     normalizeOptionalBoolean,
     z.boolean().default(false),

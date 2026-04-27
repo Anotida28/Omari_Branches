@@ -149,6 +149,7 @@ export default function WalletCustomer360Page() {
   const search = searchParams.get("search") ?? "";
   const status = (searchParams.get("status") ?? "all") as "all" | "active_a30" | "dormant_90";
   const selectedCustomerId = searchParams.get("customerId") ?? "";
+  const currency = (searchParams.get("currency") ?? "USD") as "USD" | "ZWL";
   const page = Math.max(0, Number(searchParams.get("page") ?? "0"));
   const pageSize = Math.max(10, Number(searchParams.get("pageSize") ?? "25"));
 
@@ -165,7 +166,7 @@ export default function WalletCustomer360Page() {
   };
 
   const listQuery = useQuery({
-    queryKey: ["wallet", "customer-360", { search, status, page, pageSize, dateTo }],
+    queryKey: ["wallet", "customer-360", { search, status, page, pageSize, dateTo, currency }],
     queryFn: () =>
       fetchWalletCustomer360List({
         search: search || undefined,
@@ -173,6 +174,7 @@ export default function WalletCustomer360Page() {
         page: page + 1,
         pageSize,
         asOfDate: dateTo,
+        currency,
       }),
   });
 
@@ -183,13 +185,14 @@ export default function WalletCustomer360Page() {
   }, [listQuery.data, selectedCustomerId]);
 
   const detailQuery = useQuery({
-    queryKey: ["wallet", "customer-360-detail", { selectedCustomerId, dateFrom, dateTo }],
+    queryKey: ["wallet", "customer-360-detail", { selectedCustomerId, dateFrom, dateTo, currency }],
     queryFn: () =>
       fetchWalletCustomer360Detail({
         customerId: selectedCustomerId,
         dateFrom,
         dateTo,
         asOfDate: dateTo,
+        currency,
       }),
     enabled: selectedCustomerId.length > 0,
   });
@@ -198,6 +201,11 @@ export default function WalletCustomer360Page() {
     <section className="space-y-5 motion-fade-up">
       <FilterBar>
         <Stack direction={{ xs: "column", xl: "row" }} spacing={1.2} alignItems={{ xs: "stretch", xl: "center" }}>
+          <ButtonGroup size="small" variant="outlined">
+            {(["USD", "ZWL"] as const).map((c) => (
+              <Button key={c} variant={currency === c ? "contained" : "outlined"} onClick={() => updateParams({ currency: c, page: undefined, customerId: undefined })}>{c}</Button>
+            ))}
+          </ButtonGroup>
           <ButtonGroup size="small" variant="outlined" sx={{ flexWrap: "wrap" }}>
             {presets.map((preset) => (
               <Button key={preset.label} onClick={() => updateParams({ ...preset.getRange(), page: undefined })}>

@@ -1,8 +1,6 @@
-import { Prisma } from "@prisma/client";
 import sql from "mssql";
 
 import { env } from "../config/env";
-import { prisma } from "../db/prisma";
 
 export class WalletServiceError extends Error {
   status: number;
@@ -19,11 +17,14 @@ type QualifiedTableName = {
   table: string;
 };
 
+type Currency = "USD" | "ZWL";
+
 export type WalletOverviewInput = {
   dateFrom: Date;
   dateTo: Date;
   asOfDate: Date;
   compare: boolean;
+  currency: Currency;
 };
 
 type WalletKpis = {
@@ -59,7 +60,7 @@ export type WalletOverviewResponse = {
     };
   } | null;
   metadata: {
-    currency: "USD";
+    currency: string;
     dataFreshnessTimestamp: string;
     sourceSummaryTable: string;
     sourceBalanceTable: string;
@@ -70,6 +71,7 @@ export type WalletOverviewResponse = {
 export type WalletCustomerActivityGrowthInput = {
   dateFrom: Date;
   dateTo: Date;
+  currency: Currency;
 };
 
 export type WalletCustomerActivityTrendPoint = {
@@ -102,7 +104,6 @@ export type WalletCustomerActivityGrowthResponse = {
   frequencyBuckets: WalletCustomerFrequencyBucket[];
   metadata: {
     dataFreshnessTimestamp: string;
-    snapshotRefreshedAt: string | null;
     sourceSummaryTable: string;
   };
 };
@@ -111,6 +112,7 @@ export type WalletRetentionDormancyInput = {
   dateFrom: Date;
   dateTo: Date;
   asOfDate: Date;
+  currency: Currency;
 };
 
 export type WalletInactivityBucket = {
@@ -149,13 +151,13 @@ export type WalletRetentionDormancyResponse = {
   cohorts: WalletRetentionCohort[];
   metadata: {
     dataFreshnessTimestamp: string;
-    snapshotRefreshedAt: string | null;
   };
 };
 
 export type WalletTransactionPerformanceInput = {
   dateFrom: Date;
   dateTo: Date;
+  currency: Currency;
 };
 
 export type WalletTransactionTrendPoint = {
@@ -200,6 +202,7 @@ export type WalletTransactionPerformanceResponse = {
 export type WalletRevenuePerformanceInput = {
   dateFrom: Date;
   dateTo: Date;
+  currency: Currency;
 };
 
 export type WalletRevenueTrendPoint = {
@@ -243,6 +246,7 @@ export type WalletLiquidityInput = {
   dateFrom: Date;
   dateTo: Date;
   asOfDate: Date;
+  currency: Currency;
 };
 
 export type WalletLiquidityTrendPoint = {
@@ -293,6 +297,7 @@ export type WalletCustomer360ListInput = {
   page: number;
   pageSize: number;
   asOfDate: Date;
+  currency: Currency;
 };
 
 export type WalletCustomer360Summary = {
@@ -317,7 +322,6 @@ export type WalletCustomer360ListResponse = {
   total: number;
   metadata: {
     dataFreshnessTimestamp: string;
-    snapshotRefreshedAt: string | null;
   };
 };
 
@@ -326,6 +330,7 @@ export type WalletCustomer360DetailInput = {
   dateFrom: Date;
   dateTo: Date;
   asOfDate: Date;
+  currency: Currency;
 };
 
 export type WalletCustomer360TrendPoint = {
@@ -351,7 +356,6 @@ export type WalletCustomer360DetailResponse = {
   metadata: {
     dataFreshnessTimestamp: string;
     sourceSummaryTable: string;
-    snapshotRefreshedAt: string | null;
   };
 };
 
@@ -359,6 +363,7 @@ export type WalletInsightsAlertsInput = {
   dateFrom: Date;
   dateTo: Date;
   asOfDate: Date;
+  currency: Currency;
 };
 
 export type WalletInsightAlertSeverity = "critical" | "warning" | "positive" | "info";
@@ -407,6 +412,17 @@ type NumericRecord = Record<string, unknown>;
 
 const LOW_BALANCE_THRESHOLD = 100;
 
+// Deposit and withdrawal transaction type classifications per currency
+const DEPOSIT_TYPES: Record<Currency, readonly string[]> = {
+  USD: ["Cash In credit"],
+  ZWL: ["ZIPIT-Receive", "Transfer-Receive", "B2W Credit"],
+};
+
+const WITHDRAWAL_TYPES: Record<Currency, readonly string[]> = {
+  USD: ["Withdrawal (CashOut)"],
+  ZWL: ["ZIPIT-Send", "Transfer-Send-Omari", "W2B Debit"],
+};
+
 let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 function parseQualifiedTableName(value: string): QualifiedTableName {
@@ -437,41 +453,17 @@ function daysBetween(start: Date, end: Date): number {
 }
 
 function getDormancyStatus(daysSinceLastActivity: number): WalletCustomer360Summary["dormancyStatus"] {
-  if (daysSinceLastActivity > 90) {
-    return "dormant";
-  }
-  if (daysSinceLastActivity > 30) {
-    return "watch";
-  }
+  if (daysSinceLastActivity > 90) return "dormant";
+  if (daysSinceLastActivity > 30) return "watch";
   return "active";
 }
 
 function toNumber(value: unknown): number {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-  if (typeof value === "bigint") {
-    return Number(value);
-  }
-  if (value === null || value === undefined) {
-    return 0;
-  }
-
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "bigint") return Number(value);
+  if (value === null || value === undefined) return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function getPrismaErrorCode(error: unknown): string | null {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code?: unknown }).code === "string"
-  ) {
-    return (error as { code: string }).code;
-  }
-
-  return null;
 }
 
 function getSourceConfig(): sql.config {
@@ -498,10 +490,7 @@ function ensureSourceConfigured(): void {
     !env.SOURCE_SQL_USER ||
     !env.SOURCE_SQL_PASSWORD
   ) {
-    throw new WalletServiceError(
-      "Source SQL metrics connection is not configured.",
-      503,
-    );
+    throw new WalletServiceError("Source SQL metrics connection is not configured.", 503);
   }
 }
 
@@ -520,24 +509,133 @@ async function getPool(): Promise<sql.ConnectionPool> {
   return poolPromise;
 }
 
+// Build safe SQL IN list from hardcoded constant string arrays only
+function sqlInList(items: readonly string[]): string {
+  return items.map((item) => `'${item.replace(/'/g, "''")}'`).join(", ");
+}
+
+function getTxTable(): QualifiedTableName {
+  return parseQualifiedTableName(env.SOURCE_SQL_TRANSACTIONS_TABLE);
+}
+
+function getCustomerTable(): QualifiedTableName {
+  return parseQualifiedTableName(env.SOURCE_SQL_CUSTOMER_TABLE);
+}
+
+function getAccountsTable(currency: Currency): QualifiedTableName {
+  return parseQualifiedTableName(
+    currency === "USD" ? env.SOURCE_SQL_USD_ACCOUNTS_TABLE : env.SOURCE_SQL_ZWL_ACCOUNTS_TABLE,
+  );
+}
+
+// For USD: use the current-snapshot table; for ZWL: use the historical table (no dedicated current table)
+function getBalanceCurrentTable(currency: Currency): QualifiedTableName {
+  return parseQualifiedTableName(
+    currency === "USD"
+      ? env.SOURCE_SQL_USD_BALANCE_CURRENT_TABLE
+      : env.SOURCE_SQL_ZWL_BALANCE_TABLE,
+  );
+}
+
+function getBalanceHistoryTable(currency: Currency): QualifiedTableName {
+  return parseQualifiedTableName(
+    currency === "USD" ? env.SOURCE_SQL_AGENT_BALANCE_TABLE : env.SOURCE_SQL_ZWL_BALANCE_TABLE,
+  );
+}
+
+function buildComparisonKpi(current: number, previous: number): WalletComparisonKpi {
+  const absoluteChange = current - previous;
+  const percentChange = previous === 0 ? null : (absoluteChange / previous) * 100;
+  return { previousValue: previous, absoluteChange, percentChange };
+}
+
+function mapTransactionTrendRow(row: Record<string, unknown>): WalletTransactionTrendPoint {
+  const activeCustomers = Math.trunc(toNumber(row.activeCustomers));
+  const totalTransactionValue = toNumber(row.totalTransactionValue);
+  const totalTransactionVolume = Math.trunc(toNumber(row.totalTransactionVolume));
+  const depositValue = toNumber(row.depositValue);
+  const withdrawalValue = toNumber(row.withdrawalValue);
+  return {
+    period: String(row.period),
+    depositValue,
+    withdrawalValue,
+    netFlowValue: depositValue - withdrawalValue,
+    depositVolume: Math.trunc(toNumber(row.depositVolume)),
+    withdrawalVolume: Math.trunc(toNumber(row.withdrawalVolume)),
+    totalTransactionValue,
+    totalTransactionVolume,
+    activeCustomers,
+    valuePerActiveCustomer: activeCustomers === 0 ? 0 : totalTransactionValue / activeCustomers,
+    volumePerActiveCustomer: activeCustomers === 0 ? 0 : totalTransactionVolume / activeCustomers,
+  };
+}
+
+function mapRevenueTrendRow(row: Record<string, unknown>): WalletRevenueTrendPoint {
+  const totalCommission = toNumber(row.totalCommission);
+  const totalTransactionValue = toNumber(row.totalTransactionValue);
+  const totalTransactionVolume = Math.trunc(toNumber(row.totalTransactionVolume));
+  const activeCustomers = Math.trunc(toNumber(row.activeCustomers));
+  return {
+    period: String(row.period),
+    totalCommission,
+    depositCommission: toNumber(row.depositCommission),
+    withdrawalCommission: toNumber(row.withdrawalCommission),
+    totalTransactionValue,
+    totalTransactionVolume,
+    activeCustomers,
+    commissionPerTransaction: totalTransactionVolume === 0 ? 0 : totalCommission / totalTransactionVolume,
+    commissionPerActiveCustomer: activeCustomers === 0 ? 0 : totalCommission / activeCustomers,
+    commissionRate: totalTransactionValue === 0 ? 0 : (totalCommission / totalTransactionValue) * 100,
+  };
+}
+
+function mapCustomer360Summary(row: Record<string, unknown>, asOfDate: Date): WalletCustomer360Summary {
+  const firstSeenDate = row.firstSeenDate instanceof Date ? row.firstSeenDate : new Date(String(row.firstSeenDate));
+  const lastSeenDate = row.lastSeenDate instanceof Date ? row.lastSeenDate : new Date(String(row.lastSeenDate));
+  const daysSinceLastActivity = daysBetween(lastSeenDate, asOfDate);
+  return {
+    customerId: String(row.customerId),
+    fullName: row.fullName === null || row.fullName === undefined ? null : String(row.fullName).trim() || null,
+    mobileNumber: row.mobileNumber === null || row.mobileNumber === undefined ? null : String(row.mobileNumber).trim() || null,
+    firstSeenDate: formatDate(firstSeenDate),
+    lastSeenDate: formatDate(lastSeenDate),
+    daysSinceLastActivity,
+    dormancyStatus: getDormancyStatus(daysSinceLastActivity),
+    lifetimeTransactionValue: toNumber(row.lifetimeTransactionValue),
+    lifetimeTransactionVolume: Math.trunc(toNumber(row.lifetimeTransactionVolume)),
+    lifetimeCommission: toNumber(row.lifetimeCommission),
+    last30DayTransactionValue: toNumber(row.last30DayTransactionValue),
+    last60DayTransactionValue: toNumber(row.last60DayTransactionValue),
+  };
+}
+
+// ─── Transaction KPIs ────────────────────────────────────────────────────────
+
 async function queryTransactionKpis(params: {
-  table: QualifiedTableName;
+  currency: Currency;
   dateFrom: Date;
   dateTo: Date;
 }): Promise<Pick<WalletKpis, "totalTransactionValue" | "totalTransactionVolume" | "totalCommission">> {
   const pool = await getPool();
+  const tx = getTxTable();
+  const depositIn = sqlInList(DEPOSIT_TYPES[params.currency]);
+  const withdrawalIn = sqlInList(WITHDRAWAL_TYPES[params.currency]);
   const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
   request.input("dateFrom", sql.Date, params.dateFrom);
   request.input("dateTo", sql.Date, params.dateTo);
 
   const result = await request.query(`
     SELECT
-      COALESCE(SUM(COALESCE([total_value], 0)), 0) AS totalTransactionValue,
-      COALESCE(SUM(COALESCE([total_volume], 0)), 0) AS totalTransactionVolume,
-      COALESCE(SUM(COALESCE([total_commission], 0)), 0) AS totalCommission
-    FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-    WHERE CAST([date_id] AS DATE) >= @dateFrom
-      AND CAST([date_id] AS DATE) <= @dateTo
+      COALESCE(SUM(CASE WHEN [TransactionType] IN (${depositIn}) THEN [TransactionAmount] ELSE 0 END), 0) AS depositValue,
+      COALESCE(SUM(CASE WHEN [TransactionType] IN (${withdrawalIn}) THEN [TransactionAmount] ELSE 0 END), 0) AS withdrawalValue,
+      COALESCE(SUM([TransactionAmount]), 0) AS totalTransactionValue,
+      COALESCE(SUM([Volume]), 0) AS totalTransactionVolume,
+      COALESCE(ABS(SUM(CASE WHEN [NetFee] < 0 THEN [NetFee] ELSE 0 END)), 0) AS totalCommission
+    FROM [${tx.schema}].[${tx.table}] WITH (NOLOCK)
+    WHERE [Currency] = @currency
+      AND CAST([Date] AS DATE) >= @dateFrom
+      AND CAST([Date] AS DATE) <= @dateTo
   `);
 
   const row = (result.recordset[0] ?? {}) as NumericRecord;
@@ -548,119 +646,95 @@ async function queryTransactionKpis(params: {
   };
 }
 
+// ─── Customer KPIs ───────────────────────────────────────────────────────────
+
 async function queryCustomerKpis(params: {
-  table: QualifiedTableName;
-  dateFrom: Date;
-  dateTo: Date;
-  asOfDate: Date;
-}): Promise<Pick<WalletKpis, "activeCustomersA30" | "activeCustomersA60" | "newCustomers" | "dormantCustomers90Plus">> {
-  try {
-    return await queryCustomerKpisFromSnapshot(params);
-  } catch (error) {
-    if (getPrismaErrorCode(error) !== "P2010") {
-      throw error;
-    }
-
-    return queryCustomerKpisFromSource(params);
-  }
-}
-
-async function queryCustomerKpisFromSnapshot(params: {
-  dateFrom: Date;
-  dateTo: Date;
-  asOfDate: Date;
-}): Promise<Pick<WalletKpis, "activeCustomersA30" | "activeCustomersA60" | "newCustomers" | "dormantCustomers90Plus">> {
-  const a30Date = addDays(params.asOfDate, -29);
-  const a60Date = addDays(params.asOfDate, -59);
-  const dormantCutoff = addDays(params.asOfDate, -90);
-
-  const rows = await prisma.$queryRaw<Array<{
-    activeCustomersA30: bigint | number;
-    activeCustomersA60: bigint | number;
-    newCustomers: bigint | number;
-    dormantCustomers90Plus: bigint | number;
-  }>>`
-    SELECT
-      SUM(CASE WHEN [lastSeenDate] >= ${a30Date} AND [lastSeenDate] <= ${params.asOfDate} THEN 1 ELSE 0 END) AS [activeCustomersA30],
-      SUM(CASE WHEN [lastSeenDate] >= ${a60Date} AND [lastSeenDate] <= ${params.asOfDate} THEN 1 ELSE 0 END) AS [activeCustomersA60],
-      SUM(CASE WHEN [firstSeenDate] >= ${params.dateFrom} AND [firstSeenDate] <= ${params.dateTo} THEN 1 ELSE 0 END) AS [newCustomers],
-      SUM(CASE WHEN [lastSeenDate] < ${dormantCutoff} THEN 1 ELSE 0 END) AS [dormantCustomers90Plus]
-    FROM [WalletCustomerActivitySnapshot]
-    WHERE [firstSeenDate] <= ${params.asOfDate}
-  `;
-
-  const row = rows[0] ?? {};
-  return {
-    activeCustomersA30: Math.trunc(toNumber(row.activeCustomersA30)),
-    activeCustomersA60: Math.trunc(toNumber(row.activeCustomersA60)),
-    newCustomers: Math.trunc(toNumber(row.newCustomers)),
-    dormantCustomers90Plus: Math.trunc(toNumber(row.dormantCustomers90Plus)),
-  };
-}
-
-async function queryCustomerKpisFromSource(params: {
-  table: QualifiedTableName;
+  currency: Currency;
   dateFrom: Date;
   dateTo: Date;
   asOfDate: Date;
 }): Promise<Pick<WalletKpis, "activeCustomersA30" | "activeCustomersA60" | "newCustomers" | "dormantCustomers90Plus">> {
   const pool = await getPool();
-  const activeA30Request = pool.request();
-  activeA30Request.input("a30Date", sql.Date, addDays(params.asOfDate, -29));
-  activeA30Request.input("asOfDate", sql.Date, params.asOfDate);
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const a30Date = addDays(params.asOfDate, -29);
+  const a60Date = addDays(params.asOfDate, -59);
+  const dormantCutoff = addDays(params.asOfDate, -90);
 
-  const activeA60Request = pool.request();
-  activeA60Request.input("a60Date", sql.Date, addDays(params.asOfDate, -59));
-  activeA60Request.input("asOfDate", sql.Date, params.asOfDate);
+  const reqA30 = pool.request();
+  reqA30.input("currency", sql.NVarChar(10), params.currency);
+  reqA30.input("a30Date", sql.Date, a30Date);
+  reqA30.input("asOfDate", sql.Date, params.asOfDate);
 
-  const newCustomersRequest = pool.request();
-  newCustomersRequest.input("dateFrom", sql.Date, params.dateFrom);
-  newCustomersRequest.input("dateTo", sql.Date, params.dateTo);
+  const reqA60 = pool.request();
+  reqA60.input("currency", sql.NVarChar(10), params.currency);
+  reqA60.input("a60Date", sql.Date, a60Date);
+  reqA60.input("asOfDate", sql.Date, params.asOfDate);
 
-  const [activeA30Result, activeA60Result, newCustomersResult] = await Promise.all([
-    activeA30Request.query(`
-      SELECT COUNT(DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120))))) AS activeCustomersA30
-      FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-      WHERE [date_id] >= @a30Date
-        AND [date_id] <= @asOfDate
-        AND [customer_id] IS NOT NULL
-        AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) <> ''
+  const reqNew = pool.request();
+  reqNew.input("currency", sql.NVarChar(10), params.currency);
+  reqNew.input("dateFrom", sql.Date, params.dateFrom);
+  reqNew.input("dateTo", sql.Date, params.dateTo);
+
+  const reqDormant = pool.request();
+  reqDormant.input("currency", sql.NVarChar(10), params.currency);
+  reqDormant.input("dormantCutoff", sql.Date, dormantCutoff);
+  reqDormant.input("asOfDate", sql.Date, params.asOfDate);
+
+  const [resA30, resA60, resNew, resDormant] = await Promise.all([
+    reqA30.query(`
+      SELECT COUNT(DISTINCT a.[CIF]) AS activeCustomersA30
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      WHERE t.[Currency] = @currency
+        AND CAST(t.[Date] AS DATE) >= @a30Date
+        AND CAST(t.[Date] AS DATE) <= @asOfDate
+        AND a.[CIF] IS NOT NULL
     `),
-    activeA60Request.query(`
-      SELECT COUNT(DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120))))) AS activeCustomersA60
-      FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-      WHERE [date_id] >= @a60Date
-        AND [date_id] <= @asOfDate
-        AND [customer_id] IS NOT NULL
-        AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) <> ''
+    reqA60.query(`
+      SELECT COUNT(DISTINCT a.[CIF]) AS activeCustomersA60
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      WHERE t.[Currency] = @currency
+        AND CAST(t.[Date] AS DATE) >= @a60Date
+        AND CAST(t.[Date] AS DATE) <= @asOfDate
+        AND a.[CIF] IS NOT NULL
     `),
-    newCustomersRequest.query(`
+    reqNew.query(`
       SELECT COUNT(*) AS newCustomers
       FROM (
-        SELECT
-          LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) AS customerId,
-          MIN([date_id]) AS firstDate
-        FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-        WHERE [date_id] <= @dateTo
-          AND [customer_id] IS NOT NULL
-          AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) <> ''
-        GROUP BY LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120))))
-      ) customer_first_seen
-      WHERE firstDate >= @dateFrom
-        AND firstDate <= @dateTo
+        SELECT a.[CIF], MIN(CAST(t.[Date] AS DATE)) AS firstDate
+        FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+        JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+        WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+        GROUP BY a.[CIF]
+      ) first_seen
+      WHERE firstDate >= @dateFrom AND firstDate <= @dateTo
+    `),
+    reqDormant.query(`
+      SELECT COUNT(*) AS dormantCustomers90Plus
+      FROM (
+        SELECT a.[CIF], MAX(CAST(t.[Date] AS DATE)) AS lastDate
+        FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+        JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+        WHERE t.[Currency] = @currency
+          AND CAST(t.[Date] AS DATE) <= @asOfDate
+          AND a.[CIF] IS NOT NULL
+        GROUP BY a.[CIF]
+      ) last_seen
+      WHERE lastDate < @dormantCutoff
     `),
   ]);
 
-  const activeA30Row = (activeA30Result.recordset[0] ?? {}) as NumericRecord;
-  const activeA60Row = (activeA60Result.recordset[0] ?? {}) as NumericRecord;
-  const newCustomersRow = (newCustomersResult.recordset[0] ?? {}) as NumericRecord;
   return {
-    activeCustomersA30: Math.trunc(toNumber(activeA30Row.activeCustomersA30)),
-    activeCustomersA60: Math.trunc(toNumber(activeA60Row.activeCustomersA60)),
-    newCustomers: Math.trunc(toNumber(newCustomersRow.newCustomers)),
-    dormantCustomers90Plus: null,
+    activeCustomersA30: Math.trunc(toNumber((resA30.recordset[0] as NumericRecord).activeCustomersA30)),
+    activeCustomersA60: Math.trunc(toNumber((resA60.recordset[0] as NumericRecord).activeCustomersA60)),
+    newCustomers: Math.trunc(toNumber((resNew.recordset[0] as NumericRecord).newCustomers)),
+    dormantCustomers90Plus: Math.trunc(toNumber((resDormant.recordset[0] as NumericRecord).dormantCustomers90Plus)),
   };
 }
+
+// ─── E-Float (Balance) ───────────────────────────────────────────────────────
 
 async function queryLatestEFloat(params: {
   table: QualifiedTableName;
@@ -688,7 +762,6 @@ async function queryLatestEFloat(params: {
 
   const row = (result.recordset[0] ?? {}) as NumericRecord;
   const snapshotDate = row.latestEFloatDate;
-
   return {
     latestTotalEFloat: toNumber(row.latestTotalEFloat),
     latestEFloatDate: snapshotDate instanceof Date ? formatDate(snapshotDate) : null,
@@ -696,277 +769,117 @@ async function queryLatestEFloat(params: {
 }
 
 async function queryEFloatWithFallback(params: {
-  currentTable: QualifiedTableName;
-  historicalTable: QualifiedTableName;
+  currency: Currency;
   asOfDate: Date;
 }): Promise<{ latestTotalEFloat: number; latestEFloatDate: string | null }> {
-  const fromCurrent = await queryLatestEFloat({
-    table: params.currentTable,
-    asOfDate: params.asOfDate,
-  });
-
-  if (fromCurrent.latestEFloatDate) {
-    return fromCurrent;
-  }
-
-  return queryLatestEFloat({
-    table: params.historicalTable,
-    asOfDate: params.asOfDate,
-  });
+  const currentTable = getBalanceCurrentTable(params.currency);
+  const fromCurrent = await queryLatestEFloat({ table: currentTable, asOfDate: params.asOfDate });
+  if (fromCurrent.latestEFloatDate) return fromCurrent;
+  const historyTable = getBalanceHistoryTable(params.currency);
+  return queryLatestEFloat({ table: historyTable, asOfDate: params.asOfDate });
 }
 
-function buildComparisonKpi(current: number, previous: number): WalletComparisonKpi {
-  const absoluteChange = current - previous;
-  const percentChange = previous === 0 ? null : (absoluteChange / previous) * 100;
+// ─── Activity Trend ──────────────────────────────────────────────────────────
 
-  return {
-    previousValue: previous,
-    absoluteChange,
-    percentChange,
-  };
-}
-
-function makePeriodMap(
-  rows: Array<Record<string, unknown>>,
-): Map<string, { newCustomers: number }> {
-  return new Map(
-    rows.map((row) => [
-      String(row.period),
-      { newCustomers: Math.trunc(toNumber(row.newCustomers)) },
-    ]),
-  );
-}
-
-async function queryNewCustomerTrendFromSnapshot(params: {
+async function queryActivityTrend(params: {
+  currency: Currency;
   dateFrom: Date;
   dateTo: Date;
   grain: "daily" | "monthly";
-}): Promise<Map<string, { newCustomers: number }>> {
-  try {
-    const periodSql =
-      params.grain === "daily"
-        ? Prisma.sql`CONVERT(VARCHAR(10), [firstSeenDate], 23)`
-        : Prisma.sql`CONVERT(CHAR(7), [firstSeenDate], 120)`;
-
-    const rows = await prisma.$queryRaw<Array<Record<string, unknown>>>`
-      SELECT
-        ${periodSql} AS [period],
-        COUNT(*) AS [newCustomers]
-      FROM [WalletCustomerActivitySnapshot]
-      WHERE [firstSeenDate] >= ${params.dateFrom}
-        AND [firstSeenDate] <= ${params.dateTo}
-      GROUP BY ${periodSql}
-      ORDER BY [period] ASC
-    `;
-
-    return makePeriodMap(rows);
-  } catch (error) {
-    if (getPrismaErrorCode(error) !== "P2010") {
-      throw error;
-    }
-
-    return new Map();
-  }
-}
-
-async function getSnapshotRefreshedAt(): Promise<string | null> {
-  try {
-    const rows = await prisma.$queryRaw<Array<{ refreshedAt: Date | null }>>`
-      SELECT MAX([refreshedAt]) AS [refreshedAt]
-      FROM [WalletCustomerActivitySnapshot]
-    `;
-
-    const refreshedAt = rows[0]?.refreshedAt;
-    return refreshedAt instanceof Date ? refreshedAt.toISOString() : null;
-  } catch (error) {
-    if (getPrismaErrorCode(error) !== "P2010") {
-      throw error;
-    }
-
-    return null;
-  }
-}
-
-async function queryRetentionDormancyFromSnapshot(params: {
-  dateFrom: Date;
-  dateTo: Date;
-  asOfDate: Date;
-}): Promise<{
-  activeCustomersA30: number;
-  dormantCustomers90Plus: number;
-  totalCustomers: number;
-  inactivityBuckets: WalletInactivityBucket[];
-  reactivationTrend: WalletReactivationTrendPoint[];
-  cohorts: WalletRetentionCohort[];
-}> {
-  const a30Date = addDays(params.asOfDate, -29);
-  const dormantCutoff = addDays(params.asOfDate, -90);
-
-  const [summaryRows, bucketRows, reactivationRows, cohortRows] = await Promise.all([
-    prisma.$queryRaw<Array<Record<string, unknown>>>`
-      SELECT
-        COUNT(*) AS [totalCustomers],
-        SUM(CASE WHEN [lastSeenDate] >= ${a30Date} AND [lastSeenDate] <= ${params.asOfDate} THEN 1 ELSE 0 END) AS [activeCustomersA30],
-        SUM(CASE WHEN [lastSeenDate] < ${dormantCutoff} THEN 1 ELSE 0 END) AS [dormantCustomers90Plus]
-      FROM [WalletCustomerActivitySnapshot]
-      WHERE [firstSeenDate] <= ${params.asOfDate}
-    `,
-    prisma.$queryRaw<Array<Record<string, unknown>>>`
-      SELECT
-        [bucket],
-        COUNT(*) AS [customers]
-      FROM (
-        SELECT
-          CASE
-            WHEN DATEDIFF(DAY, [lastSeenDate], ${params.asOfDate}) BETWEEN 0 AND 7 THEN '0-7 days'
-            WHEN DATEDIFF(DAY, [lastSeenDate], ${params.asOfDate}) BETWEEN 8 AND 30 THEN '8-30 days'
-            WHEN DATEDIFF(DAY, [lastSeenDate], ${params.asOfDate}) BETWEEN 31 AND 60 THEN '31-60 days'
-            WHEN DATEDIFF(DAY, [lastSeenDate], ${params.asOfDate}) BETWEEN 61 AND 90 THEN '61-90 days'
-            ELSE '90+ days'
-          END AS [bucket]
-        FROM [WalletCustomerActivitySnapshot]
-        WHERE [firstSeenDate] <= ${params.asOfDate}
-      ) bucketed_customers
-      GROUP BY [bucket]
-    `,
-    prisma.$queryRaw<Array<Record<string, unknown>>>`
-      SELECT
-        CONVERT(VARCHAR(10), [lastSeenDate], 23) AS [period],
-        COUNT(*) AS [reactivatedCustomers]
-      FROM [WalletCustomerActivitySnapshot]
-      WHERE [lastSeenDate] >= ${params.dateFrom}
-        AND [lastSeenDate] <= ${params.dateTo}
-        AND DATEDIFF(DAY, [firstSeenDate], [lastSeenDate]) > 90
-      GROUP BY CONVERT(VARCHAR(10), [lastSeenDate], 23)
-      ORDER BY [period] ASC
-    `,
-    prisma.$queryRaw<Array<Record<string, unknown>>>`
-      SELECT
-        CONVERT(CHAR(7), [firstSeenDate], 120) AS [cohortMonth],
-        COUNT(*) AS [customers],
-        SUM(CASE WHEN [lastSeenDate] >= ${a30Date} AND [lastSeenDate] <= ${params.asOfDate} THEN 1 ELSE 0 END) AS [active30Customers],
-        SUM(CASE WHEN [lastSeenDate] < ${dormantCutoff} THEN 1 ELSE 0 END) AS [dormant90Customers]
-      FROM [WalletCustomerActivitySnapshot]
-      WHERE [firstSeenDate] <= ${params.asOfDate}
-      GROUP BY CONVERT(CHAR(7), [firstSeenDate], 120)
-      ORDER BY [cohortMonth] DESC
-    `,
-  ]);
-
-  const summary = summaryRows[0] ?? {};
-  const totalCustomers = Math.trunc(toNumber(summary.totalCustomers));
-  const byBucket = new Map(
-    bucketRows.map((row) => [String(row.bucket), Math.trunc(toNumber(row.customers))]),
-  );
-
-  return {
-    activeCustomersA30: Math.trunc(toNumber(summary.activeCustomersA30)),
-    dormantCustomers90Plus: Math.trunc(toNumber(summary.dormantCustomers90Plus)),
-    totalCustomers,
-    inactivityBuckets: ([
-      "0-7 days",
-      "8-30 days",
-      "31-60 days",
-      "61-90 days",
-      "90+ days",
-    ] as const).map((bucket) => ({
-      bucket,
-      customers: byBucket.get(bucket) ?? 0,
-    })),
-    reactivationTrend: reactivationRows.map((row) => ({
-      period: String(row.period),
-      reactivatedCustomers: Math.trunc(toNumber(row.reactivatedCustomers)),
-    })),
-    cohorts: cohortRows.map((row) => {
-      const customers = Math.trunc(toNumber(row.customers));
-      const active30Customers = Math.trunc(toNumber(row.active30Customers));
-      const dormant90Customers = Math.trunc(toNumber(row.dormant90Customers));
-
-      return {
-        cohortMonth: String(row.cohortMonth),
-        customers,
-        active30Customers,
-        dormant90Customers,
-        active30Rate: customers === 0 ? 0 : (active30Customers / customers) * 100,
-        dormant90Rate: customers === 0 ? 0 : (dormant90Customers / customers) * 100,
-      };
-    }),
-  };
-}
-
-async function queryActivityTrendFromSource(params: {
-  table: QualifiedTableName;
-  dateFrom: Date;
-  dateTo: Date;
-  grain: "daily" | "monthly";
-}): Promise<Array<{ period: string; activeCustomers: number; transactionVolume: number }>> {
+}): Promise<Array<{ period: string; activeCustomers: number; newCustomers: number; transactionVolume: number }>> {
   const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
   const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
   request.input("dateFrom", sql.Date, params.dateFrom);
   request.input("dateTo", sql.Date, params.dateTo);
 
-  const periodExpression =
+  const periodExpr =
     params.grain === "daily"
-      ? "CONVERT(VARCHAR(10), CAST([date_id] AS DATE), 23)"
-      : "CONVERT(CHAR(7), CAST([date_id] AS DATE), 120)";
+      ? "CONVERT(VARCHAR(10), CAST(t.[Date] AS DATE), 23)"
+      : "CONVERT(CHAR(7), CAST(t.[Date] AS DATE), 120)";
 
   const result = await request.query(`
+    WITH customer_first AS (
+      SELECT a.[CIF], MIN(CAST(t.[Date] AS DATE)) AS firstDate
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+      GROUP BY a.[CIF]
+    ),
+    period_data AS (
+      SELECT
+        ${periodExpr} AS period,
+        a.[CIF] AS cif,
+        SUM(t.[Volume]) AS txVolume
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      WHERE t.[Currency] = @currency
+        AND CAST(t.[Date] AS DATE) >= @dateFrom
+        AND CAST(t.[Date] AS DATE) <= @dateTo
+        AND a.[CIF] IS NOT NULL
+      GROUP BY ${periodExpr}, a.[CIF]
+    )
     SELECT
-      ${periodExpression} AS [period],
-      COUNT(DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120))))) AS [activeCustomers],
-      COALESCE(SUM(COALESCE([total_volume], 0)), 0) AS [transactionVolume]
-    FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-    WHERE [date_id] >= @dateFrom
-      AND [date_id] <= @dateTo
-      AND [customer_id] IS NOT NULL
-      AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) <> ''
-    GROUP BY ${periodExpression}
-    ORDER BY [period] ASC
+      p.period,
+      COUNT(DISTINCT p.cif) AS activeCustomers,
+      COUNT(DISTINCT CASE WHEN cf.firstDate >= @dateFrom AND cf.firstDate <= @dateTo
+        AND ${params.grain === "daily" ? "CONVERT(VARCHAR(10), cf.firstDate, 23)" : "CONVERT(CHAR(7), cf.firstDate, 120)"} = p.period
+        THEN p.cif END) AS newCustomers,
+      COALESCE(SUM(p.txVolume), 0) AS transactionVolume
+    FROM period_data p
+    JOIN customer_first cf ON p.cif = cf.cif
+    GROUP BY p.period
+    ORDER BY p.period ASC
   `);
 
   return (result.recordset as Array<Record<string, unknown>>).map((row) => ({
     period: String(row.period),
     activeCustomers: Math.trunc(toNumber(row.activeCustomers)),
+    newCustomers: Math.trunc(toNumber(row.newCustomers)),
     transactionVolume: Math.trunc(toNumber(row.transactionVolume)),
   }));
 }
 
-async function queryFrequencyBucketsFromSource(params: {
-  table: QualifiedTableName;
+async function queryFrequencyBuckets(params: {
+  currency: Currency;
   dateFrom: Date;
   dateTo: Date;
 }): Promise<WalletCustomerFrequencyBucket[]> {
   const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
   const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
   request.input("dateFrom", sql.Date, params.dateFrom);
   request.input("dateTo", sql.Date, params.dateTo);
 
   const result = await request.query(`
     WITH customer_frequency AS (
-      SELECT
-        LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) AS [customerId],
-        COALESCE(SUM(COALESCE([total_volume], 0)), 0) AS [transactionCount]
-      FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-      WHERE [date_id] >= @dateFrom
-        AND [date_id] <= @dateTo
-        AND [customer_id] IS NOT NULL
-        AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) <> ''
-      GROUP BY LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120))))
+      SELECT a.[CIF] AS customerId, COALESCE(SUM(t.[Volume]), 0) AS transactionCount
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      WHERE t.[Currency] = @currency
+        AND CAST(t.[Date] AS DATE) >= @dateFrom
+        AND CAST(t.[Date] AS DATE) <= @dateTo
+        AND a.[CIF] IS NOT NULL
+      GROUP BY a.[CIF]
     )
     SELECT
       CASE
-        WHEN [transactionCount] <= 1 THEN '1 tx'
-        WHEN [transactionCount] BETWEEN 2 AND 5 THEN '2-5 tx'
-        WHEN [transactionCount] BETWEEN 6 AND 20 THEN '6-20 tx'
+        WHEN transactionCount <= 1 THEN '1 tx'
+        WHEN transactionCount BETWEEN 2 AND 5 THEN '2-5 tx'
+        WHEN transactionCount BETWEEN 6 AND 20 THEN '6-20 tx'
         ELSE '20+ tx'
-      END AS [bucket],
-      COUNT(*) AS [customers]
+      END AS bucket,
+      COUNT(*) AS customers
     FROM customer_frequency
     GROUP BY
       CASE
-        WHEN [transactionCount] <= 1 THEN '1 tx'
-        WHEN [transactionCount] BETWEEN 2 AND 5 THEN '2-5 tx'
-        WHEN [transactionCount] BETWEEN 6 AND 20 THEN '6-20 tx'
+        WHEN transactionCount <= 1 THEN '1 tx'
+        WHEN transactionCount BETWEEN 2 AND 5 THEN '2-5 tx'
+        WHEN transactionCount BETWEEN 6 AND 20 THEN '6-20 tx'
         ELSE '20+ tx'
       END
   `);
@@ -984,246 +897,192 @@ async function queryFrequencyBucketsFromSource(params: {
   }));
 }
 
-function mergeActivityTrend(
-  activeRows: Array<{ period: string; activeCustomers: number; transactionVolume: number }>,
-  newCustomersByPeriod: Map<string, { newCustomers: number }>,
-): WalletCustomerActivityTrendPoint[] {
-  const periods = new Set([
-    ...activeRows.map((row) => row.period),
-    ...Array.from(newCustomersByPeriod.keys()),
-  ]);
-  const activeByPeriod = new Map(activeRows.map((row) => [row.period, row]));
-
-  return Array.from(periods)
-    .sort((left, right) => left.localeCompare(right))
-    .map((period) => {
-      const active = activeByPeriod.get(period);
-      const newCustomers = newCustomersByPeriod.get(period)?.newCustomers ?? 0;
-      const activeCustomers = active?.activeCustomers ?? 0;
-
-      return {
-        period,
-        activeCustomers,
-        newCustomers,
-        returningCustomers: Math.max(0, activeCustomers - newCustomers),
-        transactionVolume: active?.transactionVolume ?? 0,
-      };
-    });
-}
+// ─── Transaction Performance ─────────────────────────────────────────────────
 
 async function queryTransactionPerformanceTrend(params: {
-  table: QualifiedTableName;
+  currency: Currency;
   dateFrom: Date;
   dateTo: Date;
   grain: "daily" | "monthly";
 }): Promise<WalletTransactionTrendPoint[]> {
   const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const depositIn = sqlInList(DEPOSIT_TYPES[params.currency]);
+  const withdrawalIn = sqlInList(WITHDRAWAL_TYPES[params.currency]);
   const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
   request.input("dateFrom", sql.Date, params.dateFrom);
   request.input("dateTo", sql.Date, params.dateTo);
 
-  const periodExpression =
+  const periodExpr =
     params.grain === "daily"
-      ? "CONVERT(VARCHAR(10), CAST([date_id] AS DATE), 23)"
-      : "CONVERT(CHAR(7), CAST([date_id] AS DATE), 120)";
+      ? "CONVERT(VARCHAR(10), CAST(t.[Date] AS DATE), 23)"
+      : "CONVERT(CHAR(7), CAST(t.[Date] AS DATE), 120)";
 
   const result = await request.query(`
     SELECT
-      ${periodExpression} AS [period],
-      COALESCE(SUM(COALESCE([value_of_deposits], 0)), 0) AS [depositValue],
-      COALESCE(SUM(COALESCE([value_of_withdrawals], 0)), 0) AS [withdrawalValue],
-      COALESCE(SUM(COALESCE([number_of_deposits], 0)), 0) AS [depositVolume],
-      COALESCE(SUM(COALESCE([number_of_withdrawals], 0)), 0) AS [withdrawalVolume],
-      COALESCE(SUM(COALESCE([total_value], 0)), 0) AS [totalTransactionValue],
-      COALESCE(SUM(COALESCE([total_volume], 0)), 0) AS [totalTransactionVolume],
-      COUNT(DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120))))) AS [activeCustomers]
-    FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-    WHERE [date_id] >= @dateFrom
-      AND [date_id] <= @dateTo
-      AND [customer_id] IS NOT NULL
-      AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) <> ''
-    GROUP BY ${periodExpression}
-    ORDER BY [period] ASC
+      ${periodExpr} AS period,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${depositIn}) THEN t.[TransactionAmount] ELSE 0 END), 0) AS depositValue,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${withdrawalIn}) THEN t.[TransactionAmount] ELSE 0 END), 0) AS withdrawalValue,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${depositIn}) THEN t.[Volume] ELSE 0 END), 0) AS depositVolume,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${withdrawalIn}) THEN t.[Volume] ELSE 0 END), 0) AS withdrawalVolume,
+      COALESCE(SUM(t.[TransactionAmount]), 0) AS totalTransactionValue,
+      COALESCE(SUM(t.[Volume]), 0) AS totalTransactionVolume,
+      COUNT(DISTINCT a.[CIF]) AS activeCustomers
+    FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+    WHERE t.[Currency] = @currency
+      AND CAST(t.[Date] AS DATE) >= @dateFrom
+      AND CAST(t.[Date] AS DATE) <= @dateTo
+      AND a.[CIF] IS NOT NULL
+    GROUP BY ${periodExpr}
+    ORDER BY period ASC
   `);
 
-  return (result.recordset as Array<Record<string, unknown>>).map((row) => {
-    const activeCustomers = Math.trunc(toNumber(row.activeCustomers));
-    const totalTransactionValue = toNumber(row.totalTransactionValue);
-    const totalTransactionVolume = Math.trunc(toNumber(row.totalTransactionVolume));
-    const depositValue = toNumber(row.depositValue);
-    const withdrawalValue = toNumber(row.withdrawalValue);
-
-    return {
-      period: String(row.period),
-      depositValue,
-      withdrawalValue,
-      netFlowValue: depositValue - withdrawalValue,
-      depositVolume: Math.trunc(toNumber(row.depositVolume)),
-      withdrawalVolume: Math.trunc(toNumber(row.withdrawalVolume)),
-      totalTransactionValue,
-      totalTransactionVolume,
-      activeCustomers,
-      valuePerActiveCustomer:
-        activeCustomers === 0 ? 0 : totalTransactionValue / activeCustomers,
-      volumePerActiveCustomer:
-        activeCustomers === 0 ? 0 : totalTransactionVolume / activeCustomers,
-    };
-  });
+  return (result.recordset as Array<Record<string, unknown>>).map(mapTransactionTrendRow);
 }
 
 async function queryTransactionPerformanceKpis(params: {
-  table: QualifiedTableName;
+  currency: Currency;
   dateFrom: Date;
   dateTo: Date;
 }): Promise<WalletTransactionPerformanceResponse["kpis"]> {
   const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const depositIn = sqlInList(DEPOSIT_TYPES[params.currency]);
+  const withdrawalIn = sqlInList(WITHDRAWAL_TYPES[params.currency]);
   const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
   request.input("dateFrom", sql.Date, params.dateFrom);
   request.input("dateTo", sql.Date, params.dateTo);
 
   const result = await request.query(`
     SELECT
-      COALESCE(SUM(COALESCE([value_of_deposits], 0)), 0) AS [depositValue],
-      COALESCE(SUM(COALESCE([value_of_withdrawals], 0)), 0) AS [withdrawalValue],
-      COALESCE(SUM(COALESCE([number_of_deposits], 0)), 0) AS [depositVolume],
-      COALESCE(SUM(COALESCE([number_of_withdrawals], 0)), 0) AS [withdrawalVolume],
-      COALESCE(SUM(COALESCE([total_value], 0)), 0) AS [totalTransactionValue],
-      COALESCE(SUM(COALESCE([total_volume], 0)), 0) AS [totalTransactionVolume],
-      COUNT(DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120))))) AS [activeCustomers]
-    FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-    WHERE [date_id] >= @dateFrom
-      AND [date_id] <= @dateTo
-      AND [customer_id] IS NOT NULL
-      AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) <> ''
+      COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${depositIn}) THEN t.[TransactionAmount] ELSE 0 END), 0) AS depositValue,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${withdrawalIn}) THEN t.[TransactionAmount] ELSE 0 END), 0) AS withdrawalValue,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${depositIn}) THEN t.[Volume] ELSE 0 END), 0) AS depositVolume,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${withdrawalIn}) THEN t.[Volume] ELSE 0 END), 0) AS withdrawalVolume,
+      COALESCE(SUM(t.[TransactionAmount]), 0) AS totalTransactionValue,
+      COALESCE(SUM(t.[Volume]), 0) AS totalTransactionVolume,
+      COUNT(DISTINCT a.[CIF]) AS activeCustomers
+    FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+    WHERE t.[Currency] = @currency
+      AND CAST(t.[Date] AS DATE) >= @dateFrom
+      AND CAST(t.[Date] AS DATE) <= @dateTo
+      AND a.[CIF] IS NOT NULL
   `);
 
   const row = (result.recordset[0] ?? {}) as NumericRecord;
-  const activeCustomers = Math.trunc(toNumber(row.activeCustomers));
-  const totalTransactionValue = toNumber(row.totalTransactionValue);
-  const totalTransactionVolume = Math.trunc(toNumber(row.totalTransactionVolume));
-  const depositValue = toNumber(row.depositValue);
-  const withdrawalValue = toNumber(row.withdrawalValue);
-
+  const mapped = mapTransactionTrendRow({ ...row, period: "" });
   return {
-    depositValue,
-    withdrawalValue,
-    netFlowValue: depositValue - withdrawalValue,
-    depositVolume: Math.trunc(toNumber(row.depositVolume)),
-    withdrawalVolume: Math.trunc(toNumber(row.withdrawalVolume)),
-    totalTransactionValue,
-    totalTransactionVolume,
-    activeCustomers,
-    valuePerActiveCustomer:
-      activeCustomers === 0 ? 0 : totalTransactionValue / activeCustomers,
-    volumePerActiveCustomer:
-      activeCustomers === 0 ? 0 : totalTransactionVolume / activeCustomers,
+    depositValue: mapped.depositValue,
+    withdrawalValue: mapped.withdrawalValue,
+    netFlowValue: mapped.netFlowValue,
+    depositVolume: mapped.depositVolume,
+    withdrawalVolume: mapped.withdrawalVolume,
+    totalTransactionValue: mapped.totalTransactionValue,
+    totalTransactionVolume: mapped.totalTransactionVolume,
+    activeCustomers: mapped.activeCustomers,
+    valuePerActiveCustomer: mapped.valuePerActiveCustomer,
+    volumePerActiveCustomer: mapped.volumePerActiveCustomer,
   };
 }
 
+// ─── Revenue Performance ─────────────────────────────────────────────────────
+
 async function queryRevenuePerformanceTrend(params: {
-  table: QualifiedTableName;
+  currency: Currency;
   dateFrom: Date;
   dateTo: Date;
   grain: "daily" | "monthly";
 }): Promise<WalletRevenueTrendPoint[]> {
   const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const depositIn = sqlInList(DEPOSIT_TYPES[params.currency]);
+  const withdrawalIn = sqlInList(WITHDRAWAL_TYPES[params.currency]);
   const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
   request.input("dateFrom", sql.Date, params.dateFrom);
   request.input("dateTo", sql.Date, params.dateTo);
 
-  const periodExpression =
+  const periodExpr =
     params.grain === "daily"
-      ? "CONVERT(VARCHAR(10), CAST([date_id] AS DATE), 23)"
-      : "CONVERT(CHAR(7), CAST([date_id] AS DATE), 120)";
+      ? "CONVERT(VARCHAR(10), CAST(t.[Date] AS DATE), 23)"
+      : "CONVERT(CHAR(7), CAST(t.[Date] AS DATE), 120)";
 
   const result = await request.query(`
     SELECT
-      ${periodExpression} AS [period],
-      COALESCE(SUM(COALESCE([total_commission], 0)), 0) AS [totalCommission],
-      COALESCE(SUM(COALESCE([commission_on_deposits], 0)), 0) AS [depositCommission],
-      COALESCE(SUM(COALESCE([commission_on_withdrawals], 0)), 0) AS [withdrawalCommission],
-      COALESCE(SUM(COALESCE([total_value], 0)), 0) AS [totalTransactionValue],
-      COALESCE(SUM(COALESCE([total_volume], 0)), 0) AS [totalTransactionVolume],
-      COUNT(DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120))))) AS [activeCustomers]
-    FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-    WHERE [date_id] >= @dateFrom
-      AND [date_id] <= @dateTo
-      AND [customer_id] IS NOT NULL
-      AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) <> ''
-    GROUP BY ${periodExpression}
-    ORDER BY [period] ASC
+      ${periodExpr} AS period,
+      COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS totalCommission,
+      COALESCE(ABS(SUM(CASE WHEN t.[TransactionType] IN (${depositIn}) AND t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS depositCommission,
+      COALESCE(ABS(SUM(CASE WHEN t.[TransactionType] IN (${withdrawalIn}) AND t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS withdrawalCommission,
+      COALESCE(SUM(t.[TransactionAmount]), 0) AS totalTransactionValue,
+      COALESCE(SUM(t.[Volume]), 0) AS totalTransactionVolume,
+      COUNT(DISTINCT a.[CIF]) AS activeCustomers
+    FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+    WHERE t.[Currency] = @currency
+      AND CAST(t.[Date] AS DATE) >= @dateFrom
+      AND CAST(t.[Date] AS DATE) <= @dateTo
+      AND a.[CIF] IS NOT NULL
+    GROUP BY ${periodExpr}
+    ORDER BY period ASC
   `);
 
-  return (result.recordset as Array<Record<string, unknown>>).map((row) => {
-    const totalCommission = toNumber(row.totalCommission);
-    const totalTransactionValue = toNumber(row.totalTransactionValue);
-    const totalTransactionVolume = Math.trunc(toNumber(row.totalTransactionVolume));
-    const activeCustomers = Math.trunc(toNumber(row.activeCustomers));
-
-    return {
-      period: String(row.period),
-      totalCommission,
-      depositCommission: toNumber(row.depositCommission),
-      withdrawalCommission: toNumber(row.withdrawalCommission),
-      totalTransactionValue,
-      totalTransactionVolume,
-      activeCustomers,
-      commissionPerTransaction:
-        totalTransactionVolume === 0 ? 0 : totalCommission / totalTransactionVolume,
-      commissionPerActiveCustomer:
-        activeCustomers === 0 ? 0 : totalCommission / activeCustomers,
-      commissionRate:
-        totalTransactionValue === 0 ? 0 : (totalCommission / totalTransactionValue) * 100,
-    };
-  });
+  return (result.recordset as Array<Record<string, unknown>>).map(mapRevenueTrendRow);
 }
 
 async function queryRevenuePerformanceKpis(params: {
-  table: QualifiedTableName;
+  currency: Currency;
   dateFrom: Date;
   dateTo: Date;
 }): Promise<WalletRevenuePerformanceResponse["kpis"]> {
   const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const depositIn = sqlInList(DEPOSIT_TYPES[params.currency]);
+  const withdrawalIn = sqlInList(WITHDRAWAL_TYPES[params.currency]);
   const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
   request.input("dateFrom", sql.Date, params.dateFrom);
   request.input("dateTo", sql.Date, params.dateTo);
 
   const result = await request.query(`
     SELECT
-      COALESCE(SUM(COALESCE([total_commission], 0)), 0) AS [totalCommission],
-      COALESCE(SUM(COALESCE([commission_on_deposits], 0)), 0) AS [depositCommission],
-      COALESCE(SUM(COALESCE([commission_on_withdrawals], 0)), 0) AS [withdrawalCommission],
-      COALESCE(SUM(COALESCE([total_value], 0)), 0) AS [totalTransactionValue],
-      COALESCE(SUM(COALESCE([total_volume], 0)), 0) AS [totalTransactionVolume],
-      COUNT(DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120))))) AS [activeCustomers]
-    FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-    WHERE [date_id] >= @dateFrom
-      AND [date_id] <= @dateTo
-      AND [customer_id] IS NOT NULL
-      AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) <> ''
+      COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS totalCommission,
+      COALESCE(ABS(SUM(CASE WHEN t.[TransactionType] IN (${depositIn}) AND t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS depositCommission,
+      COALESCE(ABS(SUM(CASE WHEN t.[TransactionType] IN (${withdrawalIn}) AND t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS withdrawalCommission,
+      COALESCE(SUM(t.[TransactionAmount]), 0) AS totalTransactionValue,
+      COALESCE(SUM(t.[Volume]), 0) AS totalTransactionVolume,
+      COUNT(DISTINCT a.[CIF]) AS activeCustomers
+    FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+    WHERE t.[Currency] = @currency
+      AND CAST(t.[Date] AS DATE) >= @dateFrom
+      AND CAST(t.[Date] AS DATE) <= @dateTo
+      AND a.[CIF] IS NOT NULL
   `);
 
   const row = (result.recordset[0] ?? {}) as NumericRecord;
-  const totalCommission = toNumber(row.totalCommission);
-  const totalTransactionValue = toNumber(row.totalTransactionValue);
-  const totalTransactionVolume = Math.trunc(toNumber(row.totalTransactionVolume));
-  const activeCustomers = Math.trunc(toNumber(row.activeCustomers));
-
+  const mapped = mapRevenueTrendRow({ ...row, period: "" });
   return {
-    totalCommission,
-    depositCommission: toNumber(row.depositCommission),
-    withdrawalCommission: toNumber(row.withdrawalCommission),
-    totalTransactionValue,
-    totalTransactionVolume,
-    activeCustomers,
-    commissionPerTransaction:
-      totalTransactionVolume === 0 ? 0 : totalCommission / totalTransactionVolume,
-    commissionPerActiveCustomer:
-      activeCustomers === 0 ? 0 : totalCommission / activeCustomers,
-    commissionRate:
-      totalTransactionValue === 0 ? 0 : (totalCommission / totalTransactionValue) * 100,
+    totalCommission: mapped.totalCommission,
+    depositCommission: mapped.depositCommission,
+    withdrawalCommission: mapped.withdrawalCommission,
+    totalTransactionValue: mapped.totalTransactionValue,
+    totalTransactionVolume: mapped.totalTransactionVolume,
+    activeCustomers: mapped.activeCustomers,
+    commissionPerTransaction: mapped.commissionPerTransaction,
+    commissionPerActiveCustomer: mapped.commissionPerActiveCustomer,
+    commissionRate: mapped.commissionRate,
   };
 }
+
+// ─── Liquidity ───────────────────────────────────────────────────────────────
 
 async function queryLiquiditySnapshot(params: {
   table: QualifiedTableName;
@@ -1300,8 +1159,7 @@ async function queryLiquiditySnapshot(params: {
     zeroOrNegativeAccounts: Math.trunc(toNumber(row.zeroOrNegativeAccounts)),
     averageBalance: toNumber(row.averageBalance),
     medianBalance: toNumber(row.medianBalance),
-    top10BalanceConcentration:
-      latestTotalEFloat === 0 ? 0 : (top10BalanceTotal / latestTotalEFloat) * 100,
+    top10BalanceConcentration: latestTotalEFloat === 0 ? 0 : (top10BalanceTotal / latestTotalEFloat) * 100,
   };
 }
 
@@ -1406,165 +1264,366 @@ async function queryLiquidityProductBreakdown(params: {
   }));
 }
 
-function mapCustomer360Summary(
-  row: Record<string, unknown>,
-  asOfDate: Date,
-): WalletCustomer360Summary {
-  const firstSeenDate = row.firstSeenDate instanceof Date ? row.firstSeenDate : new Date(String(row.firstSeenDate));
-  const lastSeenDate = row.lastSeenDate instanceof Date ? row.lastSeenDate : new Date(String(row.lastSeenDate));
-  const daysSinceLastActivity = daysBetween(lastSeenDate, asOfDate);
+// ─── Retention / Dormancy ────────────────────────────────────────────────────
+
+async function queryRetentionDormancy(params: {
+  currency: Currency;
+  dateFrom: Date;
+  dateTo: Date;
+  asOfDate: Date;
+}): Promise<{
+  activeCustomersA30: number;
+  dormantCustomers90Plus: number;
+  totalCustomers: number;
+  inactivityBuckets: WalletInactivityBucket[];
+  reactivationTrend: WalletReactivationTrendPoint[];
+  cohorts: WalletRetentionCohort[];
+}> {
+  const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const a30Date = addDays(params.asOfDate, -29);
+  const dormantCutoff = addDays(params.asOfDate, -90);
+
+  const reqSummary = pool.request();
+  reqSummary.input("currency", sql.NVarChar(10), params.currency);
+  reqSummary.input("asOfDate", sql.Date, params.asOfDate);
+  reqSummary.input("a30Date", sql.Date, a30Date);
+  reqSummary.input("dormantCutoff", sql.Date, dormantCutoff);
+
+  const reqBuckets = pool.request();
+  reqBuckets.input("currency", sql.NVarChar(10), params.currency);
+  reqBuckets.input("asOfDate", sql.Date, params.asOfDate);
+
+  const reqReactivation = pool.request();
+  reqReactivation.input("currency", sql.NVarChar(10), params.currency);
+  reqReactivation.input("dateFrom", sql.Date, params.dateFrom);
+  reqReactivation.input("dateTo", sql.Date, params.dateTo);
+
+  const reqCohorts = pool.request();
+  reqCohorts.input("currency", sql.NVarChar(10), params.currency);
+  reqCohorts.input("asOfDate", sql.Date, params.asOfDate);
+  reqCohorts.input("a30Date", sql.Date, a30Date);
+  reqCohorts.input("dormantCutoff", sql.Date, dormantCutoff);
+
+  const customerLastSeen = `
+    (SELECT a.[CIF], MAX(CAST(t.[Date] AS DATE)) AS lastDate, MIN(CAST(t.[Date] AS DATE)) AS firstDate
+     FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+     JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+     WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+     GROUP BY a.[CIF]) cls
+  `;
+
+  const [resSummary, resBuckets, resReactivation, resCohorts] = await Promise.all([
+    reqSummary.query(`
+      SELECT
+        COUNT(*) AS totalCustomers,
+        SUM(CASE WHEN cls.lastDate >= @a30Date AND cls.lastDate <= @asOfDate THEN 1 ELSE 0 END) AS activeCustomersA30,
+        SUM(CASE WHEN cls.lastDate < @dormantCutoff THEN 1 ELSE 0 END) AS dormantCustomers90Plus
+      FROM ${customerLastSeen}
+      WHERE cls.lastDate <= @asOfDate
+    `),
+    reqBuckets.query(`
+      SELECT
+        CASE
+          WHEN DATEDIFF(DAY, cls.lastDate, @asOfDate) BETWEEN 0 AND 7 THEN '0-7 days'
+          WHEN DATEDIFF(DAY, cls.lastDate, @asOfDate) BETWEEN 8 AND 30 THEN '8-30 days'
+          WHEN DATEDIFF(DAY, cls.lastDate, @asOfDate) BETWEEN 31 AND 60 THEN '31-60 days'
+          WHEN DATEDIFF(DAY, cls.lastDate, @asOfDate) BETWEEN 61 AND 90 THEN '61-90 days'
+          ELSE '90+ days'
+        END AS bucket,
+        COUNT(*) AS customers
+      FROM ${customerLastSeen}
+      WHERE cls.lastDate <= @asOfDate
+      GROUP BY
+        CASE
+          WHEN DATEDIFF(DAY, cls.lastDate, @asOfDate) BETWEEN 0 AND 7 THEN '0-7 days'
+          WHEN DATEDIFF(DAY, cls.lastDate, @asOfDate) BETWEEN 8 AND 30 THEN '8-30 days'
+          WHEN DATEDIFF(DAY, cls.lastDate, @asOfDate) BETWEEN 31 AND 60 THEN '31-60 days'
+          WHEN DATEDIFF(DAY, cls.lastDate, @asOfDate) BETWEEN 61 AND 90 THEN '61-90 days'
+          ELSE '90+ days'
+        END
+    `),
+    reqReactivation.query(`
+      WITH customer_gaps AS (
+        SELECT
+          a.[CIF],
+          CAST(t.[Date] AS DATE) AS txDate,
+          LAG(CAST(t.[Date] AS DATE)) OVER (PARTITION BY a.[CIF] ORDER BY CAST(t.[Date] AS DATE)) AS prevDate
+        FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+        JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+        WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+      )
+      SELECT
+        CONVERT(VARCHAR(10), txDate, 23) AS period,
+        COUNT(DISTINCT [CIF]) AS reactivatedCustomers
+      FROM customer_gaps
+      WHERE txDate >= @dateFrom
+        AND txDate <= @dateTo
+        AND prevDate IS NOT NULL
+        AND DATEDIFF(DAY, prevDate, txDate) > 90
+      GROUP BY CONVERT(VARCHAR(10), txDate, 23)
+      ORDER BY period ASC
+    `),
+    reqCohorts.query(`
+      SELECT
+        CONVERT(CHAR(7), cls.firstDate, 120) AS cohortMonth,
+        COUNT(*) AS customers,
+        SUM(CASE WHEN cls.lastDate >= @a30Date AND cls.lastDate <= @asOfDate THEN 1 ELSE 0 END) AS active30Customers,
+        SUM(CASE WHEN cls.lastDate < @dormantCutoff THEN 1 ELSE 0 END) AS dormant90Customers
+      FROM ${customerLastSeen}
+      WHERE cls.firstDate <= @asOfDate
+      GROUP BY CONVERT(CHAR(7), cls.firstDate, 120)
+      ORDER BY cohortMonth DESC
+    `),
+  ]);
+
+  const summary = (resSummary.recordset[0] ?? {}) as NumericRecord;
+  const byBucket = new Map(
+    (resBuckets.recordset as Array<Record<string, unknown>>).map((row) => [
+      String(row.bucket),
+      Math.trunc(toNumber(row.customers)),
+    ]),
+  );
 
   return {
-    customerId: String(row.customerId),
-    fullName: row.fullName === null || row.fullName === undefined ? null : String(row.fullName),
-    mobileNumber: row.mobileNumber === null || row.mobileNumber === undefined ? null : String(row.mobileNumber),
-    firstSeenDate: formatDate(firstSeenDate),
-    lastSeenDate: formatDate(lastSeenDate),
-    daysSinceLastActivity,
-    dormancyStatus: getDormancyStatus(daysSinceLastActivity),
-    lifetimeTransactionValue: toNumber(row.lifetimeTransactionValue),
-    lifetimeTransactionVolume: Math.trunc(toNumber(row.lifetimeTransactionVolume)),
-    lifetimeCommission: toNumber(row.lifetimeCommission),
-    last30DayTransactionValue: toNumber(row.last30DayTransactionValue),
-    last60DayTransactionValue: toNumber(row.last60DayTransactionValue),
+    totalCustomers: Math.trunc(toNumber(summary.totalCustomers)),
+    activeCustomersA30: Math.trunc(toNumber(summary.activeCustomersA30)),
+    dormantCustomers90Plus: Math.trunc(toNumber(summary.dormantCustomers90Plus)),
+    inactivityBuckets: (["0-7 days", "8-30 days", "31-60 days", "61-90 days", "90+ days"] as const).map((bucket) => ({
+      bucket,
+      customers: byBucket.get(bucket) ?? 0,
+    })),
+    reactivationTrend: (resReactivation.recordset as Array<Record<string, unknown>>).map((row) => ({
+      period: String(row.period),
+      reactivatedCustomers: Math.trunc(toNumber(row.reactivatedCustomers)),
+    })),
+    cohorts: (resCohorts.recordset as Array<Record<string, unknown>>).map((row) => {
+      const customers = Math.trunc(toNumber(row.customers));
+      const active30Customers = Math.trunc(toNumber(row.active30Customers));
+      const dormant90Customers = Math.trunc(toNumber(row.dormant90Customers));
+      return {
+        cohortMonth: String(row.cohortMonth),
+        customers,
+        active30Customers,
+        dormant90Customers,
+        active30Rate: customers === 0 ? 0 : (active30Customers / customers) * 100,
+        dormant90Rate: customers === 0 ? 0 : (dormant90Customers / customers) * 100,
+      };
+    }),
   };
 }
 
-function buildCustomer360Where(input: {
+// ─── Customer 360 ─────────────────────────────────────────────────────────────
+
+async function queryCustomer360List(params: {
+  currency: Currency;
   search?: string;
   status?: "all" | "active_a30" | "dormant_90";
   asOfDate: Date;
-}): Prisma.Sql {
-  const conditions: Prisma.Sql[] = [Prisma.sql`[firstSeenDate] <= ${input.asOfDate}`];
-  const search = input.search?.trim();
+  page: number;
+  pageSize: number;
+}): Promise<{ items: Array<Record<string, unknown>>; total: number }> {
+  const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const cust = getCustomerTable();
+  const last30 = addDays(params.asOfDate, -29);
+  const last60 = addDays(params.asOfDate, -59);
+  const dormantCutoff = addDays(params.asOfDate, -90);
+  const offset = (params.page - 1) * params.pageSize;
 
-  if (search) {
-    const pattern = `%${search}%`;
-    conditions.push(Prisma.sql`(
-      [customerId] LIKE ${pattern}
-      OR [fullName] LIKE ${pattern}
-      OR [mobileNumber] LIKE ${pattern}
-    )`);
-  }
+  const reqCount = pool.request();
+  reqCount.input("currency", sql.NVarChar(10), params.currency);
+  reqCount.input("asOfDate", sql.Date, params.asOfDate);
+  if (params.status === "active_a30") reqCount.input("statusDate", sql.Date, last30);
+  if (params.status === "dormant_90") reqCount.input("statusDate", sql.Date, dormantCutoff);
 
-  if (input.status === "active_a30") {
-    conditions.push(Prisma.sql`[lastSeenDate] >= ${addDays(input.asOfDate, -29)}`);
-  } else if (input.status === "dormant_90") {
-    conditions.push(Prisma.sql`[lastSeenDate] < ${addDays(input.asOfDate, -90)}`);
-  }
+  const reqItems = pool.request();
+  reqItems.input("currency", sql.NVarChar(10), params.currency);
+  reqItems.input("asOfDate", sql.Date, params.asOfDate);
+  reqItems.input("last30", sql.Date, last30);
+  reqItems.input("last60", sql.Date, last60);
+  reqItems.input("offset", sql.Int, offset);
+  reqItems.input("pageSize", sql.Int, params.pageSize);
+  if (params.status === "active_a30") reqItems.input("statusDate", sql.Date, last30);
+  if (params.status === "dormant_90") reqItems.input("statusDate", sql.Date, dormantCutoff);
 
-  return Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
-}
+  const searchClause = params.search?.trim()
+    ? `AND (c.[CIF] LIKE '%${params.search.trim().replace(/'/g, "''")}%'
+         OR CONCAT(c.[FirstName], ' ', c.[LastName]) LIKE '%${params.search.trim().replace(/'/g, "''")}%'
+         OR c.[MobileNumber] LIKE '%${params.search.trim().replace(/'/g, "''")}%')`
+    : "";
 
-function addInsightAlert(
-  alerts: WalletInsightAlertItem[],
-  alert: WalletInsightAlertItem,
-): void {
-  alerts.push(alert);
-}
+  const statusClause =
+    params.status === "active_a30"
+      ? "AND cls.lastDate >= @statusDate AND cls.lastDate <= @asOfDate"
+      : params.status === "dormant_90"
+        ? "AND cls.lastDate < @statusDate"
+        : "";
 
-function summarizeInsightAlerts(
-  alerts: WalletInsightAlertItem[],
-): WalletInsightsAlertsResponse["summary"] {
+  const [resCount, resItems] = await Promise.all([
+    reqCount.query(`
+      WITH customer_stats AS (
+        SELECT a.[CIF], MAX(CAST(t.[Date] AS DATE)) AS lastDate
+        FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+        JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+        WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+        GROUP BY a.[CIF]
+      )
+      SELECT COUNT(*) AS total FROM customer_stats cls
+      JOIN [${cust.schema}].[${cust.table}] c WITH (NOLOCK) ON cls.[CIF] = c.[CIF]
+      WHERE cls.lastDate <= @asOfDate ${searchClause} ${statusClause}
+    `),  reqItems.query(`
+      WITH customer_stats AS (
+        SELECT
+          a.[CIF],
+          MIN(CAST(t.[Date] AS DATE)) AS firstDate,
+          MAX(CAST(t.[Date] AS DATE)) AS lastDate,
+          SUM(t.[TransactionAmount]) AS lifetimeValue,
+          SUM(t.[Volume]) AS lifetimeVolume,
+          ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)) AS lifetimeCommission,
+          SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last30 THEN t.[TransactionAmount] ELSE 0 END) AS last30Value,
+          SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last60 THEN t.[TransactionAmount] ELSE 0 END) AS last60Value
+        FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+        JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+        WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+        GROUP BY a.[CIF]
+      )
+      SELECT
+        cls.[CIF] AS customerId,
+        CONCAT(LTRIM(RTRIM(c.[FirstName])), ' ', LTRIM(RTRIM(c.[LastName]))) AS fullName,
+        c.[MobileNumber] AS mobileNumber,
+        cls.firstDate AS firstSeenDate,
+        cls.lastDate AS lastSeenDate,
+        cls.lifetimeValue AS lifetimeTransactionValue,
+        cls.lifetimeVolume AS lifetimeTransactionVolume,
+        cls.lifetimeCommission,
+        cls.last30Value AS last30DayTransactionValue,
+        cls.last60Value AS last60DayTransactionValue
+      FROM customer_stats cls
+      JOIN [${cust.schema}].[${cust.table}] c WITH (NOLOCK) ON cls.[CIF] = c.[CIF]
+      WHERE cls.lastDate <= @asOfDate ${searchClause} ${statusClause}
+      ORDER BY cls.lifetimeValue DESC
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
+    `),
+  ]);
+
   return {
-    criticalCount: alerts.filter((alert) => alert.severity === "critical").length,
-    warningCount: alerts.filter((alert) => alert.severity === "warning").length,
-    positiveCount: alerts.filter((alert) => alert.severity === "positive").length,
-    infoCount: alerts.filter((alert) => alert.severity === "info").length,
-    totalAlerts: alerts.length,
+    total: Math.trunc(toNumber((resCount.recordset[0] as NumericRecord).total)),
+    items: resItems.recordset as Array<Record<string, unknown>>,
   };
 }
 
-async function getCustomerSnapshotRefreshedAt(): Promise<string | null> {
-  const rows = await prisma.$queryRaw<Array<{ snapshotRefreshedAt: Date | null }>>`
-    SELECT MAX([refreshedAt]) AS [snapshotRefreshedAt]
-    FROM [WalletCustomerActivitySnapshot]
-  `;
-  const snapshotRefreshedAt = rows[0]?.snapshotRefreshedAt;
-  return snapshotRefreshedAt instanceof Date ? snapshotRefreshedAt.toISOString() : null;
-}
-
-async function queryCustomer360Snapshot(customerId: string): Promise<Record<string, unknown> | null> {
-  const rows = await prisma.$queryRaw<Array<Record<string, unknown>>>`
-    SELECT TOP 1
-      [customerId],
-      [fullName],
-      [mobileNumber],
-      [firstSeenDate],
-      [lastSeenDate],
-      [lifetimeTransactionValue],
-      [lifetimeTransactionVolume],
-      [lifetimeCommission],
-      [last30DayTransactionValue],
-      [last60DayTransactionValue]
-    FROM [WalletCustomerActivitySnapshot]
-    WHERE [customerId] = ${customerId}
-  `;
-
-  return rows[0] ?? null;
-}
-
-async function queryCustomer360SourceDetail(params: {
-  table: QualifiedTableName;
+async function queryCustomer360Detail(params: {
+  currency: Currency;
   customerId: string;
   dateFrom: Date;
   dateTo: Date;
   asOfDate: Date;
 }): Promise<{
+  customer: Record<string, unknown> | null;
   kpis: WalletCustomer360DetailResponse["kpis"];
   dailyTrend: WalletCustomer360TrendPoint[];
 }> {
   const pool = await getPool();
-  const request = pool.request();
-  request.input("customerId", sql.VarChar(120), params.customerId);
-  request.input("dateFrom", sql.Date, params.dateFrom);
-  request.input("dateTo", sql.Date, params.dateTo);
-  request.input("last90Date", sql.Date, addDays(params.asOfDate, -89));
-  request.input("asOfDate", sql.Date, params.asOfDate);
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const cust = getCustomerTable();
+  const depositIn = sqlInList(DEPOSIT_TYPES[params.currency]);
+  const withdrawalIn = sqlInList(WITHDRAWAL_TYPES[params.currency]);
+  const last30 = addDays(params.asOfDate, -29);
+  const last60 = addDays(params.asOfDate, -59);
+  const last90Date = addDays(params.asOfDate, -89);
 
-  const result = await request.query(`
-    SELECT
-      COALESCE(SUM(CASE WHEN [date_id] >= @dateFrom AND [date_id] <= @dateTo THEN COALESCE([total_value], 0) ELSE 0 END), 0) AS [selectedPeriodTransactionValue],
-      COALESCE(SUM(CASE WHEN [date_id] >= @dateFrom AND [date_id] <= @dateTo THEN COALESCE([total_volume], 0) ELSE 0 END), 0) AS [selectedPeriodTransactionVolume],
-      COALESCE(SUM(CASE WHEN [date_id] >= @dateFrom AND [date_id] <= @dateTo THEN COALESCE([total_commission], 0) ELSE 0 END), 0) AS [selectedPeriodCommission],
-      COALESCE(SUM(CASE WHEN [date_id] >= @last90Date AND [date_id] <= @asOfDate THEN COALESCE([total_value], 0) ELSE 0 END), 0) AS [last90DayTransactionValue],
-      COALESCE(SUM(CASE WHEN [date_id] >= @last90Date AND [date_id] <= @asOfDate THEN COALESCE([total_volume], 0) ELSE 0 END), 0) AS [last90DayTransactionVolume]
-    FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-    WHERE LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) = @customerId;
+  const reqProfile = pool.request();
+  reqProfile.input("currency", sql.NVarChar(10), params.currency);
+  reqProfile.input("customerId", sql.NVarChar(120), params.customerId);
+  reqProfile.input("asOfDate", sql.Date, params.asOfDate);
+  reqProfile.input("last30", sql.Date, last30);
+  reqProfile.input("last60", sql.Date, last60);
 
-    SELECT
-      CONVERT(VARCHAR(10), CAST([date_id] AS DATE), 23) AS [period],
-      COALESCE(SUM(COALESCE([total_value], 0)), 0) AS [transactionValue],
-      COALESCE(SUM(COALESCE([total_volume], 0)), 0) AS [transactionVolume],
-      COALESCE(SUM(COALESCE([total_commission], 0)), 0) AS [commission],
-      COALESCE(SUM(COALESCE([value_of_deposits], 0)), 0) AS [depositValue],
-      COALESCE(SUM(COALESCE([value_of_withdrawals], 0)), 0) AS [withdrawalValue]
-    FROM [${params.table.schema}].[${params.table.table}] WITH (NOLOCK)
-    WHERE [date_id] >= @dateFrom
-      AND [date_id] <= @dateTo
-      AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(120)))) = @customerId
-    GROUP BY CONVERT(VARCHAR(10), CAST([date_id] AS DATE), 23)
-    ORDER BY [period] ASC;
-  `);
+  const reqKpis = pool.request();
+  reqKpis.input("currency", sql.NVarChar(10), params.currency);
+  reqKpis.input("customerId", sql.NVarChar(120), params.customerId);
+  reqKpis.input("dateFrom", sql.Date, params.dateFrom);
+  reqKpis.input("dateTo", sql.Date, params.dateTo);
+  reqKpis.input("last90Date", sql.Date, last90Date);
+  reqKpis.input("asOfDate", sql.Date, params.asOfDate);
 
-  const recordsets = result.recordsets as unknown as Array<Array<Record<string, unknown>>>;
-  const kpiRow = (recordsets[0]?.[0] ?? {}) as NumericRecord;
+  const reqTrend = pool.request();
+  reqTrend.input("currency", sql.NVarChar(10), params.currency);
+  reqTrend.input("customerId", sql.NVarChar(120), params.customerId);
+  reqTrend.input("dateFrom", sql.Date, params.dateFrom);
+  reqTrend.input("dateTo", sql.Date, params.dateTo);
+
+  const [resProfile, resKpis, resTrend] = await Promise.all([
+    reqProfile.query(`
+      SELECT
+        c.[CIF] AS customerId,
+        CONCAT(LTRIM(RTRIM(c.[FirstName])), ' ', LTRIM(RTRIM(c.[LastName]))) AS fullName,
+        c.[MobileNumber] AS mobileNumber,
+        MIN(CAST(t.[Date] AS DATE)) AS firstSeenDate,
+        MAX(CAST(t.[Date] AS DATE)) AS lastSeenDate,
+        SUM(t.[TransactionAmount]) AS lifetimeTransactionValue,
+        SUM(t.[Volume]) AS lifetimeTransactionVolume,
+        ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)) AS lifetimeCommission,
+        SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last30 THEN t.[TransactionAmount] ELSE 0 END) AS last30DayTransactionValue,
+        SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last60 THEN t.[TransactionAmount] ELSE 0 END) AS last60DayTransactionValue
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      JOIN [${cust.schema}].[${cust.table}] c WITH (NOLOCK) ON a.[CIF] = c.[CIF]
+      WHERE t.[Currency] = @currency
+        AND c.[CIF] = @customerId
+        AND CAST(t.[Date] AS DATE) <= @asOfDate
+      GROUP BY c.[CIF], c.[FirstName], c.[LastName], c.[MobileNumber]
+    `),
+    reqKpis.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @dateFrom AND CAST(t.[Date] AS DATE) <= @dateTo THEN t.[TransactionAmount] ELSE 0 END), 0) AS selectedPeriodTransactionValue,
+        COALESCE(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @dateFrom AND CAST(t.[Date] AS DATE) <= @dateTo THEN t.[Volume] ELSE 0 END), 0) AS selectedPeriodTransactionVolume,
+        COALESCE(ABS(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @dateFrom AND CAST(t.[Date] AS DATE) <= @dateTo AND t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS selectedPeriodCommission,
+        COALESCE(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last90Date AND CAST(t.[Date] AS DATE) <= @asOfDate THEN t.[TransactionAmount] ELSE 0 END), 0) AS last90DayTransactionValue,
+        COALESCE(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last90Date AND CAST(t.[Date] AS DATE) <= @asOfDate THEN t.[Volume] ELSE 0 END), 0) AS last90DayTransactionVolume
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      WHERE t.[Currency] = @currency AND a.[CIF] = @customerId
+    `),
+    reqTrend.query(`
+      SELECT
+        CONVERT(VARCHAR(10), CAST(t.[Date] AS DATE), 23) AS period,
+        COALESCE(SUM(t.[TransactionAmount]), 0) AS transactionValue,
+        COALESCE(SUM(t.[Volume]), 0) AS transactionVolume,
+        COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS commission,
+        COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${depositIn}) THEN t.[TransactionAmount] ELSE 0 END), 0) AS depositValue,
+        COALESCE(SUM(CASE WHEN t.[TransactionType] IN (${withdrawalIn}) THEN t.[TransactionAmount] ELSE 0 END), 0) AS withdrawalValue
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      WHERE t.[Currency] = @currency
+        AND a.[CIF] = @customerId
+        AND CAST(t.[Date] AS DATE) >= @dateFrom
+        AND CAST(t.[Date] AS DATE) <= @dateTo
+      GROUP BY CONVERT(VARCHAR(10), CAST(t.[Date] AS DATE), 23)
+      ORDER BY period ASC
+    `),
+  ]);
+
+  const profileRow = (resProfile.recordset[0] ?? null) as Record<string, unknown> | null;
+  const kpiRow = (resKpis.recordset[0] ?? {}) as NumericRecord;
   const selectedPeriodTransactionValue = toNumber(kpiRow.selectedPeriodTransactionValue);
   const selectedPeriodTransactionVolume = Math.trunc(toNumber(kpiRow.selectedPeriodTransactionVolume));
 
   return {
+    customer: profileRow,
     kpis: {
       selectedPeriodTransactionValue,
       selectedPeriodTransactionVolume,
       selectedPeriodCommission: toNumber(kpiRow.selectedPeriodCommission),
       last90DayTransactionValue: toNumber(kpiRow.last90DayTransactionValue),
       last90DayTransactionVolume: Math.trunc(toNumber(kpiRow.last90DayTransactionVolume)),
-      averageTransactionValue:
-        selectedPeriodTransactionVolume === 0
-          ? 0
-          : selectedPeriodTransactionValue / selectedPeriodTransactionVolume,
+      averageTransactionValue: selectedPeriodTransactionVolume === 0 ? 0 : selectedPeriodTransactionValue / selectedPeriodTransactionVolume,
     },
-    dailyTrend: (recordsets[1] ?? []).map((row) => ({
+    dailyTrend: (resTrend.recordset as Array<Record<string, unknown>>).map((row) => ({
       period: String(row.period),
       transactionValue: toNumber(row.transactionValue),
       transactionVolume: Math.trunc(toNumber(row.transactionVolume)),
@@ -1575,39 +1634,40 @@ async function queryCustomer360SourceDetail(params: {
   };
 }
 
-async function computeKpis(input: {
-  summaryTable: QualifiedTableName;
-  balanceTable: QualifiedTableName;
-  balanceCurrentTable: QualifiedTableName;
+// ─── KPI Aggregate (for overview) ────────────────────────────────────────────
+
+async function computeKpis(params: {
+  currency: Currency;
   dateFrom: Date;
   dateTo: Date;
   asOfDate: Date;
 }): Promise<WalletKpis> {
   const [transactionKpis, customerKpis, eFloatKpis] = await Promise.all([
-    queryTransactionKpis({
-      table: input.summaryTable,
-      dateFrom: input.dateFrom,
-      dateTo: input.dateTo,
-    }),
-    queryCustomerKpis({
-      table: input.summaryTable,
-      dateFrom: input.dateFrom,
-      dateTo: input.dateTo,
-      asOfDate: input.asOfDate,
-    }),
-    queryEFloatWithFallback({
-      currentTable: input.balanceCurrentTable,
-      historicalTable: input.balanceTable,
-      asOfDate: input.asOfDate,
-    }),
+    queryTransactionKpis(params),
+    queryCustomerKpis(params),
+    queryEFloatWithFallback({ currency: params.currency, asOfDate: params.asOfDate }),
   ]);
 
+  return { ...transactionKpis, ...customerKpis, ...eFloatKpis };
+}
+
+// ─── Insight Alerts ───────────────────────────────────────────────────────────
+
+function addInsightAlert(alerts: WalletInsightAlertItem[], alert: WalletInsightAlertItem): void {
+  alerts.push(alert);
+}
+
+function summarizeInsightAlerts(alerts: WalletInsightAlertItem[]): WalletInsightsAlertsResponse["summary"] {
   return {
-    ...transactionKpis,
-    ...customerKpis,
-    ...eFloatKpis,
+    criticalCount: alerts.filter((a) => a.severity === "critical").length,
+    warningCount: alerts.filter((a) => a.severity === "warning").length,
+    positiveCount: alerts.filter((a) => a.severity === "positive").length,
+    infoCount: alerts.filter((a) => a.severity === "info").length,
+    totalAlerts: alerts.length,
   };
 }
+
+// ─── Exported Service Functions ───────────────────────────────────────────────
 
 export async function getWalletOverview(
   input: WalletOverviewInput,
@@ -1616,36 +1676,20 @@ export async function getWalletOverview(
     throw new WalletServiceError("dateFrom must be less than or equal to dateTo", 400);
   }
 
-  const summaryTable = parseQualifiedTableName(env.SOURCE_SQL_AGENT_SUMMARY_TABLE);
-  const balanceTable = parseQualifiedTableName(env.SOURCE_SQL_AGENT_BALANCE_TABLE);
-  const balanceCurrentTable = parseQualifiedTableName(env.SOURCE_SQL_AGENT_BALANCE_CURRENT_TABLE);
-
+  const currency = input.currency;
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
   const asOfDate = normalizeDateOnly(input.asOfDate);
-  const daySpan = Math.max(
-    1,
-    Math.floor((dateTo.getTime() - dateFrom.getTime()) / (24 * 60 * 60 * 1000)) + 1,
-  );
-
+  const daySpan = Math.max(1, Math.floor((dateTo.getTime() - dateFrom.getTime()) / 86_400_000) + 1);
   const previousDateTo = addDays(dateFrom, -1);
   const previousDateFrom = addDays(previousDateTo, -(daySpan - 1));
 
-  const kpis = await computeKpis({
-    summaryTable,
-    balanceTable,
-    balanceCurrentTable,
-    dateFrom,
-    dateTo,
-    asOfDate,
-  });
+  const kpis = await computeKpis({ currency, dateFrom, dateTo, asOfDate });
 
   let comparison: WalletOverviewResponse["comparison"] = null;
   if (input.compare) {
     const previousKpis = await computeKpis({
-      summaryTable,
-      balanceTable,
-      balanceCurrentTable,
+      currency,
       dateFrom: previousDateFrom,
       dateTo: previousDateTo,
       asOfDate: previousDateTo,
@@ -1655,42 +1699,17 @@ export async function getWalletOverview(
       previousPeriodDateFrom: formatDate(previousDateFrom),
       previousPeriodDateTo: formatDate(previousDateTo),
       kpis: {
-        totalTransactionValue: buildComparisonKpi(
-          kpis.totalTransactionValue,
-          previousKpis.totalTransactionValue,
-        ),
-        totalTransactionVolume: buildComparisonKpi(
-          kpis.totalTransactionVolume,
-          previousKpis.totalTransactionVolume,
-        ),
-        totalCommission: buildComparisonKpi(
-          kpis.totalCommission,
-          previousKpis.totalCommission,
-        ),
-        activeCustomersA30: buildComparisonKpi(
-          kpis.activeCustomersA30,
-          previousKpis.activeCustomersA30,
-        ),
-        activeCustomersA60: buildComparisonKpi(
-          kpis.activeCustomersA60,
-          previousKpis.activeCustomersA60,
-        ),
-        newCustomers: buildComparisonKpi(
-          kpis.newCustomers,
-          previousKpis.newCustomers,
-        ),
+        totalTransactionValue: buildComparisonKpi(kpis.totalTransactionValue, previousKpis.totalTransactionValue),
+        totalTransactionVolume: buildComparisonKpi(kpis.totalTransactionVolume, previousKpis.totalTransactionVolume),
+        totalCommission: buildComparisonKpi(kpis.totalCommission, previousKpis.totalCommission),
+        activeCustomersA30: buildComparisonKpi(kpis.activeCustomersA30, previousKpis.activeCustomersA30),
+        activeCustomersA60: buildComparisonKpi(kpis.activeCustomersA60, previousKpis.activeCustomersA60),
+        newCustomers: buildComparisonKpi(kpis.newCustomers, previousKpis.newCustomers),
         dormantCustomers90Plus:
-          kpis.dormantCustomers90Plus === null ||
-          previousKpis.dormantCustomers90Plus === null
+          kpis.dormantCustomers90Plus === null || previousKpis.dormantCustomers90Plus === null
             ? null
-            : buildComparisonKpi(
-                kpis.dormantCustomers90Plus,
-                previousKpis.dormantCustomers90Plus,
-              ),
-        latestTotalEFloat: buildComparisonKpi(
-          kpis.latestTotalEFloat,
-          previousKpis.latestTotalEFloat,
-        ),
+            : buildComparisonKpi(kpis.dormantCustomers90Plus, previousKpis.dormantCustomers90Plus),
+        latestTotalEFloat: buildComparisonKpi(kpis.latestTotalEFloat, previousKpis.latestTotalEFloat),
       },
     };
   }
@@ -1704,11 +1723,11 @@ export async function getWalletOverview(
     kpis,
     comparison,
     metadata: {
-      currency: "USD",
+      currency,
       dataFreshnessTimestamp: new Date().toISOString(),
-      sourceSummaryTable: env.SOURCE_SQL_AGENT_SUMMARY_TABLE,
-      sourceBalanceTable: env.SOURCE_SQL_AGENT_BALANCE_TABLE,
-      sourceBalanceCurrentTable: env.SOURCE_SQL_AGENT_BALANCE_CURRENT_TABLE,
+      sourceSummaryTable: env.SOURCE_SQL_TRANSACTIONS_TABLE,
+      sourceBalanceTable: getBalanceHistoryTable(currency).schema + "." + getBalanceHistoryTable(currency).table,
+      sourceBalanceCurrentTable: getBalanceCurrentTable(currency).schema + "." + getBalanceCurrentTable(currency).table,
     },
   };
 }
@@ -1720,80 +1739,50 @@ export async function getWalletCustomerActivityGrowth(
     throw new WalletServiceError("dateFrom must be less than or equal to dateTo", 400);
   }
 
-  const summaryTable = parseQualifiedTableName(env.SOURCE_SQL_AGENT_SUMMARY_TABLE);
+  const currency = input.currency;
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
 
-  const [
-    dailyActiveRows,
-    monthlyActiveRows,
-    dailyNewCustomers,
-    monthlyNewCustomers,
-    frequencyBuckets,
-    snapshotRefreshedAt,
-  ] = await Promise.all([
-    queryActivityTrendFromSource({
-      table: summaryTable,
-      dateFrom,
-      dateTo,
-      grain: "daily",
-    }),
-    queryActivityTrendFromSource({
-      table: summaryTable,
-      dateFrom,
-      dateTo,
-      grain: "monthly",
-    }),
-    queryNewCustomerTrendFromSnapshot({
-      dateFrom,
-      dateTo,
-      grain: "daily",
-    }),
-    queryNewCustomerTrendFromSnapshot({
-      dateFrom,
-      dateTo,
-      grain: "monthly",
-    }),
-    queryFrequencyBucketsFromSource({
-      table: summaryTable,
-      dateFrom,
-      dateTo,
-    }),
-    getSnapshotRefreshedAt(),
+  const [dailyTrendRaw, monthlyTrendRaw, frequencyBuckets] = await Promise.all([
+    queryActivityTrend({ currency, dateFrom, dateTo, grain: "daily" }),
+    queryActivityTrend({ currency, dateFrom, dateTo, grain: "monthly" }),
+    queryFrequencyBuckets({ currency, dateFrom, dateTo }),
   ]);
 
-  const dailyTrend = mergeActivityTrend(dailyActiveRows, dailyNewCustomers);
-  const monthlyTrend = mergeActivityTrend(monthlyActiveRows, monthlyNewCustomers);
-  const totalActiveCustomers = frequencyBuckets.reduce(
-    (sum, bucket) => sum + bucket.customers,
-    0,
-  );
-  const newCustomers = dailyTrend.reduce((sum, point) => sum + point.newCustomers, 0);
-  const transactionVolume = dailyTrend.reduce(
-    (sum, point) => sum + point.transactionVolume,
-    0,
-  );
+  const dailyTrend = dailyTrendRaw.map((row) => ({
+    period: row.period,
+    activeCustomers: row.activeCustomers,
+    newCustomers: row.newCustomers,
+    returningCustomers: Math.max(0, row.activeCustomers - row.newCustomers),
+    transactionVolume: row.transactionVolume,
+  }));
+  const monthlyTrend = monthlyTrendRaw.map((row) => ({
+    period: row.period,
+    activeCustomers: row.activeCustomers,
+    newCustomers: row.newCustomers,
+    returningCustomers: Math.max(0, row.activeCustomers - row.newCustomers),
+    transactionVolume: row.transactionVolume,
+  }));
+
+  const totalActiveCustomers = frequencyBuckets.reduce((sum, b) => sum + b.customers, 0);
+  const newCustomers = dailyTrend.reduce((sum, p) => sum + p.newCustomers, 0);
+  const transactionVolume = dailyTrend.reduce((sum, p) => sum + p.transactionVolume, 0);
 
   return {
-    period: {
-      dateFrom: formatDate(dateFrom),
-      dateTo: formatDate(dateTo),
-    },
+    period: { dateFrom: formatDate(dateFrom), dateTo: formatDate(dateTo) },
     kpis: {
       activeCustomers: totalActiveCustomers,
       newCustomers,
       returningCustomers: Math.max(0, totalActiveCustomers - newCustomers),
       transactionVolume,
-      averageTransactionsPerActiveCustomer:
-        totalActiveCustomers === 0 ? 0 : transactionVolume / totalActiveCustomers,
+      averageTransactionsPerActiveCustomer: totalActiveCustomers === 0 ? 0 : transactionVolume / totalActiveCustomers,
     },
     dailyTrend,
     monthlyTrend,
     frequencyBuckets,
     metadata: {
       dataFreshnessTimestamp: new Date().toISOString(),
-      snapshotRefreshedAt,
-      sourceSummaryTable: env.SOURCE_SQL_AGENT_SUMMARY_TABLE,
+      sourceSummaryTable: env.SOURCE_SQL_TRANSACTIONS_TABLE,
     },
   };
 }
@@ -1805,17 +1794,13 @@ export async function getWalletRetentionDormancy(
     throw new WalletServiceError("dateFrom must be less than or equal to dateTo", 400);
   }
 
+  const currency = input.currency;
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
   const asOfDate = normalizeDateOnly(input.asOfDate);
-  const [retention, snapshotRefreshedAt] = await Promise.all([
-    queryRetentionDormancyFromSnapshot({ dateFrom, dateTo, asOfDate }),
-    getSnapshotRefreshedAt(),
-  ]);
-  const reactivatedCustomers = retention.reactivationTrend.reduce(
-    (sum, point) => sum + point.reactivatedCustomers,
-    0,
-  );
+
+  const retention = await queryRetentionDormancy({ currency, dateFrom, dateTo, asOfDate });
+  const reactivatedCustomers = retention.reactivationTrend.reduce((sum, p) => sum + p.reactivatedCustomers, 0);
 
   return {
     period: {
@@ -1826,10 +1811,7 @@ export async function getWalletRetentionDormancy(
     kpis: {
       activeCustomersA30: retention.activeCustomersA30,
       dormantCustomers90Plus: retention.dormantCustomers90Plus,
-      dormancyRate:
-        retention.totalCustomers === 0
-          ? 0
-          : (retention.dormantCustomers90Plus / retention.totalCustomers) * 100,
+      dormancyRate: retention.totalCustomers === 0 ? 0 : (retention.dormantCustomers90Plus / retention.totalCustomers) * 100,
       reactivatedCustomers,
     },
     inactivityBuckets: retention.inactivityBuckets,
@@ -1837,7 +1819,6 @@ export async function getWalletRetentionDormancy(
     cohorts: retention.cohorts,
     metadata: {
       dataFreshnessTimestamp: new Date().toISOString(),
-      snapshotRefreshedAt,
     },
   };
 }
@@ -1849,40 +1830,24 @@ export async function getWalletTransactionPerformance(
     throw new WalletServiceError("dateFrom must be less than or equal to dateTo", 400);
   }
 
-  const summaryTable = parseQualifiedTableName(env.SOURCE_SQL_AGENT_SUMMARY_TABLE);
+  const currency = input.currency;
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
+
   const [kpis, dailyTrend, monthlyTrend] = await Promise.all([
-    queryTransactionPerformanceKpis({
-      table: summaryTable,
-      dateFrom,
-      dateTo,
-    }),
-    queryTransactionPerformanceTrend({
-      table: summaryTable,
-      dateFrom,
-      dateTo,
-      grain: "daily",
-    }),
-    queryTransactionPerformanceTrend({
-      table: summaryTable,
-      dateFrom,
-      dateTo,
-      grain: "monthly",
-    }),
+    queryTransactionPerformanceKpis({ currency, dateFrom, dateTo }),
+    queryTransactionPerformanceTrend({ currency, dateFrom, dateTo, grain: "daily" }),
+    queryTransactionPerformanceTrend({ currency, dateFrom, dateTo, grain: "monthly" }),
   ]);
 
   return {
-    period: {
-      dateFrom: formatDate(dateFrom),
-      dateTo: formatDate(dateTo),
-    },
+    period: { dateFrom: formatDate(dateFrom), dateTo: formatDate(dateTo) },
     kpis,
     dailyTrend,
     monthlyTrend,
     metadata: {
       dataFreshnessTimestamp: new Date().toISOString(),
-      sourceSummaryTable: env.SOURCE_SQL_AGENT_SUMMARY_TABLE,
+      sourceSummaryTable: env.SOURCE_SQL_TRANSACTIONS_TABLE,
     },
   };
 }
@@ -1894,40 +1859,24 @@ export async function getWalletRevenuePerformance(
     throw new WalletServiceError("dateFrom must be less than or equal to dateTo", 400);
   }
 
-  const summaryTable = parseQualifiedTableName(env.SOURCE_SQL_AGENT_SUMMARY_TABLE);
+  const currency = input.currency;
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
+
   const [kpis, dailyTrend, monthlyTrend] = await Promise.all([
-    queryRevenuePerformanceKpis({
-      table: summaryTable,
-      dateFrom,
-      dateTo,
-    }),
-    queryRevenuePerformanceTrend({
-      table: summaryTable,
-      dateFrom,
-      dateTo,
-      grain: "daily",
-    }),
-    queryRevenuePerformanceTrend({
-      table: summaryTable,
-      dateFrom,
-      dateTo,
-      grain: "monthly",
-    }),
+    queryRevenuePerformanceKpis({ currency, dateFrom, dateTo }),
+    queryRevenuePerformanceTrend({ currency, dateFrom, dateTo, grain: "daily" }),
+    queryRevenuePerformanceTrend({ currency, dateFrom, dateTo, grain: "monthly" }),
   ]);
 
   return {
-    period: {
-      dateFrom: formatDate(dateFrom),
-      dateTo: formatDate(dateTo),
-    },
+    period: { dateFrom: formatDate(dateFrom), dateTo: formatDate(dateTo) },
     kpis,
     dailyTrend,
     monthlyTrend,
     metadata: {
       dataFreshnessTimestamp: new Date().toISOString(),
-      sourceSummaryTable: env.SOURCE_SQL_AGENT_SUMMARY_TABLE,
+      sourceSummaryTable: env.SOURCE_SQL_TRANSACTIONS_TABLE,
     },
   };
 }
@@ -1939,24 +1888,17 @@ export async function getWalletLiquidity(
     throw new WalletServiceError("dateFrom must be less than or equal to dateTo", 400);
   }
 
-  const balanceCurrentTable = parseQualifiedTableName(env.SOURCE_SQL_AGENT_BALANCE_CURRENT_TABLE);
+  const currency = input.currency;
+  const balanceCurrentTable = getBalanceCurrentTable(currency);
+  const balanceHistoryTable = getBalanceHistoryTable(currency);
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
   const asOfDate = normalizeDateOnly(input.asOfDate);
+
   const [kpis, dailyTrend, productBreakdown] = await Promise.all([
-    queryLiquiditySnapshot({
-      table: balanceCurrentTable,
-      asOfDate,
-    }),
-    queryLiquidityTrend({
-      table: balanceCurrentTable,
-      dateFrom,
-      dateTo,
-    }),
-    queryLiquidityProductBreakdown({
-      table: balanceCurrentTable,
-      asOfDate,
-    }),
+    queryLiquiditySnapshot({ table: balanceCurrentTable, asOfDate }),
+    queryLiquidityTrend({ table: balanceHistoryTable, dateFrom, dateTo }),
+    queryLiquidityProductBreakdown({ table: balanceCurrentTable, asOfDate }),
   ]);
 
   return {
@@ -1970,7 +1912,7 @@ export async function getWalletLiquidity(
     productBreakdown,
     metadata: {
       dataFreshnessTimestamp: new Date().toISOString(),
-      sourceBalanceCurrentTable: env.SOURCE_SQL_AGENT_BALANCE_CURRENT_TABLE,
+      sourceBalanceCurrentTable: `${balanceCurrentTable.schema}.${balanceCurrentTable.table}`,
       lowBalanceThreshold: LOW_BALANCE_THRESHOLD,
     },
   };
@@ -1982,47 +1924,23 @@ export async function listWalletCustomer360(
   const asOfDate = normalizeDateOnly(input.asOfDate);
   const page = Math.max(1, Math.trunc(input.page));
   const pageSize = Math.min(100, Math.max(5, Math.trunc(input.pageSize)));
-  const offset = (page - 1) * pageSize;
-  const whereClause = buildCustomer360Where({
+
+  const { items, total } = await queryCustomer360List({
+    currency: input.currency,
     search: input.search,
     status: input.status ?? "all",
     asOfDate,
-  });
-
-  const [countRows, itemRows, snapshotRefreshedAt] = await Promise.all([
-    prisma.$queryRaw<Array<{ total: bigint | number }>>`
-      SELECT COUNT_BIG(*) AS [total]
-      FROM [WalletCustomerActivitySnapshot]
-      ${whereClause}
-    `,
-    prisma.$queryRaw<Array<Record<string, unknown>>>`
-      SELECT
-        [customerId],
-        [fullName],
-        [mobileNumber],
-        [firstSeenDate],
-        [lastSeenDate],
-        [lifetimeTransactionValue],
-        [lifetimeTransactionVolume],
-        [lifetimeCommission],
-        [last30DayTransactionValue],
-        [last60DayTransactionValue]
-      FROM [WalletCustomerActivitySnapshot]
-      ${whereClause}
-      ORDER BY [lifetimeTransactionValue] DESC, [lastSeenDate] DESC
-      OFFSET ${offset} ROWS FETCH NEXT ${pageSize} ROWS ONLY
-    `,
-    getCustomerSnapshotRefreshedAt(),
-  ]);
-
-  return {
-    items: itemRows.map((row) => mapCustomer360Summary(row, asOfDate)),
     page,
     pageSize,
-    total: Math.trunc(toNumber(countRows[0]?.total)),
+  });
+
+  return {
+    items: items.map((row) => mapCustomer360Summary(row, asOfDate)),
+    page,
+    pageSize,
+    total,
     metadata: {
       dataFreshnessTimestamp: new Date().toISOString(),
-      snapshotRefreshedAt,
     },
   };
 }
@@ -2039,34 +1957,29 @@ export async function getWalletCustomer360Detail(
     throw new WalletServiceError("customerId is required", 400);
   }
 
-  const snapshot = await queryCustomer360Snapshot(customerId);
-  if (!snapshot) {
-    throw new WalletServiceError("Customer not found", 404);
-  }
-
-  const summaryTable = parseQualifiedTableName(env.SOURCE_SQL_AGENT_SUMMARY_TABLE);
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
   const asOfDate = normalizeDateOnly(input.asOfDate);
-  const [sourceDetail, snapshotRefreshedAt] = await Promise.all([
-    queryCustomer360SourceDetail({
-      table: summaryTable,
-      customerId,
-      dateFrom,
-      dateTo,
-      asOfDate,
-    }),
-    getCustomerSnapshotRefreshedAt(),
-  ]);
+
+  const { customer, kpis, dailyTrend } = await queryCustomer360Detail({
+    currency: input.currency,
+    customerId,
+    dateFrom,
+    dateTo,
+    asOfDate,
+  });
+
+  if (!customer) {
+    throw new WalletServiceError("Customer not found", 404);
+  }
 
   return {
-    customer: mapCustomer360Summary(snapshot, asOfDate),
-    kpis: sourceDetail.kpis,
-    dailyTrend: sourceDetail.dailyTrend,
+    customer: mapCustomer360Summary(customer, asOfDate),
+    kpis,
+    dailyTrend,
     metadata: {
       dataFreshnessTimestamp: new Date().toISOString(),
-      sourceSummaryTable: env.SOURCE_SQL_AGENT_SUMMARY_TABLE,
-      snapshotRefreshedAt,
+      sourceSummaryTable: env.SOURCE_SQL_TRANSACTIONS_TABLE,
     },
   };
 }
@@ -2078,34 +1991,20 @@ export async function getWalletInsightsAlerts(
     throw new WalletServiceError("dateFrom must be less than or equal to dateTo", 400);
   }
 
+  const currency = input.currency;
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
   const asOfDate = normalizeDateOnly(input.asOfDate);
+
   const [overview, transactionPerformance, revenuePerformance, liquidity] = await Promise.all([
-    getWalletOverview({
-      dateFrom,
-      dateTo,
-      asOfDate,
-      compare: true,
-    }),
-    getWalletTransactionPerformance({
-      dateFrom,
-      dateTo,
-    }),
-    getWalletRevenuePerformance({
-      dateFrom,
-      dateTo,
-    }),
-    getWalletLiquidity({
-      dateFrom,
-      dateTo,
-      asOfDate,
-    }),
+    getWalletOverview({ dateFrom, dateTo, asOfDate, compare: true, currency }),
+    getWalletTransactionPerformance({ dateFrom, dateTo, currency }),
+    getWalletRevenuePerformance({ dateFrom, dateTo, currency }),
+    getWalletLiquidity({ dateFrom, dateTo, asOfDate, currency }),
   ]);
 
   const alerts: WalletInsightAlertItem[] = [];
-  const transactionValueChange =
-    overview.comparison?.kpis.totalTransactionValue.percentChange ?? null;
+  const transactionValueChange = overview.comparison?.kpis.totalTransactionValue.percentChange ?? null;
   const activeA30Change = overview.comparison?.kpis.activeCustomersA30.percentChange ?? null;
   const dormantChange = overview.comparison?.kpis.dormantCustomers90Plus?.percentChange ?? null;
   const commissionRate = revenuePerformance.kpis.commissionRate;
@@ -2147,107 +2046,81 @@ export async function getWalletInsightsAlerts(
       severity: activeA30Change <= -15 ? "critical" : "warning",
       category: "activity",
       title: "Active customers A30 are down",
-      metricLabel: "A30 change",
+      metricLabel: "Active customers change",
       metricValue: activeA30Change,
       thresholdLabel: "Below -8%",
-      message: "Recent active customer usage weakened compared with the previous period.",
-      suggestedAction: "Use Customer 360 to identify high-value customers whose last activity moved beyond 30 days.",
+      message: "The number of customers active in the last 30 days fell against the prior period.",
+      suggestedAction: "Investigate if there is a specific customer segment or product driving the decline.",
     });
-  }
-
-  if (dormantChange !== null && dormantChange >= 5) {
+  } else if (activeA30Change !== null && activeA30Change >= 8) {
     addInsightAlert(alerts, {
-      id: "dormancy-90-up",
-      severity: dormantChange >= 15 ? "critical" : "warning",
-      category: "dormancy",
-      title: "Dormant customers are rising",
-      metricLabel: "Dormant 90+ change",
-      metricValue: dormantChange,
-      thresholdLabel: "Above +5%",
-      message: "The dormant 90+ customer base increased against the previous comparable period.",
-      suggestedAction: "Prioritize reactivation for customers with high lifetime value and recent last-60 activity.",
+      id: "activity-a30-up",
+      severity: "positive",
+      category: "activity",
+      title: "Active customers A30 are growing",
+      metricLabel: "Active customers change",
+      metricValue: activeA30Change,
+      thresholdLabel: "Above +8%",
+      message: "More customers are transacting compared to the prior period.",
+      suggestedAction: "Ensure liquidity keeps pace with the increased activity.",
     });
   }
 
-  if (commissionRate < 0.5) {
+  if (dormantChange !== null && dormantChange >= 10) {
+    addInsightAlert(alerts, {
+      id: "dormancy-up",
+      severity: dormantChange >= 20 ? "critical" : "warning",
+      category: "dormancy",
+      title: "Dormant customers are increasing",
+      metricLabel: "Dormant change",
+      metricValue: dormantChange,
+      thresholdLabel: "Above +10%",
+      message: "The pool of customers inactive for 90+ days has grown since the prior period.",
+      suggestedAction: "Run a reactivation campaign targeting dormant customers with relevant incentives.",
+    });
+  }
+
+  if (commissionRate < 0.5 && revenuePerformance.kpis.totalTransactionVolume > 0) {
     addInsightAlert(alerts, {
       id: "revenue-commission-rate-low",
-      severity: commissionRate < 0.35 ? "critical" : "warning",
+      severity: "warning",
       category: "revenue",
-      title: "Commission rate is low",
+      title: "Commission rate is below 0.5%",
       metricLabel: "Commission rate",
       metricValue: commissionRate,
       thresholdLabel: "Below 0.5%",
-      message: "Commission is not scaling strongly relative to transaction value.",
-      suggestedAction: "Review product mix and transaction types driving high value but low commission contribution.",
+      message: "The commission rate on wallet transactions is low relative to typical expectations.",
+      suggestedAction: "Review fee structures and check if commission-free transaction types are growing.",
     });
   }
 
   if (netFlowValue < 0) {
     addInsightAlert(alerts, {
-      id: "cash-flow-negative-net-flow",
-      severity: netFlowValue <= -100_000 ? "critical" : "warning",
+      id: "cash-flow-negative",
+      severity: Math.abs(netFlowValue) > 100_000 ? "critical" : "warning",
       category: "cash_flow",
-      title: "Net flow is negative",
+      title: "Net cash flow is negative",
       metricLabel: "Net flow",
       metricValue: netFlowValue,
       thresholdLabel: "Below 0",
-      message: "Withdrawal value is higher than deposit value in the selected period.",
-      suggestedAction: "Monitor liquidity pressure and compare this period against low-balance account movement.",
+      message: "Withdrawals exceeded deposits in the selected period, resulting in net outflow.",
+      suggestedAction: "Monitor e-float levels and ensure sufficient liquidity to meet customer demand.",
     });
   }
 
-  if (lowBalanceShare >= 60) {
+  if (lowBalanceShare > 30) {
     addInsightAlert(alerts, {
-      id: "liquidity-low-balance-share-high",
-      severity: lowBalanceShare >= 80 ? "critical" : "warning",
+      id: "liquidity-low-balance",
+      severity: lowBalanceShare > 60 ? "critical" : "warning",
       category: "liquidity",
-      title: "Low-balance account share is high",
+      title: "High share of low-balance accounts",
       metricLabel: "Low-balance share",
       metricValue: lowBalanceShare,
-      thresholdLabel: "Above 60%",
-      message: "A large share of wallet accounts are below the configured low-balance threshold.",
-      suggestedAction: "Use Wallet Liquidity to identify affected products and funding concentration risk.",
+      thresholdLabel: `Above 30% (threshold ${LOW_BALANCE_THRESHOLD})`,
+      message: `More than ${Math.round(lowBalanceShare)}% of accounts have a balance below ${LOW_BALANCE_THRESHOLD}.`,
+      suggestedAction: "Encourage minimum balance deposits or review e-float distribution strategy.",
     });
   }
-
-  if (liquidity.kpis.top10BalanceConcentration >= 80) {
-    addInsightAlert(alerts, {
-      id: "liquidity-concentration-high",
-      severity: liquidity.kpis.top10BalanceConcentration >= 90 ? "critical" : "warning",
-      category: "liquidity",
-      title: "Balance concentration is high",
-      metricLabel: "Top 10% concentration",
-      metricValue: liquidity.kpis.top10BalanceConcentration,
-      thresholdLabel: "Above 80%",
-      message: "Most e-float is concentrated in a small share of accounts.",
-      suggestedAction: "Review product and account concentration before funding decisions are made.",
-    });
-  }
-
-  if (alerts.length === 0) {
-    addInsightAlert(alerts, {
-      id: "wallet-no-material-alerts",
-      severity: "info",
-      category: "growth",
-      title: "No material wallet alerts",
-      metricLabel: "Alert count",
-      metricValue: 0,
-      thresholdLabel: "No triggered thresholds",
-      message: "No configured wallet insight threshold was triggered for this period.",
-      suggestedAction: "Continue monitoring revenue quality, customer activity, and liquidity movement.",
-    });
-  }
-
-  alerts.sort((left, right) => {
-    const severityRank: Record<WalletInsightAlertSeverity, number> = {
-      critical: 0,
-      warning: 1,
-      positive: 2,
-      info: 3,
-    };
-    return severityRank[left.severity] - severityRank[right.severity];
-  });
 
   return {
     period: {
@@ -2259,8 +2132,8 @@ export async function getWalletInsightsAlerts(
     alerts,
     metadata: {
       dataFreshnessTimestamp: new Date().toISOString(),
-      sourceSummaryTable: env.SOURCE_SQL_AGENT_SUMMARY_TABLE,
-      sourceBalanceCurrentTable: env.SOURCE_SQL_AGENT_BALANCE_CURRENT_TABLE,
+      sourceSummaryTable: env.SOURCE_SQL_TRANSACTIONS_TABLE,
+      sourceBalanceCurrentTable: `${getBalanceCurrentTable(currency).schema}.${getBalanceCurrentTable(currency).table}`,
     },
   };
 }

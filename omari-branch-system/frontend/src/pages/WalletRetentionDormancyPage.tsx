@@ -136,6 +136,7 @@ export default function WalletRetentionDormancyPage() {
   const initialDateFrom = toInputDate(shiftDays(new Date(), -29));
   const dateFrom = searchParams.get("dateFrom") ?? initialDateFrom;
   const dateTo = searchParams.get("dateTo") ?? initialDateTo;
+  const currency = (searchParams.get("currency") ?? "USD") as "USD" | "ZWL";
 
   const updateParams = (updates: Record<string, string | undefined>) => {
     const next = new URLSearchParams(searchParams);
@@ -147,8 +148,8 @@ export default function WalletRetentionDormancyPage() {
   };
 
   const retentionQuery = useQuery({
-    queryKey: ["wallet", "retention-dormancy", { dateFrom, dateTo }],
-    queryFn: () => fetchWalletRetentionDormancy({ dateFrom, dateTo, asOfDate: dateTo }),
+    queryKey: ["wallet", "retention-dormancy", { dateFrom, dateTo, currency }],
+    queryFn: () => fetchWalletRetentionDormancy({ dateFrom, dateTo, asOfDate: dateTo, currency }),
   });
 
   const focusTitle =
@@ -160,6 +161,11 @@ export default function WalletRetentionDormancyPage() {
     <section className="space-y-5 motion-fade-up">
       <FilterBar>
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1.2} alignItems={{ xs: "stretch", lg: "center" }}>
+          <ButtonGroup size="small" variant="outlined">
+            {(["USD", "ZWL"] as const).map((c) => (
+              <Button key={c} variant={currency === c ? "contained" : "outlined"} onClick={() => updateParams({ currency: c })}>{c}</Button>
+            ))}
+          </ButtonGroup>
           <ButtonGroup size="small" variant="outlined" sx={{ flexWrap: "wrap" }}>
             {presets.map((preset) => (
               <Button key={preset.label} onClick={() => updateParams(preset.getRange())}>{preset.label}</Button>
@@ -308,9 +314,6 @@ export default function WalletRetentionDormancyPage() {
 
           <Alert severity="info" icon={<CalendarClock size={16} />}>
             Period: {formatDate(retentionQuery.data.period.dateFrom)} to {formatDate(retentionQuery.data.period.dateTo)}.
-            Snapshot refreshed: {retentionQuery.data.metadata.snapshotRefreshedAt
-              ? new Date(retentionQuery.data.metadata.snapshotRefreshedAt).toLocaleString("en-US")
-              : "not available"}.
           </Alert>
         </>
       ) : null}

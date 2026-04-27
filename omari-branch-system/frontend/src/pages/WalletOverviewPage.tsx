@@ -114,6 +114,7 @@ export default function WalletOverviewPage() {
   const dateFrom = searchParams.get("dateFrom") ?? initialDateFrom;
   const dateTo = searchParams.get("dateTo") ?? initialDateTo;
   const compare = searchParams.get("compare") !== "false";
+  const currency = (searchParams.get("currency") ?? "USD") as "USD" | "ZWL";
 
   const updateParams = (updates: Record<string, string | undefined>) => {
     const next = new URLSearchParams(searchParams);
@@ -128,13 +129,14 @@ export default function WalletOverviewPage() {
   };
 
   const walletQuery = useQuery({
-    queryKey: ["wallet", "overview", { dateFrom, dateTo, compare }],
+    queryKey: ["wallet", "overview", { dateFrom, dateTo, compare, currency }],
     queryFn: () =>
       fetchWalletOverview({
         dateFrom,
         dateTo,
         asOfDate: dateTo,
         compare,
+        currency,
       }),
   });
 
@@ -259,6 +261,18 @@ export default function WalletOverviewPage() {
     <section className="space-y-5 motion-fade-up">
       <FilterBar>
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1.2} alignItems={{ xs: "stretch", lg: "center" }}>
+          <ButtonGroup size="small" variant="outlined">
+            {(["USD", "ZWL"] as const).map((c) => (
+              <Button
+                key={c}
+                variant={currency === c ? "contained" : "outlined"}
+                onClick={() => updateParams({ currency: c })}
+              >
+                {c}
+              </Button>
+            ))}
+          </ButtonGroup>
+
           <ButtonGroup size="small" variant="outlined" sx={{ flexWrap: "wrap" }}>
             {datePresets.map((preset) => (
               <Button
