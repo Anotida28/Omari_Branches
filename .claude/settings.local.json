@@ -14,7 +14,9 @@
       "Bash(sqlcmd -S 172.16.7.216,1433 -U Devwork -P Kick1221 -d omari_dp -N -C -Q \"SELECT TOP 1 * FROM reporting.omari_account_balances_usd WITH \\(NOLOCK\\)\" -W)",
       "Bash(sqlcmd -S 172.16.7.216,1433 -U Devwork -P Kick1221 -d omari_dp -N -C -Q \"SELECT TransactionType, COUNT\\(*\\) as cnt, SUM\\(TransactionAmount\\) as total FROM reporting.transactions_aggregate WITH \\(NOLOCK\\) WHERE Currency='ZWL' AND CAST\\(Date AS DATE\\) >= '2026-01-01' GROUP BY TransactionType ORDER BY cnt DESC\" -W)",
       "Bash(sqlcmd -S 172.16.7.216,1433 -U Devwork -P Kick1221 -d omari_dp -N -C -Q \"SELECT TransactionType, COUNT\\(*\\) as cnt, SUM\\(TransactionAmount\\) as total FROM reporting.transactions_aggregate WITH \\(NOLOCK\\) WHERE Currency='USD' AND CAST\\(Date AS DATE\\) >= '2026-01-01' AND TransactionType IN \\('Cash In credit','Withdrawal \\(CashOut\\)','Cash In'\\) GROUP BY TransactionType ORDER BY cnt DESC\" -W)",
-      "Bash(node tmp-source-check.js)"
+      "Bash(node tmp-source-check.js)",
+      "Bash(node -e ' *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

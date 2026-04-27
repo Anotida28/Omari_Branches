@@ -457,6 +457,22 @@ export type WalletTransactionTrendPoint = {
   volumePerActiveCustomer: number;
 };
 
+export type WalletTransactionDistributionBucket = {
+  bucket: string;
+  totalVolume: number;
+  totalValue: number;
+  percentage: number;
+};
+
+export type WalletDepositMethodProfitabilityItem = {
+  method: string;
+  volume: number;
+  totalValue: number;
+  avgAmount: number;
+  totalCommission: number;
+  commissionRate: number;
+};
+
 export type WalletTransactionPerformanceResponse = {
   period: {
     dateFrom: string;
@@ -476,6 +492,9 @@ export type WalletTransactionPerformanceResponse = {
   };
   dailyTrend: WalletTransactionTrendPoint[];
   monthlyTrend: WalletTransactionTrendPoint[];
+  availableUseCases: string[];
+  distribution: WalletTransactionDistributionBucket[];
+  profitabilityByDepositMethod: WalletDepositMethodProfitabilityItem[];
   metadata: {
     dataFreshnessTimestamp: string;
     sourceSummaryTable: string;
@@ -486,6 +505,7 @@ export type WalletTransactionPerformanceParams = {
   dateFrom: string;
   dateTo: string;
   currency?: "USD" | "ZWL";
+  useCase?: string;
 };
 
 export type WalletRevenueTrendPoint = {

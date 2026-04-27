@@ -171,10 +171,27 @@ export type WalletRetentionDormancyResponse = {
   };
 };
 
+export type WalletTransactionDistributionBucket = {
+  bucket: string;
+  totalVolume: number;
+  totalValue: number;
+  percentage: number;
+};
+
+export type WalletDepositMethodProfitabilityItem = {
+  method: string;
+  volume: number;
+  totalValue: number;
+  avgAmount: number;
+  totalCommission: number;
+  commissionRate: number;
+};
+
 export type WalletTransactionPerformanceInput = {
   dateFrom: Date;
   dateTo: Date;
   currency: Currency;
+  useCase?: string;
 };
 
 export type WalletTransactionTrendPoint = {
@@ -210,6 +227,9 @@ export type WalletTransactionPerformanceResponse = {
   };
   dailyTrend: WalletTransactionTrendPoint[];
   monthlyTrend: WalletTransactionTrendPoint[];
+  availableUseCases: string[];
+  distribution: WalletTransactionDistributionBucket[];
+  profitabilityByDepositMethod: WalletDepositMethodProfitabilityItem[];
   metadata: {
     dataFreshnessTimestamp: string;
     sourceSummaryTable: string;
@@ -440,6 +460,42 @@ const WITHDRAWAL_TYPES: Record<Currency, readonly string[]> = {
   ZWL: ["ZIPIT-Send", "Transfer-Send-Omari", "W2B Debit"],
 };
 
+// Deposit types used for the profitability breakdown table
+const PROFITABILITY_DEPOSIT_TYPES: Record<Currency, readonly string[]> = {
+  USD: ["Cash In credit", "Agent Deposit", "B2W Credit", "Deposit", "Cash In", "Cash In for other credit"],
+  ZWL: ["ZIPIT-Receive", "Transfer-Receive", "B2W Credit"],
+};
+
+// Use-case groupings — maps user-facing label to the TransactionType values per currency
+export const USE_CASE_TYPES: Record<string, Partial<Record<Currency, readonly string[]>>> = {
+  "Airtime & Bundles": {
+    USD: ["Airtime Purchase", "Bundle Purchase", "Account Bundle", "Agent Bundle Purchase"],
+    ZWL: ["Airtime Purchase"],
+  },
+  "VISA": {
+    USD: ["VISA PreAuth", "VISA Purchase Completion", "VISA Card Refund", "VISA Withdrawal"],
+  },
+  "Cash In": {
+    USD: ["Cash In credit", "Agent Deposit", "Deposit", "Cash In", "Cash In for other credit", "B2W Credit"],
+    ZWL: ["B2W Credit"],
+  },
+  "Cash Out": {
+    USD: ["Withdrawal (CashOut)", "Withdrawal (CashOut) Redeem Credit", "Agent Withdrawal", "SendToCell CashOut"],
+    ZWL: ["W2B Debit", "Withdrawal"],
+  },
+  "P2P Transfer": {
+    USD: ["ZIPIT-Send", "ZIPIT-Receive", "Transfer-Send-Omari", "Transfer-Receive", "SendToCell Send", "SendToCell Redeem"],
+    ZWL: ["ZIPIT-Send", "ZIPIT-Receive", "Transfer-Send-Omari", "Transfer-Receive", "SendToCell Send", "SendToCell Redeem"],
+  },
+  "Merchant & Bill Payment": {
+    USD: ["Merchant Purchase", "BillPayment", "Purchase", "Agent BillPayment"],
+    ZWL: ["Merchant Purchase", "BillPayment", "Purchase"],
+  },
+  "Savings & Loans": {
+    USD: ["Cash Loan Credit", "Cash Loan Debit", "Loan Repay Debit", "Loan Repay Credit", "Omari Savings Deposit"],
+  },
+};
+
 let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 function parseQualifiedTableName(value: string): QualifiedTableName {
@@ -624,6 +680,21 @@ function mapCustomer360Summary(row: Record<string, unknown>, asOfDate: Date): Wa
     last30DayTransactionValue: toNumber(row.last30DayTransactionValue),
     last60DayTransactionValue: toNumber(row.last60DayTransactionValue),
   };
+}
+
+// ─── Use-Case Helpers ────────────────────────────────────────────────────────
+
+function getAvailableUseCases(currency: Currency): string[] {
+  return Object.entries(USE_CASE_TYPES)
+    .filter(([, types]) => (types[currency]?.length ?? 0) > 0)
+    .map(([name]) => name);
+}
+
+function buildUseCaseFilter(useCase: string | undefined, currency: Currency): string {
+  if (!useCase) return "";
+  const types = USE_CASE_TYPES[useCase]?.[currency];
+  if (!types || types.length === 0) return " AND 1=0";
+  return ` AND t.[TransactionType] IN (${sqlInList(types)})`;
 }
 
 // ─── Customer Demographics ───────────────────────────────────────────────────
@@ -986,11 +1057,121 @@ async function queryFrequencyBuckets(params: {
 
 // ─── Transaction Performance ─────────────────────────────────────────────────
 
+async function queryTransactionDistribution(params: {
+  currency: Currency;
+  dateFrom: Date;
+  dateTo: Date;
+  useCaseFilter: string;
+}): Promise<WalletTransactionDistributionBucket[]> {
+  const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
+  request.input("dateFrom", sql.Date, params.dateFrom);
+  request.input("dateTo", sql.Date, params.dateTo);
+
+  const result = await request.query(`
+    WITH bucketed AS (
+      SELECT
+        CASE
+          WHEN (t.[TransactionAmount] / NULLIF(CAST(t.[Volume] AS FLOAT), 0)) < 5    THEN 1
+          WHEN (t.[TransactionAmount] / NULLIF(CAST(t.[Volume] AS FLOAT), 0)) < 20   THEN 2
+          WHEN (t.[TransactionAmount] / NULLIF(CAST(t.[Volume] AS FLOAT), 0)) < 100  THEN 3
+          WHEN (t.[TransactionAmount] / NULLIF(CAST(t.[Volume] AS FLOAT), 0)) < 500  THEN 4
+          WHEN (t.[TransactionAmount] / NULLIF(CAST(t.[Volume] AS FLOAT), 0)) < 1000 THEN 5
+          ELSE 6
+        END AS sortOrder,
+        t.[Volume],
+        t.[TransactionAmount]
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      WHERE t.[Currency] = @currency
+        AND t.[Date] >= @dateFrom
+        AND t.[Date] <= @dateTo
+        AND a.[CIF] IS NOT NULL
+        AND t.[Volume] > 0
+        AND t.[TransactionAmount] > 0${params.useCaseFilter}
+    )
+    SELECT
+      CASE sortOrder
+        WHEN 1 THEN 'Under 5'
+        WHEN 2 THEN '5 – 20'
+        WHEN 3 THEN '20 – 100'
+        WHEN 4 THEN '100 – 500'
+        WHEN 5 THEN '500 – 1,000'
+        ELSE 'Over 1,000'
+      END AS bucket,
+      sortOrder,
+      COALESCE(SUM([Volume]), 0) AS totalVolume,
+      COALESCE(SUM([TransactionAmount]), 0) AS totalValue
+    FROM bucketed
+    GROUP BY sortOrder
+    ORDER BY sortOrder ASC
+  `);
+
+  const rows = result.recordset as Array<Record<string, unknown>>;
+  const grandTotal = rows.reduce((s, r) => s + toNumber(r.totalVolume), 0);
+  return rows.map((r) => ({
+    bucket: String(r.bucket),
+    totalVolume: Math.trunc(toNumber(r.totalVolume)),
+    totalValue: toNumber(r.totalValue),
+    percentage: grandTotal === 0 ? 0 : Math.round((toNumber(r.totalVolume) / grandTotal) * 1000) / 10,
+  }));
+}
+
+async function queryDepositMethodProfitability(params: {
+  currency: Currency;
+  dateFrom: Date;
+  dateTo: Date;
+}): Promise<WalletDepositMethodProfitabilityItem[]> {
+  const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const depositIn = sqlInList(PROFITABILITY_DEPOSIT_TYPES[params.currency]);
+  const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
+  request.input("dateFrom", sql.Date, params.dateFrom);
+  request.input("dateTo", sql.Date, params.dateTo);
+
+  const result = await request.query(`
+    SELECT
+      t.[TransactionType] AS method,
+      COALESCE(SUM(t.[Volume]), 0) AS volume,
+      COALESCE(SUM(t.[TransactionAmount]), 0) AS totalValue,
+      COALESCE(SUM(t.[TransactionAmount]) / NULLIF(SUM(CAST(t.[Volume] AS FLOAT)), 0), 0) AS avgAmount,
+      COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS totalCommission
+    FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+    WHERE t.[Currency] = @currency
+      AND t.[Date] >= @dateFrom
+      AND t.[Date] <= @dateTo
+      AND a.[CIF] IS NOT NULL
+      AND t.[TransactionType] IN (${depositIn})
+    GROUP BY t.[TransactionType]
+    ORDER BY totalValue DESC
+  `);
+
+  return (result.recordset as Array<Record<string, unknown>>).map((r) => {
+    const totalValue = toNumber(r.totalValue);
+    const totalCommission = toNumber(r.totalCommission);
+    return {
+      method: String(r.method),
+      volume: Math.trunc(toNumber(r.volume)),
+      totalValue,
+      avgAmount: toNumber(r.avgAmount),
+      totalCommission,
+      commissionRate: totalValue === 0 ? 0 : (totalCommission / totalValue) * 100,
+    };
+  });
+}
+
 async function queryTransactionPerformanceTrend(params: {
   currency: Currency;
   dateFrom: Date;
   dateTo: Date;
   grain: "daily" | "monthly";
+  useCaseFilter: string;
 }): Promise<WalletTransactionTrendPoint[]> {
   const pool = await getPool();
   const tx = getTxTable();
@@ -1022,7 +1203,7 @@ async function queryTransactionPerformanceTrend(params: {
     WHERE t.[Currency] = @currency
       AND t.[Date] >= @dateFrom
       AND t.[Date] <= @dateTo
-      AND a.[CIF] IS NOT NULL
+      AND a.[CIF] IS NOT NULL${params.useCaseFilter}
     GROUP BY ${periodExpr}
     ORDER BY period ASC
   `);
@@ -1034,6 +1215,7 @@ async function queryTransactionPerformanceKpis(params: {
   currency: Currency;
   dateFrom: Date;
   dateTo: Date;
+  useCaseFilter: string;
 }): Promise<WalletTransactionPerformanceResponse["kpis"]> {
   const pool = await getPool();
   const tx = getTxTable();
@@ -1059,7 +1241,7 @@ async function queryTransactionPerformanceKpis(params: {
     WHERE t.[Currency] = @currency
       AND t.[Date] >= @dateFrom
       AND t.[Date] <= @dateTo
-      AND a.[CIF] IS NOT NULL
+      AND a.[CIF] IS NOT NULL${params.useCaseFilter}
   `);
 
   const row = (result.recordset[0] ?? {}) as NumericRecord;
@@ -1928,11 +2110,14 @@ async function _getWalletTransactionPerformance(
   const currency = input.currency;
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
+  const useCaseFilter = buildUseCaseFilter(input.useCase, currency);
 
-  const [kpis, dailyTrend, monthlyTrend] = await Promise.all([
-    queryTransactionPerformanceKpis({ currency, dateFrom, dateTo }),
-    queryTransactionPerformanceTrend({ currency, dateFrom, dateTo, grain: "daily" }),
-    queryTransactionPerformanceTrend({ currency, dateFrom, dateTo, grain: "monthly" }),
+  const [kpis, dailyTrend, monthlyTrend, distribution, profitabilityByDepositMethod] = await Promise.all([
+    queryTransactionPerformanceKpis({ currency, dateFrom, dateTo, useCaseFilter }),
+    queryTransactionPerformanceTrend({ currency, dateFrom, dateTo, grain: "daily", useCaseFilter }),
+    queryTransactionPerformanceTrend({ currency, dateFrom, dateTo, grain: "monthly", useCaseFilter }),
+    queryTransactionDistribution({ currency, dateFrom, dateTo, useCaseFilter }),
+    queryDepositMethodProfitability({ currency, dateFrom, dateTo }),
   ]);
 
   return {
@@ -1940,6 +2125,9 @@ async function _getWalletTransactionPerformance(
     kpis,
     dailyTrend,
     monthlyTrend,
+    availableUseCases: getAvailableUseCases(currency),
+    distribution,
+    profitabilityByDepositMethod,
     metadata: {
       dataFreshnessTimestamp: new Date().toISOString(),
       sourceSummaryTable: env.SOURCE_SQL_TRANSACTIONS_TABLE,

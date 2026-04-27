@@ -111,6 +111,7 @@ const transactionPerformanceQuerySchema = z
     dateFrom: dateSchema,
     dateTo: dateSchema,
     currency: currencySchema,
+    useCase: z.string().trim().max(60).optional(),
   })
   .strict();
 
@@ -310,6 +311,7 @@ export async function getWalletTransactionPerformanceHandler(
     dateFrom: normalizeQueryValue(req.query.dateFrom),
     dateTo: normalizeQueryValue(req.query.dateTo),
     currency: normalizeQueryValue(req.query.currency),
+    useCase: normalizeQueryValue(req.query.useCase),
   };
 
   const parsedQuery = transactionPerformanceQuerySchema.safeParse(queryInput);
@@ -329,7 +331,12 @@ export async function getWalletTransactionPerformanceHandler(
   }
 
   try {
-    const data = await getWalletTransactionPerformance(parsedQuery.data);
+    const data = await getWalletTransactionPerformance({
+      dateFrom: parsedQuery.data.dateFrom,
+      dateTo: parsedQuery.data.dateTo,
+      currency: parsedQuery.data.currency,
+      useCase: parsedQuery.data.useCase,
+    });
     res.json({ data });
   } catch (error) {
     if (handleServiceError(res, error)) {

@@ -6,9 +6,19 @@ import {
   Box,
   Button,
   ButtonGroup,
+  Chip,
   Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
@@ -16,6 +26,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ComposedChart,
   Legend,
   Line,
@@ -145,6 +156,7 @@ export default function WalletTransactionPerformancePage() {
   const dateFrom = searchParams.get("dateFrom") ?? initialDateFrom;
   const dateTo = searchParams.get("dateTo") ?? initialDateTo;
   const currency = (searchParams.get("currency") ?? "USD") as "USD" | "ZWL";
+  const useCase = searchParams.get("useCase") ?? "";
 
   const updateParams = (updates: Record<string, string | undefined>) => {
     const next = new URLSearchParams(searchParams);
@@ -156,8 +168,8 @@ export default function WalletTransactionPerformancePage() {
   };
 
   const performanceQuery = useQuery({
-    queryKey: ["wallet", "transaction-performance", { dateFrom, dateTo, currency }],
-    queryFn: () => fetchWalletTransactionPerformance({ dateFrom, dateTo, currency }),
+    queryKey: ["wallet", "transaction-performance", { dateFrom, dateTo, currency, useCase }],
+    queryFn: () => fetchWalletTransactionPerformance({ dateFrom, dateTo, currency, useCase: useCase || undefined }),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -180,6 +192,19 @@ export default function WalletTransactionPerformancePage() {
               <Button key={preset.label} onClick={() => updateParams(preset.getRange())}>{preset.label}</Button>
             ))}
           </ButtonGroup>
+          <FormControl size="small" sx={{ minWidth: { xs: "100%", lg: 200 } }}>
+            <InputLabel>Use Case</InputLabel>
+            <Select
+              label="Use Case"
+              value={useCase}
+              onChange={(e) => updateParams({ useCase: e.target.value || undefined })}
+            >
+              <MenuItem value="">All Transactions</MenuItem>
+              {(performanceQuery.data?.availableUseCases ?? []).map((uc) => (
+                <MenuItem key={uc} value={uc}>{uc}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <TextField
             type="date" label="Date From" value={dateFrom}
             onChange={(event) => updateParams({ dateFrom: event.target.value || undefined })}
@@ -210,6 +235,40 @@ export default function WalletTransactionPerformancePage() {
             <StatCard label="Value per Active Customer" value={formatCurrency(performanceQuery.data.kpis.valuePerActiveCustomer)} icon={<TrendingUp size={20} />} />
             <StatCard label="Volume per Active Customer" value={formatCount(performanceQuery.data.kpis.volumePerActiveCustomer)} icon={<Gauge size={20} />} />
           </Box>
+
+          {/* Transaction Value Distribution */}
+          {performanceQuery.data.distribution.length > 0 && (
+            <Paper sx={{ p: 2.2, ...glassPanelSx }}>
+              <Typography variant="subtitle1" fontWeight={700}>Transaction Value Distribution</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Volume of transactions by average transaction size — shows where activity is concentrated
+              </Typography>
+              <Box sx={{ height: 260 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={performanceQuery.data.distribution} margin={{ top: 16, right: 16, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} vertical={false} />
+                    <XAxis dataKey="bucket" tick={{ fontSize: 12 }} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11 }} tickFormatter={(v) => new Intl.NumberFormat("en-US", { notation: "compact" }).format(v)} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
+                    <Tooltip
+                      formatter={(value, name) =>
+                        name === "Volume"
+                          ? [new Intl.NumberFormat("en-US").format(Number(value)), "Volume"]
+                          : [`${Number(value).toFixed(1)}%`, "Share"]
+                      }
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="totalVolume" name="Volume" radius={[6, 6, 0, 0]}>
+                      {performanceQuery.data.distribution.map((_, i) => (
+                        <Cell key={i} fill={["#73c394", "#1b7f57", "#2563eb", "#c98b2c", "#c44b45", "#7c3aed"][i % 6]} />
+                      ))}
+                    </Bar>
+                    <Line yAxisId="right" type="monotone" dataKey="percentage" name="Share" stroke={chartPalette.warning} strokeWidth={2} dot={{ r: 4 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </Box>
+            </Paper>
+          )}
 
           <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "1.35fr 1fr" } }}>
             <ChartCard
@@ -333,6 +392,47 @@ export default function WalletTransactionPerformancePage() {
               </Paper>
             ))}
           </Box>
+
+          {/* Deposit Method Profitability */}
+          {performanceQuery.data.profitabilityByDepositMethod.length > 0 && (
+            <Paper sx={{ p: 2.2, ...glassPanelSx }}>
+              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>Deposit Method Profitability</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Commission earned per deposit channel over the selected period
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>Deposit Method</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Volume</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Total Value</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Avg Amount</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Commission</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Rate</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {performanceQuery.data.profitabilityByDepositMethod.map((row) => (
+                    <TableRow key={row.method} hover>
+                      <TableCell>{row.method}</TableCell>
+                      <TableCell align="right">{new Intl.NumberFormat("en-US").format(row.volume)}</TableCell>
+                      <TableCell align="right">{formatCurrency(row.totalValue)}</TableCell>
+                      <TableCell align="right">{formatCurrency(row.avgAmount)}</TableCell>
+                      <TableCell align="right">{formatCurrency(row.totalCommission)}</TableCell>
+                      <TableCell align="right">
+                        <Chip
+                          label={`${row.commissionRate.toFixed(2)}%`}
+                          size="small"
+                          color={row.commissionRate > 1 ? "success" : "default"}
+                          variant="outlined"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Paper>
+          )}
 
           <Alert severity="info" icon={<CalendarClock size={16} />}>
             Period: {formatDate(performanceQuery.data.period.dateFrom)} to {formatDate(performanceQuery.data.period.dateTo)}.
