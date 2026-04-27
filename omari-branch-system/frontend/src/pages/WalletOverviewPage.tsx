@@ -16,18 +16,36 @@ import {
   Button,
   ButtonGroup,
   FormControlLabel,
+  Paper,
   Stack,
   Switch,
   TextField,
   Typography,
 } from "@mui/material";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { useSearchParams } from "react-router-dom";
 
+import { chartPalette, glassPanelSx } from "../app/theme";
 import { getErrorMessage } from "../services/api";
 import { formatCurrency, formatDate } from "../services/format";
 import { fetchWalletOverview } from "../services/wallet";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
+
+const GENDER_COLORS = { Male: chartPalette.primary, Female: chartPalette.danger };
+const AGE_COLORS = ["#73c394", "#1b7f57", "#c98b2c", "#c44b45"];
 
 function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -138,6 +156,7 @@ export default function WalletOverviewPage() {
         compare,
         currency,
       }),
+    staleTime: 5 * 60 * 1000,
   });
 
   const insights = useMemo(() => {
@@ -343,6 +362,74 @@ export default function WalletOverviewPage() {
             {cards.map((card) => (
               <StatCard key={card.label} label={card.label} value={card.value} hint={card.hint} icon={card.icon} />
             ))}
+          </Box>
+
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+            {/* Customer Gender */}
+            <Paper sx={{ p: 2.5, ...glassPanelSx }}>
+              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Customer Gender</Typography>
+              <Stack direction={{ xs: "column", sm: "row" }} alignItems="center" spacing={3}>
+                <Box sx={{ width: 180, height: 180, flexShrink: 0 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: "Male", value: walletQuery.data.demographics.genderSplit.male },
+                          { name: "Female", value: walletQuery.data.demographics.genderSplit.female },
+                        ]}
+                        cx="50%" cy="50%"
+                        innerRadius={54} outerRadius={80}
+                        dataKey="value" paddingAngle={3}
+                      >
+                        {(["Male", "Female"] as const).map((g) => (
+                          <Cell key={g} fill={GENDER_COLORS[g]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => new Intl.NumberFormat("en-US").format(v)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </Box>
+                <Stack spacing={1.5}>
+                  {[
+                    { label: "Male", value: walletQuery.data.demographics.genderSplit.male, pct: walletQuery.data.demographics.genderSplit.malePercentage, color: GENDER_COLORS.Male },
+                    { label: "Female", value: walletQuery.data.demographics.genderSplit.female, pct: walletQuery.data.demographics.genderSplit.femalePercentage, color: GENDER_COLORS.Female },
+                  ].map((row) => (
+                    <Stack key={row.label} direction="row" alignItems="center" spacing={1}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: row.color, flexShrink: 0 }} />
+                      <Typography variant="body2" color="text.secondary" sx={{ minWidth: 50 }}>{row.label}</Typography>
+                      <Typography variant="body2" fontWeight={700}>{new Intl.NumberFormat("en-US").format(row.value)}</Typography>
+                      <Typography variant="body2" color="text.secondary">({row.pct}%)</Typography>
+                    </Stack>
+                  ))}
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Box sx={{ width: 10, height: 10, flexShrink: 0 }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 50 }}>Total</Typography>
+                    <Typography variant="body2" fontWeight={700}>{new Intl.NumberFormat("en-US").format(walletQuery.data.demographics.genderSplit.total)}</Typography>
+                  </Stack>
+                </Stack>
+              </Stack>
+            </Paper>
+
+            {/* Age Distribution */}
+            <Paper sx={{ p: 2.5, ...glassPanelSx }}>
+              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Age Distribution</Typography>
+              <Box sx={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={walletQuery.data.demographics.ageGroups} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} vertical={false} />
+                    <XAxis dataKey="group" tick={{ fontSize: 12 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v: number) => [new Intl.NumberFormat("en-US").format(v), "Customers"]} />
+                    <Bar dataKey="customers" radius={[6, 6, 0, 0]}>
+                      {walletQuery.data.demographics.ageGroups.map((_, i) => (
+                        <Cell key={i} fill={AGE_COLORS[i % AGE_COLORS.length]} />
+                      ))}
+                      <LabelList dataKey="percentage" position="top" formatter={(v: number) => `${v}%`} style={{ fontSize: 11, fontWeight: 700 }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+            </Paper>
           </Box>
 
           <Alert severity="info" icon={<CalendarClock size={16} />}>

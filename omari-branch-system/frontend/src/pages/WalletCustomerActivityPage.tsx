@@ -145,6 +145,7 @@ export default function WalletCustomerActivityPage() {
   const activityQuery = useQuery({
     queryKey: ["wallet", "customer-activity", { dateFrom, dateTo, currency }],
     queryFn: () => fetchWalletCustomerActivityGrowth({ dateFrom, dateTo, currency }),
+    staleTime: 5 * 60 * 1000,
   });
 
   return (

@@ -158,6 +158,7 @@ export default function WalletTransactionPerformancePage() {
   const performanceQuery = useQuery({
     queryKey: ["wallet", "transaction-performance", { dateFrom, dateTo, currency }],
     queryFn: () => fetchWalletTransactionPerformance({ dateFrom, dateTo, currency }),
+    staleTime: 5 * 60 * 1000,
   });
 
   const focusTitle =

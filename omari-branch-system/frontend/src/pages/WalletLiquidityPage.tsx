@@ -161,6 +161,7 @@ export default function WalletLiquidityPage() {
   const liquidityQuery = useQuery({
     queryKey: ["wallet", "liquidity", { dateFrom, dateTo, currency }],
     queryFn: () => fetchWalletLiquidity({ dateFrom, dateTo, asOfDate: dateTo, currency }),
+    staleTime: 5 * 60 * 1000,
   });
 
   const focusTitle =

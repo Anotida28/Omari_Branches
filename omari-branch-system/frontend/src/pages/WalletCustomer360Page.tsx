@@ -176,6 +176,7 @@ export default function WalletCustomer360Page() {
         asOfDate: dateTo,
         currency,
       }),
+    staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
@@ -195,6 +196,7 @@ export default function WalletCustomer360Page() {
         currency,
       }),
     enabled: selectedCustomerId.length > 0,
+    staleTime: 5 * 60 * 1000,
   });
 
   return (

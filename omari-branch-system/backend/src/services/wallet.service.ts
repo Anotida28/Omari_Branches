@@ -1,6 +1,7 @@
 import sql from "mssql";
 
 import { env } from "../config/env";
+import { walletCached } from "../utils/wallet-cache";
 
 export class WalletServiceError extends Error {
   status: number;
@@ -45,6 +46,21 @@ type WalletComparisonKpi = {
   percentChange: number | null;
 };
 
+export type WalletDemographics = {
+  genderSplit: {
+    male: number;
+    female: number;
+    total: number;
+    malePercentage: number;
+    femalePercentage: number;
+  };
+  ageGroups: Array<{
+    group: "Under 18" | "19-35" | "36-55" | "56+";
+    customers: number;
+    percentage: number;
+  }>;
+};
+
 export type WalletOverviewResponse = {
   period: {
     dateFrom: string;
@@ -52,6 +68,7 @@ export type WalletOverviewResponse = {
     asOfDate: string;
   };
   kpis: WalletKpis;
+  demographics: WalletDemographics;
   comparison: {
     previousPeriodDateFrom: string;
     previousPeriodDateTo: string;
@@ -609,6 +626,76 @@ function mapCustomer360Summary(row: Record<string, unknown>, asOfDate: Date): Wa
   };
 }
 
+// ─── Customer Demographics ───────────────────────────────────────────────────
+
+async function queryCustomerDemographics(params: { currency: Currency }): Promise<WalletDemographics> {
+  const pool = await getPool();
+  const acct = getAccountsTable(params.currency);
+  const cust = getCustomerTable();
+  const request = pool.request();
+
+  const result = await request.query(`
+    SELECT
+      CASE
+        WHEN c.[Gender] = 'Female' THEN 'Female'
+        ELSE 'Male'
+      END AS gender,
+      CASE
+        WHEN c.[DateOfBirth] IS NULL                                               THEN '19-35'
+        WHEN DATEDIFF(YEAR, c.[DateOfBirth], GETDATE()) < 18                      THEN 'Under 18'
+        WHEN DATEDIFF(YEAR, c.[DateOfBirth], GETDATE()) <= 35                     THEN '19-35'
+        WHEN DATEDIFF(YEAR, c.[DateOfBirth], GETDATE()) <= 55                     THEN '36-55'
+        ELSE '56+'
+      END AS ageGroup,
+      COUNT(DISTINCT c.[CIF]) AS customers
+    FROM [${cust.schema}].[${cust.table}] c WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON c.[CIF] = a.[CIF]
+    WHERE c.[Deleted] IS NULL
+    GROUP BY
+      CASE
+        WHEN c.[Gender] = 'Female' THEN 'Female'
+        ELSE 'Male'
+      END,
+      CASE
+        WHEN c.[DateOfBirth] IS NULL                                               THEN '19-35'
+        WHEN DATEDIFF(YEAR, c.[DateOfBirth], GETDATE()) < 18                      THEN 'Under 18'
+        WHEN DATEDIFF(YEAR, c.[DateOfBirth], GETDATE()) <= 35                     THEN '19-35'
+        WHEN DATEDIFF(YEAR, c.[DateOfBirth], GETDATE()) <= 55                     THEN '36-55'
+        ELSE '56+'
+      END
+  `);
+
+  const rows = result.recordset as Array<{ gender: string; ageGroup: string; customers: number }>;
+
+  let male = 0, female = 0;
+  const ageCounts: Record<string, number> = { "Under 18": 0, "19-35": 0, "36-55": 0, "56+": 0 };
+
+  for (const row of rows) {
+    const count = Math.trunc(toNumber(row.customers as unknown));
+    if (row.gender === "Female") female += count;
+    else male += count;
+    if (row.ageGroup in ageCounts) ageCounts[row.ageGroup] += count;
+  }
+
+  const total = male + female;
+  const ageTotal = Object.values(ageCounts).reduce((s, v) => s + v, 0);
+
+  return {
+    genderSplit: {
+      male,
+      female,
+      total,
+      malePercentage: total === 0 ? 0 : Math.round((male / total) * 100),
+      femalePercentage: total === 0 ? 0 : Math.round((female / total) * 100),
+    },
+    ageGroups: (["Under 18", "19-35", "36-55", "56+"] as const).map((group) => ({
+      group,
+      customers: ageCounts[group],
+      percentage: ageTotal === 0 ? 0 : Math.round((ageCounts[group] / ageTotal) * 100),
+    })),
+  };
+}
+
 // ─── Transaction KPIs ────────────────────────────────────────────────────────
 
 async function queryTransactionKpis(params: {
@@ -634,8 +721,8 @@ async function queryTransactionKpis(params: {
       COALESCE(ABS(SUM(CASE WHEN [NetFee] < 0 THEN [NetFee] ELSE 0 END)), 0) AS totalCommission
     FROM [${tx.schema}].[${tx.table}] WITH (NOLOCK)
     WHERE [Currency] = @currency
-      AND CAST([Date] AS DATE) >= @dateFrom
-      AND CAST([Date] AS DATE) <= @dateTo
+      AND [Date] >= @dateFrom
+      AND [Date] <= @dateTo
   `);
 
   const row = (result.recordset[0] ?? {}) as NumericRecord;
@@ -687,8 +774,8 @@ async function queryCustomerKpis(params: {
       FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
       JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
       WHERE t.[Currency] = @currency
-        AND CAST(t.[Date] AS DATE) >= @a30Date
-        AND CAST(t.[Date] AS DATE) <= @asOfDate
+        AND t.[Date] >= @a30Date
+        AND t.[Date] <= @asOfDate
         AND a.[CIF] IS NOT NULL
     `),
     reqA60.query(`
@@ -696,8 +783,8 @@ async function queryCustomerKpis(params: {
       FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
       JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
       WHERE t.[Currency] = @currency
-        AND CAST(t.[Date] AS DATE) >= @a60Date
-        AND CAST(t.[Date] AS DATE) <= @asOfDate
+        AND t.[Date] >= @a60Date
+        AND t.[Date] <= @asOfDate
         AND a.[CIF] IS NOT NULL
     `),
     reqNew.query(`
@@ -718,7 +805,7 @@ async function queryCustomerKpis(params: {
         FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
         JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
         WHERE t.[Currency] = @currency
-          AND CAST(t.[Date] AS DATE) <= @asOfDate
+          AND t.[Date] <= @asOfDate
           AND a.[CIF] IS NOT NULL
         GROUP BY a.[CIF]
       ) last_seen
@@ -801,12 +888,14 @@ async function queryActivityTrend(params: {
       : "CONVERT(CHAR(7), CAST(t.[Date] AS DATE), 120)";
 
   const result = await request.query(`
-    WITH customer_first AS (
-      SELECT a.[CIF], MIN(CAST(t.[Date] AS DATE)) AS firstDate
+    WITH has_prior_tx AS (
+      SELECT DISTINCT a.[CIF]
       FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
       JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
-      WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
-      GROUP BY a.[CIF]
+      WHERE t.[Currency] = @currency
+        AND a.[CIF] IS NOT NULL
+        AND t.[Date] >= DATEADD(YEAR, -5, @dateFrom)
+        AND t.[Date] < @dateFrom
     ),
     period_data AS (
       SELECT
@@ -816,20 +905,18 @@ async function queryActivityTrend(params: {
       FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
       JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
       WHERE t.[Currency] = @currency
-        AND CAST(t.[Date] AS DATE) >= @dateFrom
-        AND CAST(t.[Date] AS DATE) <= @dateTo
+        AND t.[Date] >= @dateFrom
+        AND t.[Date] <= @dateTo
         AND a.[CIF] IS NOT NULL
       GROUP BY ${periodExpr}, a.[CIF]
     )
     SELECT
       p.period,
       COUNT(DISTINCT p.cif) AS activeCustomers,
-      COUNT(DISTINCT CASE WHEN cf.firstDate >= @dateFrom AND cf.firstDate <= @dateTo
-        AND ${params.grain === "daily" ? "CONVERT(VARCHAR(10), cf.firstDate, 23)" : "CONVERT(CHAR(7), cf.firstDate, 120)"} = p.period
-        THEN p.cif END) AS newCustomers,
+      COUNT(DISTINCT CASE WHEN hpt.[CIF] IS NULL THEN p.cif END) AS newCustomers,
       COALESCE(SUM(p.txVolume), 0) AS transactionVolume
     FROM period_data p
-    JOIN customer_first cf ON p.cif = cf.cif
+    LEFT JOIN has_prior_tx hpt ON p.cif = hpt.[CIF]
     GROUP BY p.period
     ORDER BY p.period ASC
   `);
@@ -861,8 +948,8 @@ async function queryFrequencyBuckets(params: {
       FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
       JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
       WHERE t.[Currency] = @currency
-        AND CAST(t.[Date] AS DATE) >= @dateFrom
-        AND CAST(t.[Date] AS DATE) <= @dateTo
+        AND t.[Date] >= @dateFrom
+        AND t.[Date] <= @dateTo
         AND a.[CIF] IS NOT NULL
       GROUP BY a.[CIF]
     )
@@ -933,8 +1020,8 @@ async function queryTransactionPerformanceTrend(params: {
     FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
     JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
     WHERE t.[Currency] = @currency
-      AND CAST(t.[Date] AS DATE) >= @dateFrom
-      AND CAST(t.[Date] AS DATE) <= @dateTo
+      AND t.[Date] >= @dateFrom
+      AND t.[Date] <= @dateTo
       AND a.[CIF] IS NOT NULL
     GROUP BY ${periodExpr}
     ORDER BY period ASC
@@ -970,8 +1057,8 @@ async function queryTransactionPerformanceKpis(params: {
     FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
     JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
     WHERE t.[Currency] = @currency
-      AND CAST(t.[Date] AS DATE) >= @dateFrom
-      AND CAST(t.[Date] AS DATE) <= @dateTo
+      AND t.[Date] >= @dateFrom
+      AND t.[Date] <= @dateTo
       AND a.[CIF] IS NOT NULL
   `);
 
@@ -1026,8 +1113,8 @@ async function queryRevenuePerformanceTrend(params: {
     FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
     JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
     WHERE t.[Currency] = @currency
-      AND CAST(t.[Date] AS DATE) >= @dateFrom
-      AND CAST(t.[Date] AS DATE) <= @dateTo
+      AND t.[Date] >= @dateFrom
+      AND t.[Date] <= @dateTo
       AND a.[CIF] IS NOT NULL
     GROUP BY ${periodExpr}
     ORDER BY period ASC
@@ -1062,8 +1149,8 @@ async function queryRevenuePerformanceKpis(params: {
     FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
     JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
     WHERE t.[Currency] = @currency
-      AND CAST(t.[Date] AS DATE) >= @dateFrom
-      AND CAST(t.[Date] AS DATE) <= @dateTo
+      AND t.[Date] >= @dateFrom
+      AND t.[Date] <= @dateTo
       AND a.[CIF] IS NOT NULL
   `);
 
@@ -1311,6 +1398,8 @@ async function queryRetentionDormancy(params: {
      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
      WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+       AND t.[Date] >= DATEADD(YEAR, -5, @asOfDate)
+       AND t.[Date] <= @asOfDate
      GROUP BY a.[CIF]) cls
   `;
 
@@ -1353,6 +1442,8 @@ async function queryRetentionDormancy(params: {
         FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
         JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
         WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+          AND t.[Date] >= DATEADD(YEAR, -2, @dateFrom)
+          AND t.[Date] <= @dateTo
       )
       SELECT
         CONVERT(VARCHAR(10), txDate, 23) AS period,
@@ -1483,8 +1574,8 @@ async function queryCustomer360List(params: {
           SUM(t.[TransactionAmount]) AS lifetimeValue,
           SUM(t.[Volume]) AS lifetimeVolume,
           ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)) AS lifetimeCommission,
-          SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last30 THEN t.[TransactionAmount] ELSE 0 END) AS last30Value,
-          SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last60 THEN t.[TransactionAmount] ELSE 0 END) AS last60Value
+          SUM(CASE WHEN t.[Date] >= @last30 THEN t.[TransactionAmount] ELSE 0 END) AS last30Value,
+          SUM(CASE WHEN t.[Date] >= @last60 THEN t.[TransactionAmount] ELSE 0 END) AS last60Value
         FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
         JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
         WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
@@ -1568,23 +1659,23 @@ async function queryCustomer360Detail(params: {
         SUM(t.[TransactionAmount]) AS lifetimeTransactionValue,
         SUM(t.[Volume]) AS lifetimeTransactionVolume,
         ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)) AS lifetimeCommission,
-        SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last30 THEN t.[TransactionAmount] ELSE 0 END) AS last30DayTransactionValue,
-        SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last60 THEN t.[TransactionAmount] ELSE 0 END) AS last60DayTransactionValue
+        SUM(CASE WHEN t.[Date] >= @last30 THEN t.[TransactionAmount] ELSE 0 END) AS last30DayTransactionValue,
+        SUM(CASE WHEN t.[Date] >= @last60 THEN t.[TransactionAmount] ELSE 0 END) AS last60DayTransactionValue
       FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
       JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
       JOIN [${cust.schema}].[${cust.table}] c WITH (NOLOCK) ON a.[CIF] = c.[CIF]
       WHERE t.[Currency] = @currency
         AND c.[CIF] = @customerId
-        AND CAST(t.[Date] AS DATE) <= @asOfDate
+        AND t.[Date] <= @asOfDate
       GROUP BY c.[CIF], c.[FirstName], c.[LastName], c.[MobileNumber]
     `),
     reqKpis.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @dateFrom AND CAST(t.[Date] AS DATE) <= @dateTo THEN t.[TransactionAmount] ELSE 0 END), 0) AS selectedPeriodTransactionValue,
-        COALESCE(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @dateFrom AND CAST(t.[Date] AS DATE) <= @dateTo THEN t.[Volume] ELSE 0 END), 0) AS selectedPeriodTransactionVolume,
-        COALESCE(ABS(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @dateFrom AND CAST(t.[Date] AS DATE) <= @dateTo AND t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS selectedPeriodCommission,
-        COALESCE(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last90Date AND CAST(t.[Date] AS DATE) <= @asOfDate THEN t.[TransactionAmount] ELSE 0 END), 0) AS last90DayTransactionValue,
-        COALESCE(SUM(CASE WHEN CAST(t.[Date] AS DATE) >= @last90Date AND CAST(t.[Date] AS DATE) <= @asOfDate THEN t.[Volume] ELSE 0 END), 0) AS last90DayTransactionVolume
+        COALESCE(SUM(CASE WHEN t.[Date] >= @dateFrom AND t.[Date] <= @dateTo THEN t.[TransactionAmount] ELSE 0 END), 0) AS selectedPeriodTransactionValue,
+        COALESCE(SUM(CASE WHEN t.[Date] >= @dateFrom AND t.[Date] <= @dateTo THEN t.[Volume] ELSE 0 END), 0) AS selectedPeriodTransactionVolume,
+        COALESCE(ABS(SUM(CASE WHEN t.[Date] >= @dateFrom AND t.[Date] <= @dateTo AND t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS selectedPeriodCommission,
+        COALESCE(SUM(CASE WHEN t.[Date] >= @last90Date AND t.[Date] <= @asOfDate THEN t.[TransactionAmount] ELSE 0 END), 0) AS last90DayTransactionValue,
+        COALESCE(SUM(CASE WHEN t.[Date] >= @last90Date AND t.[Date] <= @asOfDate THEN t.[Volume] ELSE 0 END), 0) AS last90DayTransactionVolume
       FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
       JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
       WHERE t.[Currency] = @currency AND a.[CIF] = @customerId
@@ -1601,8 +1692,8 @@ async function queryCustomer360Detail(params: {
       JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
       WHERE t.[Currency] = @currency
         AND a.[CIF] = @customerId
-        AND CAST(t.[Date] AS DATE) >= @dateFrom
-        AND CAST(t.[Date] AS DATE) <= @dateTo
+        AND t.[Date] >= @dateFrom
+        AND t.[Date] <= @dateTo
       GROUP BY CONVERT(VARCHAR(10), CAST(t.[Date] AS DATE), 23)
       ORDER BY period ASC
     `),
@@ -1669,7 +1760,7 @@ function summarizeInsightAlerts(alerts: WalletInsightAlertItem[]): WalletInsight
 
 // ─── Exported Service Functions ───────────────────────────────────────────────
 
-export async function getWalletOverview(
+async function _getWalletOverview(
   input: WalletOverviewInput,
 ): Promise<WalletOverviewResponse> {
   if (input.dateFrom > input.dateTo) {
@@ -1684,7 +1775,10 @@ export async function getWalletOverview(
   const previousDateTo = addDays(dateFrom, -1);
   const previousDateFrom = addDays(previousDateTo, -(daySpan - 1));
 
-  const kpis = await computeKpis({ currency, dateFrom, dateTo, asOfDate });
+  const [kpis, demographics] = await Promise.all([
+    computeKpis({ currency, dateFrom, dateTo, asOfDate }),
+    queryCustomerDemographics({ currency }),
+  ]);
 
   let comparison: WalletOverviewResponse["comparison"] = null;
   if (input.compare) {
@@ -1721,6 +1815,7 @@ export async function getWalletOverview(
       asOfDate: formatDate(asOfDate),
     },
     kpis,
+    demographics,
     comparison,
     metadata: {
       currency,
@@ -1732,7 +1827,7 @@ export async function getWalletOverview(
   };
 }
 
-export async function getWalletCustomerActivityGrowth(
+async function _getWalletCustomerActivityGrowth(
   input: WalletCustomerActivityGrowthInput,
 ): Promise<WalletCustomerActivityGrowthResponse> {
   if (input.dateFrom > input.dateTo) {
@@ -1787,7 +1882,7 @@ export async function getWalletCustomerActivityGrowth(
   };
 }
 
-export async function getWalletRetentionDormancy(
+async function _getWalletRetentionDormancy(
   input: WalletRetentionDormancyInput,
 ): Promise<WalletRetentionDormancyResponse> {
   if (input.dateFrom > input.dateTo) {
@@ -1823,7 +1918,7 @@ export async function getWalletRetentionDormancy(
   };
 }
 
-export async function getWalletTransactionPerformance(
+async function _getWalletTransactionPerformance(
   input: WalletTransactionPerformanceInput,
 ): Promise<WalletTransactionPerformanceResponse> {
   if (input.dateFrom > input.dateTo) {
@@ -1852,7 +1947,7 @@ export async function getWalletTransactionPerformance(
   };
 }
 
-export async function getWalletRevenuePerformance(
+async function _getWalletRevenuePerformance(
   input: WalletRevenuePerformanceInput,
 ): Promise<WalletRevenuePerformanceResponse> {
   if (input.dateFrom > input.dateTo) {
@@ -1881,7 +1976,7 @@ export async function getWalletRevenuePerformance(
   };
 }
 
-export async function getWalletLiquidity(
+async function _getWalletLiquidity(
   input: WalletLiquidityInput,
 ): Promise<WalletLiquidityResponse> {
   if (input.dateFrom > input.dateTo) {
@@ -1918,7 +2013,7 @@ export async function getWalletLiquidity(
   };
 }
 
-export async function listWalletCustomer360(
+async function _listWalletCustomer360(
   input: WalletCustomer360ListInput,
 ): Promise<WalletCustomer360ListResponse> {
   const asOfDate = normalizeDateOnly(input.asOfDate);
@@ -1945,7 +2040,7 @@ export async function listWalletCustomer360(
   };
 }
 
-export async function getWalletCustomer360Detail(
+async function _getWalletCustomer360Detail(
   input: WalletCustomer360DetailInput,
 ): Promise<WalletCustomer360DetailResponse> {
   if (input.dateFrom > input.dateTo) {
@@ -1984,7 +2079,7 @@ export async function getWalletCustomer360Detail(
   };
 }
 
-export async function getWalletInsightsAlerts(
+async function _getWalletInsightsAlerts(
   input: WalletInsightsAlertsInput,
 ): Promise<WalletInsightsAlertsResponse> {
   if (input.dateFrom > input.dateTo) {
@@ -2136,4 +2231,46 @@ export async function getWalletInsightsAlerts(
       sourceBalanceCurrentTable: `${getBalanceCurrentTable(currency).schema}.${getBalanceCurrentTable(currency).table}`,
     },
   };
+}
+
+// ─── Cached public exports ────────────────────────────────────────────────────
+
+function cacheKey(fn: string, input: unknown): string {
+  return `${fn}:${JSON.stringify(input, (_k, v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v))}`;
+}
+
+export function getWalletOverview(input: WalletOverviewInput): Promise<WalletOverviewResponse> {
+  return walletCached(cacheKey("overview", input), () => _getWalletOverview(input));
+}
+
+export function getWalletCustomerActivityGrowth(input: WalletCustomerActivityGrowthInput): Promise<WalletCustomerActivityGrowthResponse> {
+  return walletCached(cacheKey("activity", input), () => _getWalletCustomerActivityGrowth(input));
+}
+
+export function getWalletRetentionDormancy(input: WalletRetentionDormancyInput): Promise<WalletRetentionDormancyResponse> {
+  return walletCached(cacheKey("retention", input), () => _getWalletRetentionDormancy(input));
+}
+
+export function getWalletTransactionPerformance(input: WalletTransactionPerformanceInput): Promise<WalletTransactionPerformanceResponse> {
+  return walletCached(cacheKey("txperf", input), () => _getWalletTransactionPerformance(input));
+}
+
+export function getWalletRevenuePerformance(input: WalletRevenuePerformanceInput): Promise<WalletRevenuePerformanceResponse> {
+  return walletCached(cacheKey("revenue", input), () => _getWalletRevenuePerformance(input));
+}
+
+export function getWalletLiquidity(input: WalletLiquidityInput): Promise<WalletLiquidityResponse> {
+  return walletCached(cacheKey("liquidity", input), () => _getWalletLiquidity(input));
+}
+
+export function listWalletCustomer360(input: WalletCustomer360ListInput): Promise<WalletCustomer360ListResponse> {
+  return walletCached(cacheKey("c360list", input), () => _listWalletCustomer360(input));
+}
+
+export function getWalletCustomer360Detail(input: WalletCustomer360DetailInput): Promise<WalletCustomer360DetailResponse> {
+  return walletCached(cacheKey("c360detail", input), () => _getWalletCustomer360Detail(input));
+}
+
+export function getWalletInsightsAlerts(input: WalletInsightsAlertsInput): Promise<WalletInsightsAlertsResponse> {
+  return walletCached(cacheKey("insights", input), () => _getWalletInsightsAlerts(input));
 }

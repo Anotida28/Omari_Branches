@@ -162,6 +162,7 @@ export default function WalletRevenuePerformancePage() {
   const revenueQuery = useQuery({
     queryKey: ["wallet", "revenue-performance", { dateFrom, dateTo, currency }],
     queryFn: () => fetchWalletRevenuePerformance({ dateFrom, dateTo, currency }),
+    staleTime: 5 * 60 * 1000,
   });
 
   const focusTitle =

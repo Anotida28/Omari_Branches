@@ -303,6 +303,21 @@ export type WalletComparisonKpi = {
   percentChange: number | null;
 };
 
+export type WalletDemographics = {
+  genderSplit: {
+    male: number;
+    female: number;
+    total: number;
+    malePercentage: number;
+    femalePercentage: number;
+  };
+  ageGroups: Array<{
+    group: "Under 18" | "19-35" | "36-55" | "56+";
+    customers: number;
+    percentage: number;
+  }>;
+};
+
 export type WalletOverviewResponse = {
   period: {
     dateFrom: string;
@@ -310,6 +325,7 @@ export type WalletOverviewResponse = {
     asOfDate: string;
   };
   kpis: WalletOverviewKpis;
+  demographics: WalletDemographics;
   comparison: {
     previousPeriodDateFrom: string;
     previousPeriodDateTo: string;

@@ -150,6 +150,7 @@ export default function WalletRetentionDormancyPage() {
   const retentionQuery = useQuery({
     queryKey: ["wallet", "retention-dormancy", { dateFrom, dateTo, currency }],
     queryFn: () => fetchWalletRetentionDormancy({ dateFrom, dateTo, asOfDate: dateTo, currency }),
+    staleTime: 5 * 60 * 1000,
   });
 
   const focusTitle =

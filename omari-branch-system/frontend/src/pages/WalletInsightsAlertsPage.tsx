@@ -114,6 +114,7 @@ export default function WalletInsightsAlertsPage() {
   const insightsQuery = useQuery({
     queryKey: ["wallet", "insights-alerts", { dateFrom, dateTo, currency }],
     queryFn: () => fetchWalletInsightsAlerts({ dateFrom, dateTo, asOfDate: dateTo, currency }),
+    staleTime: 5 * 60 * 1000,
   });
 
   return (
