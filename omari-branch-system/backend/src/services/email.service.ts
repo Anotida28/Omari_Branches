@@ -274,7 +274,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<string> {
   }
 }
 
-function formatSubject(payload: AlertEmailPayload): string {
+export function formatSubject(payload: AlertEmailPayload): string {
   const { branchName, expenseType, period, alertType, dayOffset } = payload;
 
   if (alertType === "DUE_REMINDER") {
@@ -285,7 +285,7 @@ function formatSubject(payload: AlertEmailPayload): string {
   return `[OVERDUE] ${branchName}: ${expenseType} for ${period} is ${dayOffset} day${dayOffset !== 1 ? "s" : ""} overdue`;
 }
 
-function formatBody(payload: AlertEmailPayload): string {
+export function formatBody(payload: AlertEmailPayload): string {
   const { branchName, expenseType, period, dueDate, amount, alertType, dayOffset } = payload;
 
   const header = alertType === "DUE_REMINDER"

@@ -154,3 +154,102 @@ Health: http://localhost:4000/health
   - daily-wallet-report-emailer: 0 6 * * *
 [JobLock] Acquired lock for source-metrics-sync as worker-26764-1777383783512-2kkwc6t8 (lease=1800000ms, heartbeat=600000ms)
 [JobLock] Released lock for source-metrics-sync by worker-26764-1777383783512-2kkwc6t8
+[INFO] 16:03:54 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\jobs\wallet-report.job.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:04:00 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\jobs\wallet-report.job.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:04:06 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\jobs\wallet-report.job.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:04:11 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\jobs\wallet-report.job.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:04:28 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\jobs\wallet-report.job.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:04:33 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\jobs\daily-branch-report.job.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:04:40 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\jobs\daily-branch-report.job.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:04:50 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\jobs\daily-branch-report.job.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:05:00 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\jobs\daily-branch-report.job.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:05:05 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\email.service.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *
+[INFO] 16:05:10 Restarting: C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\email.service.ts has been modified
+API listening on http://localhost:4000
+Health: http://localhost:4000/health
+[Scheduler] Starting job scheduler...
+[Scheduler] Source metrics sync job is disabled or not configured
+[Scheduler] Scheduled jobs:
+  - daily-alert-evaluator: 0 6 * * *
+  - daily-branch-report-emailer: 0 6 * * *
+  - daily-wallet-report-emailer: 0 6 * * *

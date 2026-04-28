@@ -1,3 +1,4 @@
+import { prisma } from "../db/prisma";
 import {
   EmailSendStatus,
   EmailType,
@@ -28,7 +29,7 @@ function getYesterdayInHarare(): Date {
   return new Date(today.getTime() - 24 * 60 * 60 * 1000);
 }
 
-function money(value: number, currency: string): string {
+export function money(value: number, currency: string): string {
   const formatted = value.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -36,7 +37,7 @@ function money(value: number, currency: string): string {
   return currency === "USD" ? `$${formatted}` : `${currency} ${formatted}`;
 }
 
-function buildReportBody(
+export function buildWalletReportBody(
   reportDate: string,
   rows: WalletDailySummaryRow[],
 ): string {
@@ -92,7 +93,6 @@ function textToHtml(text: string): string {
 }
 
 async function hasReportAlreadySent(sentTo: string, reportDate: Date): Promise<boolean> {
-  const { prisma } = await import("../db/prisma");
   const count = await prisma.emailLog.count({
     where: {
       emailType: EmailType.DAILY_WALLET_REPORT,
@@ -145,7 +145,7 @@ export async function runDailyWalletReportJob(): Promise<WalletReportJobResult> 
   }
 
   const subject = `Daily Wallet Report - ${reportDateText}`;
-  const text = buildReportBody(reportDateText, rows);
+  const text = buildWalletReportBody(reportDateText, rows);
 
   for (const recipient of recipients) {
     try {

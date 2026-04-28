@@ -14,7 +14,7 @@ import { formatDateString, getTodayInHarare } from "../services/alert-evaluation
 const JOB_NAME = "daily-branch-report-emailer";
 const JOB_LOCK_DURATION_MS = 15 * 60 * 1000;
 
-type BranchReportMetric = {
+export type BranchReportMetric = {
   branchId: bigint;
   branchName: string;
   date: string;
@@ -48,7 +48,7 @@ function money(value: Prisma.Decimal | number | string): string {
   return `$${decimal.toFixed(2)}`;
 }
 
-function buildStatusLine(metric: BranchReportMetric): string {
+export function buildStatusLine(metric: BranchReportMetric): string {
   const cashIn = new Prisma.Decimal(metric.cashInValue);
   const cashOut = new Prisma.Decimal(metric.cashOutValue);
   const eFloat = new Prisma.Decimal(metric.eFloatBalance);
@@ -65,7 +65,7 @@ function buildStatusLine(metric: BranchReportMetric): string {
   return "Branch activity is within normal daily range.";
 }
 
-function buildReportBody(reportDate: string, metrics: BranchReportMetric[]): string {
+export function buildBranchReportBody(reportDate: string, metrics: BranchReportMetric[]): string {
   if (metrics.length === 0) {
     return `Daily Branch Performance Snapshot\n\nDate: ${reportDate}\n\nNo branch metrics were recorded for this date.`;
   }
@@ -160,7 +160,7 @@ async function sendReportEmail(params: {
 }): Promise<"sent" | "failed"> {
   const scopeLabel = params.branchId ? params.metrics[0]?.branchName ?? "Branch" : "All Branches";
   const subject = `Daily Branch Report - ${params.reportDateText} - ${scopeLabel}`;
-  const text = buildReportBody(params.reportDateText, params.metrics);
+  const text = buildBranchReportBody(params.reportDateText, params.metrics);
 
   try {
     await sendEmail({
