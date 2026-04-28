@@ -295,6 +295,8 @@ export type WalletOverviewKpis = {
   dormantCustomers90Plus: number | null;
   latestTotalEFloat: number;
   latestEFloatDate: string | null;
+  totalRegisteredCustomers: number;
+  transactableWallets: number;
 };
 
 export type WalletComparisonKpi = {
@@ -303,14 +305,17 @@ export type WalletComparisonKpi = {
   percentChange: number | null;
 };
 
+type WalletGenderSplit = {
+  male: number;
+  female: number;
+  total: number;
+  malePercentage: number;
+  femalePercentage: number;
+};
+
 export type WalletDemographics = {
-  genderSplit: {
-    male: number;
-    female: number;
-    total: number;
-    malePercentage: number;
-    femalePercentage: number;
-  };
+  genderSplit: WalletGenderSplit;
+  activeGenderSplit: WalletGenderSplit;
   ageGroups: Array<{
     group: "Under 18" | "19-35" | "36-55" | "56+";
     customers: number;
@@ -714,5 +719,58 @@ export type WalletInsightsAlertsParams = {
   dateFrom: string;
   dateTo: string;
   asOfDate?: string;
+  currency?: "USD" | "ZWL";
+};
+
+export type WalletVisaTrendPoint = {
+  period: string;
+  totalVolume: number;
+  totalValue: number;
+  totalCommission: number;
+  uniqueCustomers: number;
+  avgTransactionValue: number;
+  preAuthVolume: number;
+  purchaseVolume: number;
+  refundVolume: number;
+  withdrawalVolume: number;
+};
+
+export type WalletVisaTypeBreakdown = {
+  transactionType: string;
+  volume: number;
+  totalValue: number;
+  totalCommission: number;
+  percentage: number;
+};
+
+export type WalletVisaAnalyticsResponse = {
+  period: {
+    dateFrom: string;
+    dateTo: string;
+  };
+  kpis: {
+    totalVolume: number;
+    totalValue: number;
+    totalCommission: number;
+    avgTransactionValue: number;
+    uniqueCustomers: number;
+    preAuthVolume: number;
+    purchaseVolume: number;
+    refundVolume: number;
+    withdrawalVolume: number;
+    commissionRate: number;
+  };
+  dailyTrend: WalletVisaTrendPoint[];
+  monthlyTrend: WalletVisaTrendPoint[];
+  typeBreakdown: WalletVisaTypeBreakdown[];
+  metadata: {
+    dataFreshnessTimestamp: string;
+    sourceSummaryTable: string;
+  };
+};
+
+export type WalletVisaAnalyticsParams = {
+  dateFrom: string;
+  dateTo: string;
   currency?: "USD" | "ZWL";
 };

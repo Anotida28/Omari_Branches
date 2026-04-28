@@ -14,3 +14,21 @@
 [2m17:50:26[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletTransactionPerformancePage.tsx, /src/index.css[22m
 [2m17:50:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletTransactionPerformancePage.tsx, /src/index.css[22m
 [2m17:51:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletTransactionPerformancePage.tsx, /src/index.css[22m
+[2m09:10:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
+[2m09:10:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
+[2m09:10:15[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
+[2m09:10:30[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
+[2m09:10:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
+[2m09:13:23[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
+[2m09:13:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
+[2m09:13:39[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
+[2m09:34:52[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
+[2m09:34:52[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/hooks/useAuth.tsx[22m Could not Fast Refresh ("useAuth" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m09:34:52[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/hooks/useAuth.tsx[22m
+[2m09:35:28[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/WalletOverviewPage.tsx, /src/pages/WalletCustomer360Page.tsx, /src/pages/WalletInsightsAlertsPage.tsx, /src/pages/WalletCustomerActivityPage.tsx, /src/pages/WalletTransactionPerformancePage.tsx, /src/pages/WalletRetentionDormancyPage.tsx, /src/pages/WalletLiquidityPage.tsx, /src/pages/WalletRevenuePerformancePage.tsx[22m
+[2m09:35:35[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/WalletOverviewPage.tsx, /src/pages/WalletCustomer360Page.tsx, /src/pages/WalletInsightsAlertsPage.tsx, /src/pages/WalletCustomerActivityPage.tsx, /src/pages/WalletTransactionPerformancePage.tsx, /src/pages/WalletRetentionDormancyPage.tsx, /src/pages/WalletLiquidityPage.tsx, /src/pages/WalletRevenuePerformancePage.tsx[22m
+[2m09:35:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/layouts/AppLayout.tsx, /src/index.css[22m
+[2m09:35:51[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/layouts/AppLayout.tsx, /src/index.css[22m
+[2m09:35:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/routes/AppRoutes.tsx, /src/index.css[22m
+[2m09:36:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/routes/AppRoutes.tsx, /src/index.css[22m
+[2m09:37:11[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m

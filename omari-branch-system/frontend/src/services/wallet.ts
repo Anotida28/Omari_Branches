@@ -19,6 +19,8 @@ import type {
   WalletRevenuePerformanceResponse,
   WalletTransactionPerformanceParams,
   WalletTransactionPerformanceResponse,
+  WalletVisaAnalyticsParams,
+  WalletVisaAnalyticsResponse,
 } from "../types/api";
 
 export async function fetchWalletOverview(
@@ -117,6 +119,17 @@ export async function fetchWalletInsightsAlerts(
 ): Promise<WalletInsightsAlertsResponse> {
   const { data } = await api.get<ApiDataResponse<WalletInsightsAlertsResponse>>(
     "/api/wallet/insights-alerts",
+    { params },
+  );
+
+  return data.data;
+}
+
+export async function fetchWalletVisaAnalytics(
+  params: WalletVisaAnalyticsParams,
+): Promise<WalletVisaAnalyticsResponse> {
+  const { data } = await api.get<ApiDataResponse<WalletVisaAnalyticsResponse>>(
+    "/api/wallet/visa-analytics",
     { params },
   );
 

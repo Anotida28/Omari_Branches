@@ -19,6 +19,7 @@ import WalletOverviewPage from "../pages/WalletOverviewPage";
 import WalletRetentionDormancyPage from "../pages/WalletRetentionDormancyPage";
 import WalletRevenuePerformancePage from "../pages/WalletRevenuePerformancePage";
 import WalletTransactionPerformancePage from "../pages/WalletTransactionPerformancePage";
+import WalletVisaAnalyticsPage from "../pages/WalletVisaAnalyticsPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 const TrendsPage = lazy(() => import("../pages/TrendsPage"));
@@ -78,6 +79,7 @@ export function AppRoutes() {
         <Route path="/wallet/liquidity" element={<WalletLiquidityPage />} />
         <Route path="/wallet/customer-360" element={<WalletCustomer360Page />} />
         <Route path="/wallet/insights-alerts" element={<WalletInsightsAlertsPage />} />
+        <Route path="/wallet/visa-analytics" element={<WalletVisaAnalyticsPage />} />
       </Route>
 
       <Route

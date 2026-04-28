@@ -38,6 +38,8 @@ type WalletKpis = {
   dormantCustomers90Plus: number | null;
   latestTotalEFloat: number;
   latestEFloatDate: string | null;
+  totalRegisteredCustomers: number;
+  transactableWallets: number;
 };
 
 type WalletComparisonKpi = {
@@ -46,14 +48,17 @@ type WalletComparisonKpi = {
   percentChange: number | null;
 };
 
+type GenderSplit = {
+  male: number;
+  female: number;
+  total: number;
+  malePercentage: number;
+  femalePercentage: number;
+};
+
 export type WalletDemographics = {
-  genderSplit: {
-    male: number;
-    female: number;
-    total: number;
-    malePercentage: number;
-    femalePercentage: number;
-  };
+  genderSplit: GenderSplit;
+  activeGenderSplit: GenderSplit;
   ageGroups: Array<{
     group: "Under 18" | "19-35" | "36-55" | "56+";
     customers: number;
@@ -72,7 +77,7 @@ export type WalletOverviewResponse = {
   comparison: {
     previousPeriodDateFrom: string;
     previousPeriodDateTo: string;
-    kpis: Record<Exclude<keyof WalletKpis, "latestEFloatDate" | "dormantCustomers90Plus">, WalletComparisonKpi> & {
+    kpis: Record<Exclude<keyof WalletKpis, "latestEFloatDate" | "dormantCustomers90Plus" | "totalRegisteredCustomers" | "transactableWallets">, WalletComparisonKpi> & {
       dormantCustomers90Plus: WalletComparisonKpi | null;
     };
   } | null;
@@ -445,6 +450,59 @@ export type WalletInsightsAlertsResponse = {
   };
 };
 
+export type WalletVisaAnalyticsInput = {
+  dateFrom: Date;
+  dateTo: Date;
+  currency: Currency;
+};
+
+type WalletVisaTrendPoint = {
+  period: string;
+  totalVolume: number;
+  totalValue: number;
+  totalCommission: number;
+  uniqueCustomers: number;
+  avgTransactionValue: number;
+  preAuthVolume: number;
+  purchaseVolume: number;
+  refundVolume: number;
+  withdrawalVolume: number;
+};
+
+type WalletVisaTypeBreakdown = {
+  transactionType: string;
+  volume: number;
+  totalValue: number;
+  totalCommission: number;
+  percentage: number;
+};
+
+export type WalletVisaAnalyticsResponse = {
+  period: {
+    dateFrom: string;
+    dateTo: string;
+  };
+  kpis: {
+    totalVolume: number;
+    totalValue: number;
+    totalCommission: number;
+    avgTransactionValue: number;
+    uniqueCustomers: number;
+    preAuthVolume: number;
+    purchaseVolume: number;
+    refundVolume: number;
+    withdrawalVolume: number;
+    commissionRate: number;
+  };
+  dailyTrend: WalletVisaTrendPoint[];
+  monthlyTrend: WalletVisaTrendPoint[];
+  typeBreakdown: WalletVisaTypeBreakdown[];
+  metadata: {
+    dataFreshnessTimestamp: string;
+    sourceSummaryTable: string;
+  };
+};
+
 type NumericRecord = Record<string, unknown>;
 
 const LOW_BALANCE_THRESHOLD = 100;
@@ -699,18 +757,38 @@ function buildUseCaseFilter(useCase: string | undefined, currency: Currency): st
 
 // ─── Customer Demographics ───────────────────────────────────────────────────
 
-async function queryCustomerDemographics(params: { currency: Currency }): Promise<WalletDemographics> {
+function buildGenderSplit(male: number, female: number): GenderSplit {
+  const total = male + female;
+  return {
+    male, female, total,
+    malePercentage: total === 0 ? 0 : Math.round((male / total) * 100),
+    femalePercentage: total === 0 ? 0 : Math.round((female / total) * 100),
+  };
+}
+
+async function queryCustomerDemographics(params: { currency: Currency; asOfDate: Date }): Promise<WalletDemographics> {
   const pool = await getPool();
+  const tx = getTxTable();
   const acct = getAccountsTable(params.currency);
   const cust = getCustomerTable();
+  const a30Date = addDays(params.asOfDate, -29);
   const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
+  request.input("asOfDate", sql.Date, params.asOfDate);
+  request.input("a30Date", sql.Date, a30Date);
 
   const result = await request.query(`
+    WITH active_cifs AS (
+      SELECT DISTINCT a.[CIF]
+      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+      WHERE t.[Currency] = @currency
+        AND t.[Date] >= @a30Date
+        AND t.[Date] <= @asOfDate
+        AND a.[CIF] IS NOT NULL
+    )
     SELECT
-      CASE
-        WHEN c.[Gender] = 'Female' THEN 'Female'
-        ELSE 'Male'
-      END AS gender,
+      CASE WHEN c.[Gender] = 'Female' THEN 'Female' ELSE 'Male' END AS gender,
       CASE
         WHEN c.[DateOfBirth] IS NULL                                               THEN '19-35'
         WHEN DATEDIFF(YEAR, c.[DateOfBirth], GETDATE()) < 18                      THEN 'Under 18'
@@ -718,15 +796,14 @@ async function queryCustomerDemographics(params: { currency: Currency }): Promis
         WHEN DATEDIFF(YEAR, c.[DateOfBirth], GETDATE()) <= 55                     THEN '36-55'
         ELSE '56+'
       END AS ageGroup,
-      COUNT(DISTINCT c.[CIF]) AS customers
+      COUNT(DISTINCT c.[CIF]) AS customers,
+      COUNT(DISTINCT CASE WHEN ac.[CIF] IS NOT NULL THEN c.[CIF] END) AS activeCustomers
     FROM [${cust.schema}].[${cust.table}] c WITH (NOLOCK)
     JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON c.[CIF] = a.[CIF]
+    LEFT JOIN active_cifs ac ON c.[CIF] = ac.[CIF]
     WHERE c.[Deleted] IS NULL
     GROUP BY
-      CASE
-        WHEN c.[Gender] = 'Female' THEN 'Female'
-        ELSE 'Male'
-      END,
+      CASE WHEN c.[Gender] = 'Female' THEN 'Female' ELSE 'Male' END,
       CASE
         WHEN c.[DateOfBirth] IS NULL                                               THEN '19-35'
         WHEN DATEDIFF(YEAR, c.[DateOfBirth], GETDATE()) < 18                      THEN 'Under 18'
@@ -736,34 +813,53 @@ async function queryCustomerDemographics(params: { currency: Currency }): Promis
       END
   `);
 
-  const rows = result.recordset as Array<{ gender: string; ageGroup: string; customers: number }>;
+  const rows = result.recordset as Array<{ gender: string; ageGroup: string; customers: number; activeCustomers: number }>;
 
-  let male = 0, female = 0;
+  let male = 0, female = 0, activeMale = 0, activeFemale = 0;
   const ageCounts: Record<string, number> = { "Under 18": 0, "19-35": 0, "36-55": 0, "56+": 0 };
 
   for (const row of rows) {
     const count = Math.trunc(toNumber(row.customers as unknown));
-    if (row.gender === "Female") female += count;
-    else male += count;
+    const activeCount = Math.trunc(toNumber(row.activeCustomers as unknown));
+    if (row.gender === "Female") { female += count; activeFemale += activeCount; }
+    else { male += count; activeMale += activeCount; }
     if (row.ageGroup in ageCounts) ageCounts[row.ageGroup] += count;
   }
 
-  const total = male + female;
   const ageTotal = Object.values(ageCounts).reduce((s, v) => s + v, 0);
 
   return {
-    genderSplit: {
-      male,
-      female,
-      total,
-      malePercentage: total === 0 ? 0 : Math.round((male / total) * 100),
-      femalePercentage: total === 0 ? 0 : Math.round((female / total) * 100),
-    },
+    genderSplit: buildGenderSplit(male, female),
+    activeGenderSplit: buildGenderSplit(activeMale, activeFemale),
     ageGroups: (["Under 18", "19-35", "36-55", "56+"] as const).map((group) => ({
       group,
       customers: ageCounts[group],
       percentage: ageTotal === 0 ? 0 : Math.round((ageCounts[group] / ageTotal) * 100),
     })),
+  };
+}
+
+async function queryRegisteredCustomerKpis(params: {
+  currency: Currency;
+}): Promise<Pick<WalletKpis, "totalRegisteredCustomers" | "transactableWallets">> {
+  const pool = await getPool();
+  const acct = getAccountsTable(params.currency);
+  const cust = getCustomerTable();
+  const request = pool.request();
+
+  const result = await request.query(`
+    SELECT
+      COUNT(DISTINCT c.[CIF]) AS totalRegisteredCustomers,
+      COUNT(DISTINCT CASE WHEN c.[ActiveStatus] = 1 THEN c.[CIF] END) AS transactableWallets
+    FROM [${cust.schema}].[${cust.table}] c WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON c.[CIF] = a.[CIF]
+    WHERE c.[Deleted] IS NULL
+  `);
+
+  const row = (result.recordset[0] ?? {}) as Record<string, unknown>;
+  return {
+    totalRegisteredCustomers: Math.trunc(toNumber(row.totalRegisteredCustomers)),
+    transactableWallets: Math.trunc(toNumber(row.transactableWallets)),
   };
 }
 
@@ -1915,13 +2011,14 @@ async function computeKpis(params: {
   dateTo: Date;
   asOfDate: Date;
 }): Promise<WalletKpis> {
-  const [transactionKpis, customerKpis, eFloatKpis] = await Promise.all([
+  const [transactionKpis, customerKpis, eFloatKpis, registeredKpis] = await Promise.all([
     queryTransactionKpis(params),
     queryCustomerKpis(params),
     queryEFloatWithFallback({ currency: params.currency, asOfDate: params.asOfDate }),
+    queryRegisteredCustomerKpis({ currency: params.currency }),
   ]);
 
-  return { ...transactionKpis, ...customerKpis, ...eFloatKpis };
+  return { ...transactionKpis, ...customerKpis, ...eFloatKpis, ...registeredKpis };
 }
 
 // ─── Insight Alerts ───────────────────────────────────────────────────────────
@@ -1959,7 +2056,7 @@ async function _getWalletOverview(
 
   const [kpis, demographics] = await Promise.all([
     computeKpis({ currency, dateFrom, dateTo, asOfDate }),
-    queryCustomerDemographics({ currency }),
+    queryCustomerDemographics({ currency, asOfDate }),
   ]);
 
   let comparison: WalletOverviewResponse["comparison"] = null;
@@ -2421,6 +2518,186 @@ async function _getWalletInsightsAlerts(
   };
 }
 
+// ─── Visa Analytics ──────────────────────────────────────────────────────────
+
+const VISA_TRANSACTION_TYPES: readonly string[] = USE_CASE_TYPES["VISA"]?.["USD"] ?? [];
+
+async function queryVisaKpis(params: {
+  currency: Currency;
+  dateFrom: Date;
+  dateTo: Date;
+}): Promise<WalletVisaAnalyticsResponse["kpis"]> {
+  const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const visaIn = sqlInList(VISA_TRANSACTION_TYPES);
+  const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
+  request.input("dateFrom", sql.Date, params.dateFrom);
+  request.input("dateTo", sql.Date, params.dateTo);
+
+  const result = await request.query(`
+    SELECT
+      COALESCE(SUM(t.[Volume]), 0) AS totalVolume,
+      COALESCE(SUM(t.[TransactionAmount]), 0) AS totalValue,
+      COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS totalCommission,
+      COALESCE(COUNT(DISTINCT a.[CIF]), 0) AS uniqueCustomers,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] = 'VISA PreAuth' THEN t.[Volume] ELSE 0 END), 0) AS preAuthVolume,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] = 'VISA Purchase Completion' THEN t.[Volume] ELSE 0 END), 0) AS purchaseVolume,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] = 'VISA Card Refund' THEN t.[Volume] ELSE 0 END), 0) AS refundVolume,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] = 'VISA Withdrawal' THEN t.[Volume] ELSE 0 END), 0) AS withdrawalVolume
+    FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+    WHERE t.[Currency] = @currency
+      AND t.[Date] >= @dateFrom
+      AND t.[Date] <= @dateTo
+      AND a.[CIF] IS NOT NULL
+      AND t.[TransactionType] IN (${visaIn})
+  `);
+
+  const row = (result.recordset as Array<Record<string, unknown>>)[0] ?? {};
+  const totalVolume = Math.trunc(toNumber(row.totalVolume));
+  const totalValue = toNumber(row.totalValue);
+  const totalCommission = toNumber(row.totalCommission);
+  return {
+    totalVolume,
+    totalValue,
+    totalCommission,
+    avgTransactionValue: totalVolume === 0 ? 0 : totalValue / totalVolume,
+    uniqueCustomers: Math.trunc(toNumber(row.uniqueCustomers)),
+    preAuthVolume: Math.trunc(toNumber(row.preAuthVolume)),
+    purchaseVolume: Math.trunc(toNumber(row.purchaseVolume)),
+    refundVolume: Math.trunc(toNumber(row.refundVolume)),
+    withdrawalVolume: Math.trunc(toNumber(row.withdrawalVolume)),
+    commissionRate: totalValue === 0 ? 0 : (totalCommission / totalValue) * 100,
+  };
+}
+
+async function queryVisaTrend(params: {
+  currency: Currency;
+  dateFrom: Date;
+  dateTo: Date;
+  grain: "daily" | "monthly";
+}): Promise<WalletVisaTrendPoint[]> {
+  const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const visaIn = sqlInList(VISA_TRANSACTION_TYPES);
+  const periodExpr = params.grain === "monthly"
+    ? "FORMAT(t.[Date], 'yyyy-MM')"
+    : "FORMAT(t.[Date], 'yyyy-MM-dd')";
+  const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
+  request.input("dateFrom", sql.Date, params.dateFrom);
+  request.input("dateTo", sql.Date, params.dateTo);
+
+  const result = await request.query(`
+    SELECT
+      ${periodExpr} AS period,
+      COALESCE(SUM(t.[Volume]), 0) AS totalVolume,
+      COALESCE(SUM(t.[TransactionAmount]), 0) AS totalValue,
+      COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS totalCommission,
+      COALESCE(COUNT(DISTINCT a.[CIF]), 0) AS uniqueCustomers,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] = 'VISA PreAuth' THEN t.[Volume] ELSE 0 END), 0) AS preAuthVolume,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] = 'VISA Purchase Completion' THEN t.[Volume] ELSE 0 END), 0) AS purchaseVolume,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] = 'VISA Card Refund' THEN t.[Volume] ELSE 0 END), 0) AS refundVolume,
+      COALESCE(SUM(CASE WHEN t.[TransactionType] = 'VISA Withdrawal' THEN t.[Volume] ELSE 0 END), 0) AS withdrawalVolume
+    FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+    WHERE t.[Currency] = @currency
+      AND t.[Date] >= @dateFrom
+      AND t.[Date] <= @dateTo
+      AND a.[CIF] IS NOT NULL
+      AND t.[TransactionType] IN (${visaIn})
+    GROUP BY ${periodExpr}
+    ORDER BY period ASC
+  `);
+
+  return (result.recordset as Array<Record<string, unknown>>).map((r) => {
+    const totalVolume = Math.trunc(toNumber(r.totalVolume));
+    const totalValue = toNumber(r.totalValue);
+    return {
+      period: String(r.period),
+      totalVolume,
+      totalValue,
+      totalCommission: toNumber(r.totalCommission),
+      uniqueCustomers: Math.trunc(toNumber(r.uniqueCustomers)),
+      avgTransactionValue: totalVolume === 0 ? 0 : totalValue / totalVolume,
+      preAuthVolume: Math.trunc(toNumber(r.preAuthVolume)),
+      purchaseVolume: Math.trunc(toNumber(r.purchaseVolume)),
+      refundVolume: Math.trunc(toNumber(r.refundVolume)),
+      withdrawalVolume: Math.trunc(toNumber(r.withdrawalVolume)),
+    };
+  });
+}
+
+async function queryVisaTypeBreakdown(params: {
+  currency: Currency;
+  dateFrom: Date;
+  dateTo: Date;
+}): Promise<WalletVisaTypeBreakdown[]> {
+  const pool = await getPool();
+  const tx = getTxTable();
+  const acct = getAccountsTable(params.currency);
+  const visaIn = sqlInList(VISA_TRANSACTION_TYPES);
+  const request = pool.request();
+  request.input("currency", sql.NVarChar(10), params.currency);
+  request.input("dateFrom", sql.Date, params.dateFrom);
+  request.input("dateTo", sql.Date, params.dateTo);
+
+  const result = await request.query(`
+    SELECT
+      t.[TransactionType] AS transactionType,
+      COALESCE(SUM(t.[Volume]), 0) AS volume,
+      COALESCE(SUM(t.[TransactionAmount]), 0) AS totalValue,
+      COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS totalCommission
+    FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+    JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+    WHERE t.[Currency] = @currency
+      AND t.[Date] >= @dateFrom
+      AND t.[Date] <= @dateTo
+      AND a.[CIF] IS NOT NULL
+      AND t.[TransactionType] IN (${visaIn})
+    GROUP BY t.[TransactionType]
+    ORDER BY volume DESC
+  `);
+
+  const rows = result.recordset as Array<Record<string, unknown>>;
+  const grandTotal = rows.reduce((s, r) => s + toNumber(r.volume), 0);
+  return rows.map((r) => ({
+    transactionType: String(r.transactionType),
+    volume: Math.trunc(toNumber(r.volume)),
+    totalValue: toNumber(r.totalValue),
+    totalCommission: toNumber(r.totalCommission),
+    percentage: grandTotal === 0 ? 0 : Math.round((toNumber(r.volume) / grandTotal) * 1000) / 10,
+  }));
+}
+
+async function _getWalletVisaAnalytics(input: WalletVisaAnalyticsInput): Promise<WalletVisaAnalyticsResponse> {
+  const { currency } = input;
+  const dateFrom = normalizeDateOnly(input.dateFrom);
+  const dateTo = normalizeDateOnly(input.dateTo);
+
+  const [kpis, dailyTrend, monthlyTrend, typeBreakdown] = await Promise.all([
+    queryVisaKpis({ currency, dateFrom, dateTo }),
+    queryVisaTrend({ currency, dateFrom, dateTo, grain: "daily" }),
+    queryVisaTrend({ currency, dateFrom, dateTo, grain: "monthly" }),
+    queryVisaTypeBreakdown({ currency, dateFrom, dateTo }),
+  ]);
+
+  return {
+    period: { dateFrom: formatDate(dateFrom), dateTo: formatDate(dateTo) },
+    kpis,
+    dailyTrend,
+    monthlyTrend,
+    typeBreakdown,
+    metadata: {
+      dataFreshnessTimestamp: new Date().toISOString(),
+      sourceSummaryTable: env.SOURCE_SQL_TRANSACTIONS_TABLE,
+    },
+  };
+}
+
 // ─── Cached public exports ────────────────────────────────────────────────────
 
 function cacheKey(fn: string, input: unknown): string {
@@ -2461,4 +2738,8 @@ export function getWalletCustomer360Detail(input: WalletCustomer360DetailInput):
 
 export function getWalletInsightsAlerts(input: WalletInsightsAlertsInput): Promise<WalletInsightsAlertsResponse> {
   return walletCached(cacheKey("insights", input), () => _getWalletInsightsAlerts(input));
+}
+
+export function getWalletVisaAnalytics(input: WalletVisaAnalyticsInput): Promise<WalletVisaAnalyticsResponse> {
+  return walletCached(cacheKey("visa", input), () => _getWalletVisaAnalytics(input));
 }

@@ -11,6 +11,7 @@ import {
   getWalletOverview,
   getWalletRevenuePerformance,
   getWalletTransactionPerformance,
+  getWalletVisaAnalytics,
   listWalletCustomer360,
 } from "../services/wallet.service";
 function normalizeDateInput(value: string): Date | null {
@@ -157,6 +158,14 @@ const insightsAlertsQuerySchema = z
     dateFrom: dateSchema,
     dateTo: dateSchema,
     asOfDate: dateSchema.optional(),
+    currency: currencySchema,
+  })
+  .strict();
+
+const visaAnalyticsQuerySchema = z
+  .object({
+    dateFrom: dateSchema,
+    dateTo: dateSchema,
     currency: currencySchema,
   })
   .strict();
@@ -553,6 +562,49 @@ export async function getWalletInsightsAlertsHandler(
       dateFrom: parsedQuery.data.dateFrom,
       dateTo: parsedQuery.data.dateTo,
       asOfDate: parsedQuery.data.asOfDate ?? parsedQuery.data.dateTo,
+      currency: parsedQuery.data.currency,
+    });
+    res.json({ data });
+  } catch (error) {
+    if (handleServiceError(res, error)) {
+      return;
+    }
+
+    next(error);
+  }
+}
+
+export async function getWalletVisaAnalyticsHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const queryInput = {
+    dateFrom: normalizeQueryValue(req.query.dateFrom),
+    dateTo: normalizeQueryValue(req.query.dateTo),
+    currency: normalizeQueryValue(req.query.currency),
+  };
+
+  const parsedQuery = visaAnalyticsQuerySchema.safeParse(queryInput);
+  if (!parsedQuery.success) {
+    res.status(400).json({
+      error: "Validation error",
+      details: parsedQuery.error.flatten(),
+    });
+    return;
+  }
+
+  if (parsedQuery.data.dateFrom > parsedQuery.data.dateTo) {
+    res.status(400).json({
+      error: "dateFrom must be less than or equal to dateTo",
+    });
+    return;
+  }
+
+  try {
+    const data = await getWalletVisaAnalytics({
+      dateFrom: parsedQuery.data.dateFrom,
+      dateTo: parsedQuery.data.dateTo,
       currency: parsedQuery.data.currency,
     });
     res.json({ data });

@@ -1,0 +1,19 @@
+[2m09:36:04[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to resolve import "../pages/WalletVisaAnalyticsPage" from "src/routes/AppRoutes.tsx". Does the file exist?[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mC:/Users/om526127/Documents/GitHub/Projects/Omari_Branches/omari-branch-system/frontend/src/routes/AppRoutes.tsx[39m:22:36
+[33m  36 |  import WalletRevenuePerformancePage from "../pages/WalletRevenuePerformancePage";
+  37 |  import WalletTransactionPerformancePage from "../pages/WalletTransactionPerformancePage";
+  38 |  import WalletVisaAnalyticsPage from "../pages/WalletVisaAnalyticsPage";
+     |                                       ^
+  39 |  import { ProtectedRoute } from "./ProtectedRoute";
+  40 |  const TrendsPage = lazy(_c = () => import("../pages/TrendsPage"));[39m
+      at TransformPluginContext._formatError (file:///C:/Users/om526127/Documents/GitHub/Projects/Omari_Branches/omari-branch-system/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49258:41)
+      at TransformPluginContext.error (file:///C:/Users/om526127/Documents/GitHub/Projects/Omari_Branches/omari-branch-system/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49253:16)
+      at normalizeUrl (file:///C:/Users/om526127/Documents/GitHub/Projects/Omari_Branches/omari-branch-system/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64307:23)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async file:///C:/Users/om526127/Documents/GitHub/Projects/Omari_Branches/omari-branch-system/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64439:39
+      at async Promise.all (index 23)
+      at async TransformPluginContext.transform (file:///C:/Users/om526127/Documents/GitHub/Projects/Omari_Branches/omari-branch-system/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:64366:7)
+      at async PluginContainer.transform (file:///C:/Users/om526127/Documents/GitHub/Projects/Omari_Branches/omari-branch-system/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:49099:18)
+      at async loadAndTransform (file:///C:/Users/om526127/Documents/GitHub/Projects/Omari_Branches/omari-branch-system/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:51978:27)
+      at async viteTransformMiddleware (file:///C:/Users/om526127/Documents/GitHub/Projects/Omari_Branches/omari-branch-system/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:62106:24)

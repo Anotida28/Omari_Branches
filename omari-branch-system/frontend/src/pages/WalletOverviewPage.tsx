@@ -3,6 +3,7 @@ import {
   Activity,
   CalendarClock,
   DollarSign,
+  ShieldCheck,
   TrendingUp,
   UserPlus,
   Users,
@@ -273,6 +274,18 @@ export default function WalletOverviewPage() {
           : "No balance snapshot available",
         icon: <Wallet size={20} />,
       },
+      {
+        label: "Total Registered Customers",
+        value: formatCount(walletQuery.data.kpis.totalRegisteredCustomers),
+        hint: "All-time wallet registrations (not deleted)",
+        icon: <Users size={20} />,
+      },
+      {
+        label: "Transactable Wallets",
+        value: formatCount(walletQuery.data.kpis.transactableWallets),
+        hint: `${walletQuery.data.kpis.totalRegisteredCustomers > 0 ? Math.round((walletQuery.data.kpis.transactableWallets / walletQuery.data.kpis.totalRegisteredCustomers) * 100) : 0}% of registered customers`,
+        icon: <ShieldCheck size={20} />,
+      },
     ];
   }, [walletQuery.data]);
 
@@ -365,48 +378,56 @@ export default function WalletOverviewPage() {
           </Box>
 
           <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
-            {/* Customer Gender */}
+            {/* Customer Gender — Registered vs Active */}
             <Paper sx={{ p: 2.5, ...glassPanelSx }}>
               <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Customer Gender</Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} alignItems="center" spacing={3}>
-                <Box sx={{ width: 180, height: 180, flexShrink: 0 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: "Male", value: walletQuery.data.demographics.genderSplit.male },
-                          { name: "Female", value: walletQuery.data.demographics.genderSplit.female },
-                        ]}
-                        cx="50%" cy="50%"
-                        innerRadius={54} outerRadius={80}
-                        dataKey="value" paddingAngle={3}
-                      >
-                        {(["Male", "Female"] as const).map((g) => (
-                          <Cell key={g} fill={GENDER_COLORS[g]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(v: number) => new Intl.NumberFormat("en-US").format(v)} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </Box>
-                <Stack spacing={1.5}>
-                  {[
-                    { label: "Male", value: walletQuery.data.demographics.genderSplit.male, pct: walletQuery.data.demographics.genderSplit.malePercentage, color: GENDER_COLORS.Male },
-                    { label: "Female", value: walletQuery.data.demographics.genderSplit.female, pct: walletQuery.data.demographics.genderSplit.femalePercentage, color: GENDER_COLORS.Female },
-                  ].map((row) => (
-                    <Stack key={row.label} direction="row" alignItems="center" spacing={1}>
-                      <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: row.color, flexShrink: 0 }} />
-                      <Typography variant="body2" color="text.secondary" sx={{ minWidth: 50 }}>{row.label}</Typography>
-                      <Typography variant="body2" fontWeight={700}>{new Intl.NumberFormat("en-US").format(row.value)}</Typography>
-                      <Typography variant="body2" color="text.secondary">({row.pct}%)</Typography>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={3} divider={<Box sx={{ borderLeft: "1px solid", borderColor: "divider" }} />}>
+                {([
+                  { title: "Registered", split: walletQuery.data.demographics.genderSplit },
+                  { title: "Active (A30)", split: walletQuery.data.demographics.activeGenderSplit },
+                ] as const).map(({ title, split }) => (
+                  <Stack key={title} alignItems="center" spacing={1} sx={{ flex: 1 }}>
+                    <Typography variant="caption" color="text.secondary" fontWeight={600}>{title}</Typography>
+                    <Box sx={{ width: 140, height: 140 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: "Male", value: split.male },
+                              { name: "Female", value: split.female },
+                            ]}
+                            cx="50%" cy="50%"
+                            innerRadius={42} outerRadius={62}
+                            dataKey="value" paddingAngle={3}
+                          >
+                            {(["Male", "Female"] as const).map((g) => (
+                              <Cell key={g} fill={GENDER_COLORS[g]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(v) => new Intl.NumberFormat("en-US").format(Number(v))} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </Box>
+                    <Stack spacing={0.8}>
+                      {[
+                        { label: "Male", value: split.male, pct: split.malePercentage, color: GENDER_COLORS.Male },
+                        { label: "Female", value: split.female, pct: split.femalePercentage, color: GENDER_COLORS.Female },
+                      ].map((row) => (
+                        <Stack key={row.label} direction="row" alignItems="center" spacing={0.8}>
+                          <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: row.color, flexShrink: 0 }} />
+                          <Typography variant="caption" color="text.secondary" sx={{ minWidth: 44 }}>{row.label}</Typography>
+                          <Typography variant="caption" fontWeight={700}>{new Intl.NumberFormat("en-US").format(row.value)}</Typography>
+                          <Typography variant="caption" color="text.secondary">({row.pct}%)</Typography>
+                        </Stack>
+                      ))}
+                      <Stack direction="row" alignItems="center" spacing={0.8}>
+                        <Box sx={{ width: 8, height: 8, flexShrink: 0 }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 44 }}>Total</Typography>
+                        <Typography variant="caption" fontWeight={700}>{new Intl.NumberFormat("en-US").format(split.total)}</Typography>
+                      </Stack>
                     </Stack>
-                  ))}
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <Box sx={{ width: 10, height: 10, flexShrink: 0 }} />
-                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 50 }}>Total</Typography>
-                    <Typography variant="body2" fontWeight={700}>{new Intl.NumberFormat("en-US").format(walletQuery.data.demographics.genderSplit.total)}</Typography>
                   </Stack>
-                </Stack>
+                ))}
               </Stack>
             </Paper>
 
@@ -419,12 +440,12 @@ export default function WalletOverviewPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} vertical={false} />
                     <XAxis dataKey="group" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v: number) => [new Intl.NumberFormat("en-US").format(v), "Customers"]} />
+                    <Tooltip formatter={(v) => [new Intl.NumberFormat("en-US").format(Number(v)), "Customers"]} />
                     <Bar dataKey="customers" radius={[6, 6, 0, 0]}>
                       {walletQuery.data.demographics.ageGroups.map((_, i) => (
                         <Cell key={i} fill={AGE_COLORS[i % AGE_COLORS.length]} />
                       ))}
-                      <LabelList dataKey="percentage" position="top" formatter={(v: number) => `${v}%`} style={{ fontSize: 11, fontWeight: 700 }} />
+                      <LabelList dataKey="percentage" position="top" formatter={(v: unknown) => `${v}%`} style={{ fontSize: 11, fontWeight: 700 }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
