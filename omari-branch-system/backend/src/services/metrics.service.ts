@@ -16,9 +16,7 @@ export class MetricServiceError extends Error {
 export type MetricUpsertInput = {
   agentLineId: bigint;
   date: Date;
-  cashBalance: number;
   eFloatBalance: number;
-  cashInVault: number;
   cashInVolume: number;
   cashInValue: number;
   cashOutVolume: number;
@@ -42,10 +40,7 @@ export type MetricResponse = {
   id: string;
   branchId: string;
   date: string;
-  cashBalance: string;
   eFloatBalance: string;
-  cashInVault: string;
-  cashOnBranch: string;
   cashInVolume: number;
   cashInValue: string;
   cashOutVolume: number;
@@ -69,21 +64,11 @@ export type MetricListResult = {
   total: number;
 };
 
-type BranchMetricWithBalances = BranchMetric & {
-  eFloatBalance?: Prisma.Decimal | number | string | null;
-  cashInVault?: Prisma.Decimal | number | string | null;
-};
-
 function decimalToString(value: Prisma.Decimal | number | string): string {
   return new Prisma.Decimal(value).toString();
 }
 
 function toMetricResponse(metric: BranchMetric): MetricResponse {
-  const metricWithBalances = metric as BranchMetricWithBalances;
-  const cashBalance = new Prisma.Decimal(metric.cashBalance);
-  const eFloatBalance = new Prisma.Decimal(metricWithBalances.eFloatBalance ?? 0);
-  const cashInVault = new Prisma.Decimal(metricWithBalances.cashInVault ?? 0);
-  const cashOnBranch = cashBalance.plus(eFloatBalance).plus(cashInVault);
   const cashInValue = new Prisma.Decimal(metric.cashInValue);
   const cashOutValue = new Prisma.Decimal(metric.cashOutValue);
   const netCashValue = cashInValue.minus(cashOutValue);
@@ -92,10 +77,7 @@ function toMetricResponse(metric: BranchMetric): MetricResponse {
     id: metric.id.toString(),
     branchId: metric.branchId.toString(),
     date: metric.metricDate.toISOString().slice(0, 10),
-    cashBalance: cashBalance.toString(),
-    eFloatBalance: eFloatBalance.toString(),
-    cashInVault: cashInVault.toString(),
-    cashOnBranch: cashOnBranch.toString(),
+    eFloatBalance: decimalToString(metric.eFloatBalance),
     cashInVolume: metric.cashInVolume,
     cashInValue: decimalToString(metric.cashInValue),
     cashOutVolume: metric.cashOutVolume,
@@ -153,9 +135,7 @@ export async function recomputeBranchMetricForDate(
     prisma.agentLineMetric.aggregate({
       where,
       _sum: {
-        cashBalance: true,
         eFloatBalance: true,
-        cashInVault: true,
         cashInVolume: true,
         cashInValue: true,
         cashOutVolume: true,
@@ -187,9 +167,7 @@ export async function recomputeBranchMetricForDate(
       },
     },
     update: {
-      cashBalance: aggregate._sum.cashBalance ?? 0,
       eFloatBalance: aggregate._sum.eFloatBalance ?? 0,
-      cashInVault: aggregate._sum.cashInVault ?? 0,
       cashInVolume: aggregate._sum.cashInVolume ?? 0,
       cashInValue: aggregate._sum.cashInValue ?? 0,
       cashOutVolume: aggregate._sum.cashOutVolume ?? 0,
@@ -203,9 +181,7 @@ export async function recomputeBranchMetricForDate(
     create: {
       branchId,
       metricDate,
-      cashBalance: aggregate._sum.cashBalance ?? 0,
       eFloatBalance: aggregate._sum.eFloatBalance ?? 0,
-      cashInVault: aggregate._sum.cashInVault ?? 0,
       cashInVolume: aggregate._sum.cashInVolume ?? 0,
       cashInValue: aggregate._sum.cashInValue ?? 0,
       cashOutVolume: aggregate._sum.cashOutVolume ?? 0,
@@ -299,9 +275,7 @@ export async function upsertMetric(
         },
       },
       update: {
-        cashBalance: input.cashBalance,
         eFloatBalance: input.eFloatBalance,
-        cashInVault: input.cashInVault,
         cashInVolume: input.cashInVolume,
         cashInValue: input.cashInValue,
         cashOutVolume: input.cashOutVolume,
@@ -315,9 +289,7 @@ export async function upsertMetric(
       create: {
         agentLineId: input.agentLineId,
         metricDate: input.date,
-        cashBalance: input.cashBalance,
         eFloatBalance: input.eFloatBalance,
-        cashInVault: input.cashInVault,
         cashInVolume: input.cashInVolume,
         cashInValue: input.cashInValue,
         cashOutVolume: input.cashOutVolume,

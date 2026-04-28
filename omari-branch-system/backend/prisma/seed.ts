@@ -74,9 +74,7 @@ async function main() {
       create: {
         branchId: branch.id,
         metricDate: today,
-        cashBalance: 0,
         eFloatBalance: 0,
-        cashInVault: 0,
         cashInVolume: 0,
         cashInValue: 0,
         cashOutVolume: 0,

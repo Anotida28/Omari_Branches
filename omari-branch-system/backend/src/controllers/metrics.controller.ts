@@ -84,9 +84,7 @@ const upsertMetricSchema = z
   .object({
     agentLineId: branchIdSchema,
     date: dateSchema,
-    cashBalance: z.coerce.number().min(0),
     eFloatBalance: z.coerce.number().min(0),
-    cashInVault: z.coerce.number().min(0),
     cashInVolume: z.coerce.number().int().min(0),
     cashInValue: z.coerce.number().min(0),
     cashOutVolume: z.coerce.number().int().min(0),

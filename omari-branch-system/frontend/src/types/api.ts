@@ -102,10 +102,7 @@ export type BranchMetric = {
   id: string;
   branchId: string;
   date: string;
-  cashBalance: string;
   eFloatBalance: string;
-  cashInVault: string;
-  cashOnBranch: string;
   cashInVolume: number;
   cashInValue: string;
   cashOutVolume: number;

@@ -32,3 +32,6 @@
 [2m09:35:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/routes/AppRoutes.tsx, /src/index.css[22m
 [2m09:36:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/routes/AppRoutes.tsx, /src/index.css[22m
 [2m09:37:11[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m11:00:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
+[2m11:00:56[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/hooks/useAuth.tsx[22m Could not Fast Refresh ("useAuth" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m11:00:56[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/hooks/useAuth.tsx[22m

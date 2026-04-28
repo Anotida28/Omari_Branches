@@ -20,10 +20,6 @@
  * Imported balance field:
  * - available_balance from the configured account balance views -> AgentLineMetric.eFloatBalance
  *
- * Fields not currently available from the configured source views and therefore
- * default to zero in the app:
- * - cashBalance
- * - cashInVault
  */
 
 import sql from "mssql";
@@ -259,7 +255,7 @@ export function describeSourceMetricMapping(): SourceMetricMappingDescription {
         target: "AgentLineMetric.eFloatBalance",
       },
     ],
-    defaultedFields: ["cashBalance", "cashInVault"],
+    defaultedFields: [],
   };
 }
 

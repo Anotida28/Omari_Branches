@@ -255,9 +255,7 @@ export async function syncSourceMetrics(
       createRowsByKey.set(createRowKey(row.lineNumber, row.metricDate), {
         agentLineId,
         metricDate: row.metricDate,
-        cashBalance: 0,
         eFloatBalance: 0,
-        cashInVault: 0,
         cashInVolume: row.cashInVolume,
         cashInValue: row.cashInValue,
         cashOutVolume: row.cashOutVolume,
@@ -289,9 +287,7 @@ export async function syncSourceMetrics(
       createRowsByKey.set(key, {
         agentLineId,
         metricDate: row.metricDate,
-        cashBalance: 0,
         eFloatBalance: row.eFloatBalance,
-        cashInVault: 0,
         cashInVolume: 0,
         cashInValue: 0,
         cashOutVolume: 0,
