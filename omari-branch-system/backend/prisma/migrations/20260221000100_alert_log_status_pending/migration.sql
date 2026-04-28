@@ -1,3 +1,0 @@
--- AlterTable
-ALTER TABLE `AlertLog`
-    MODIFY COLUMN `status` ENUM('SENT', 'FAILED', 'SKIPPED', 'PENDING') NOT NULL DEFAULT 'SENT';

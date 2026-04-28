@@ -6,6 +6,7 @@ import {
   Chip,
   FormControlLabel,
   IconButton,
+  MenuItem,
   Paper,
   Stack,
   Switch,
@@ -18,6 +19,7 @@ import { Card, CardHeader } from "../components/ui/Card";
 import { useAuth } from "../hooks/useAuth";
 import { api, getErrorMessage } from "../services/api";
 import { sendTestEmail } from "../services/admin";
+import { listBranches } from "../services/branches";
 import {
   createRecipient,
   deleteRecipient,
@@ -25,6 +27,7 @@ import {
   updateRecipient,
 } from "../services/recipients";
 import { ConfirmDialog } from "../shared/components/ConfirmDialog";
+import type { UpdateRecipientInput } from "../types/api";
 
 type HealthResponse = {
   ok: boolean;
@@ -35,6 +38,9 @@ const INITIAL_RECIPIENT_FORM = {
   email: "",
   name: "",
   isActive: true,
+  receivesReminders: true,
+  receivesDailyReports: false,
+  reportBranchId: "all",
 };
 
 export default function SettingsPage() {
@@ -59,8 +65,13 @@ export default function SettingsPage() {
   });
 
   const recipientsQuery = useQuery({
-    queryKey: ["reminder-recipients"],
+    queryKey: ["email-recipients"],
     queryFn: listRecipients,
+  });
+
+  const branchesQuery = useQuery({
+    queryKey: ["branches", "all", "for-email-recipients"],
+    queryFn: () => listBranches({ page: 1, pageSize: 100 }),
   });
 
   const createRecipientMutation = useMutation({
@@ -68,15 +79,15 @@ export default function SettingsPage() {
     onSuccess: () => {
       setRecipientForm(INITIAL_RECIPIENT_FORM);
       setRecipientFormError("");
-      queryClient.invalidateQueries({ queryKey: ["reminder-recipients"] });
+      queryClient.invalidateQueries({ queryKey: ["email-recipients"] });
     },
   });
 
   const toggleRecipientMutation = useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      updateRecipient(id, { isActive }),
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateRecipientInput }) =>
+      updateRecipient(id, payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["reminder-recipients"] });
+      queryClient.invalidateQueries({ queryKey: ["email-recipients"] });
     },
   });
 
@@ -84,7 +95,7 @@ export default function SettingsPage() {
     mutationFn: deleteRecipient,
     onSuccess: () => {
       setRecipientToDelete(null);
-      queryClient.invalidateQueries({ queryKey: ["reminder-recipients"] });
+      queryClient.invalidateQueries({ queryKey: ["email-recipients"] });
     },
   });
 
@@ -168,7 +179,30 @@ export default function SettingsPage() {
       email,
       name: recipientForm.name.trim() || undefined,
       isActive: recipientForm.isActive,
+      receivesReminders: recipientForm.receivesReminders,
+      receivesDailyReports: recipientForm.receivesDailyReports,
+      reportBranchIds: recipientForm.receivesDailyReports
+        ? [recipientForm.reportBranchId === "all" ? null : recipientForm.reportBranchId]
+        : [],
     });
+  };
+
+  const hasSubscription = (recipient: (typeof recipients)[number], emailType: string) =>
+    recipient.subscriptions.some(
+      (subscription) => subscription.emailType === emailType && subscription.isActive,
+    );
+
+  const reportScopeLabel = (recipient: (typeof recipients)[number]) => {
+    const subscriptions = recipient.subscriptions.filter(
+      (subscription) => subscription.emailType === "DAILY_BRANCH_REPORT" && subscription.isActive,
+    );
+    if (subscriptions.length === 0) {
+      return "Reports off";
+    }
+    if (subscriptions.some((subscription) => subscription.branchId === null)) {
+      return "All branches";
+    }
+    return subscriptions.map((subscription) => subscription.branchName ?? subscription.branchId).join(", ");
   };
 
   return (
@@ -181,19 +215,19 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader
-          title="Reminder Recipients"
-          subtitle="Shared HQ recipients who receive every reminder email"
+          title="Email Recipients"
+          subtitle="Manage reminder and daily branch report delivery"
         />
         <Stack spacing={2}>
           <Alert severity="info" variant="outlined">
-            This list applies to all reminder emails across the system.
+            Reminder emails and daily branch reports share this recipient list.
           </Alert>
 
           <Paper sx={{ p: 2, border: "1px solid rgba(15, 23, 42, 0.1)" }}>
             <Stack spacing={2}>
               <Stack direction="row" spacing={1} alignItems="center">
                 <Plus size={16} />
-                <Typography variant="subtitle2">Add HQ recipient</Typography>
+                <Typography variant="subtitle2">Add email recipient</Typography>
               </Stack>
               <form onSubmit={submitRecipient} className="space-y-3">
                 <Stack spacing={2}>
@@ -229,6 +263,49 @@ export default function SettingsPage() {
                     }
                     label="Active recipient"
                   />
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={recipientForm.receivesReminders}
+                        disabled={!canWrite || createRecipientMutation.isPending}
+                        onChange={(_event, checked) =>
+                          setRecipientForm((prev) => ({ ...prev, receivesReminders: checked }))
+                        }
+                      />
+                    }
+                    label="Receive reminder emails"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={recipientForm.receivesDailyReports}
+                        disabled={!canWrite || createRecipientMutation.isPending}
+                        onChange={(_event, checked) =>
+                          setRecipientForm((prev) => ({ ...prev, receivesDailyReports: checked }))
+                        }
+                      />
+                    }
+                    label="Receive daily branch reports"
+                  />
+                  {recipientForm.receivesDailyReports ? (
+                    <TextField
+                      select
+                      label="Report Scope"
+                      value={recipientForm.reportBranchId}
+                      onChange={(event) =>
+                        setRecipientForm((prev) => ({ ...prev, reportBranchId: event.target.value }))
+                      }
+                      size="small"
+                      disabled={!canWrite || createRecipientMutation.isPending}
+                    >
+                      <MenuItem value="all">All branches</MenuItem>
+                      {(branchesQuery.data?.items ?? []).map((branch) => (
+                        <MenuItem key={branch.id} value={branch.id}>
+                          {branch.displayName}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  ) : null}
                   {recipientFormError ? <Alert severity="warning">{recipientFormError}</Alert> : null}
                   <Stack direction="row" justifyContent="flex-end">
                     <Button
@@ -254,7 +331,7 @@ export default function SettingsPage() {
             <Alert severity="error">{getErrorMessage(recipientsQuery.error)}</Alert>
           ) : recipients.length === 0 ? (
             <Alert severity="warning" variant="outlined">
-              No HQ reminder recipients are configured yet.
+              No email recipients are configured yet.
             </Alert>
           ) : (
             <Stack spacing={1}>
@@ -298,6 +375,18 @@ export default function SettingsPage() {
                             {recipient.name}
                           </Typography>
                         ) : null}
+                        <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap>
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={hasSubscription(recipient, "REMINDER") ? "Reminders" : "No reminders"}
+                          />
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={reportScopeLabel(recipient)}
+                          />
+                        </Stack>
                       </Stack>
                     </Stack>
 
@@ -312,7 +401,21 @@ export default function SettingsPage() {
                         checked={recipient.isActive}
                         disabled={!canWrite || toggleRecipientMutation.isPending}
                         onChange={(_event, checked) =>
-                          toggleRecipientMutation.mutate({ id: recipient.id, isActive: checked })
+                          toggleRecipientMutation.mutate({
+                            id: recipient.id,
+                            payload: { isActive: checked },
+                          })
+                        }
+                      />
+                      <Switch
+                        size="small"
+                        checked={hasSubscription(recipient, "REMINDER")}
+                        disabled={!canWrite || toggleRecipientMutation.isPending}
+                        onChange={(_event, checked) =>
+                          toggleRecipientMutation.mutate({
+                            id: recipient.id,
+                            payload: { receivesReminders: checked },
+                          })
                         }
                       />
                       <IconButton
@@ -407,7 +510,7 @@ export default function SettingsPage() {
       <ConfirmDialog
         open={Boolean(recipientToDelete)}
         title="Remove Recipient"
-        message={`Remove ${recipientToDelete?.email ?? "this recipient"} from HQ reminders?`}
+        message={`Remove ${recipientToDelete?.email ?? "this recipient"} from email delivery?`}
         confirmLabel="Remove"
         onClose={() => setRecipientToDelete(null)}
         onConfirm={() => {

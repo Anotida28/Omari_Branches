@@ -23,11 +23,6 @@ function decimalToString(value) {
     return new client_1.Prisma.Decimal(value).toString();
 }
 function toMetricResponse(metric) {
-    const metricWithBalances = metric;
-    const cashBalance = new client_1.Prisma.Decimal(metric.cashBalance);
-    const eFloatBalance = new client_1.Prisma.Decimal(metricWithBalances.eFloatBalance ?? 0);
-    const cashInVault = new client_1.Prisma.Decimal(metricWithBalances.cashInVault ?? 0);
-    const cashOnBranch = cashBalance.plus(eFloatBalance).plus(cashInVault);
     const cashInValue = new client_1.Prisma.Decimal(metric.cashInValue);
     const cashOutValue = new client_1.Prisma.Decimal(metric.cashOutValue);
     const netCashValue = cashInValue.minus(cashOutValue);
@@ -35,10 +30,7 @@ function toMetricResponse(metric) {
         id: metric.id.toString(),
         branchId: metric.branchId.toString(),
         date: metric.metricDate.toISOString().slice(0, 10),
-        cashBalance: cashBalance.toString(),
-        eFloatBalance: eFloatBalance.toString(),
-        cashInVault: cashInVault.toString(),
-        cashOnBranch: cashOnBranch.toString(),
+        eFloatBalance: decimalToString(metric.eFloatBalance),
         cashInVolume: metric.cashInVolume,
         cashInValue: decimalToString(metric.cashInValue),
         cashOutVolume: metric.cashOutVolume,
@@ -71,6 +63,44 @@ async function getSourceLineCount(branchId, metricDate) {
         },
     });
 }
+// Returns a map keyed by "branchId::YYYY-MM-DD" -> count of AgentLineMetric rows.
+// Resolves all items in 2 queries instead of 1 per item.
+async function getBatchSourceLineCounts(items) {
+    if (items.length === 0) {
+        return new Map();
+    }
+    const uniqueBranchIds = Array.from(new Set(items.map((m) => m.branchId.toString()))).map((id) => BigInt(id));
+    const uniqueMetricDates = Array.from(new Set(items.map((m) => m.metricDate.toISOString()))).map((s) => new Date(s));
+    // Query 1: get all agent line IDs that belong to these branches
+    const agentLines = await prisma_1.prisma.branchAgentLine.findMany({
+        where: { branchId: { in: uniqueBranchIds } },
+        select: { id: true, branchId: true },
+    });
+    if (agentLines.length === 0) {
+        return new Map();
+    }
+    const branchIdByAgentLineId = new Map(agentLines.map((al) => [al.id.toString(), al.branchId]));
+    // Query 2: count AgentLineMetric rows grouped by (agentLineId, metricDate)
+    const grouped = await prisma_1.prisma.agentLineMetric.groupBy({
+        by: ["agentLineId", "metricDate"],
+        where: {
+            agentLineId: { in: agentLines.map((al) => al.id) },
+            metricDate: { in: uniqueMetricDates },
+        },
+        _count: { _all: true },
+    });
+    // Fold agentLine-level counts up to branch-level counts
+    const countMap = new Map();
+    for (const row of grouped) {
+        const branchId = branchIdByAgentLineId.get(row.agentLineId.toString());
+        if (!branchId) {
+            continue;
+        }
+        const key = `${branchId.toString()}::${row.metricDate.toISOString().slice(0, 10)}`;
+        countMap.set(key, (countMap.get(key) ?? 0) + row._count._all);
+    }
+    return countMap;
+}
 async function recomputeBranchMetricForDate(branchId, metricDate) {
     const where = {
         metricDate,
@@ -83,9 +113,7 @@ async function recomputeBranchMetricForDate(branchId, metricDate) {
         prisma_1.prisma.agentLineMetric.aggregate({
             where,
             _sum: {
-                cashBalance: true,
                 eFloatBalance: true,
-                cashInVault: true,
                 cashInVolume: true,
                 cashInValue: true,
                 cashOutVolume: true,
@@ -115,9 +143,7 @@ async function recomputeBranchMetricForDate(branchId, metricDate) {
             },
         },
         update: {
-            cashBalance: aggregate._sum.cashBalance ?? 0,
             eFloatBalance: aggregate._sum.eFloatBalance ?? 0,
-            cashInVault: aggregate._sum.cashInVault ?? 0,
             cashInVolume: aggregate._sum.cashInVolume ?? 0,
             cashInValue: aggregate._sum.cashInValue ?? 0,
             cashOutVolume: aggregate._sum.cashOutVolume ?? 0,
@@ -131,9 +157,7 @@ async function recomputeBranchMetricForDate(branchId, metricDate) {
         create: {
             branchId,
             metricDate,
-            cashBalance: aggregate._sum.cashBalance ?? 0,
             eFloatBalance: aggregate._sum.eFloatBalance ?? 0,
-            cashInVault: aggregate._sum.cashInVault ?? 0,
             cashInVolume: aggregate._sum.cashInVolume ?? 0,
             cashInValue: aggregate._sum.cashInValue ?? 0,
             cashOutVolume: aggregate._sum.cashOutVolume ?? 0,
@@ -202,9 +226,7 @@ async function upsertMetric(input) {
                 },
             },
             update: {
-                cashBalance: input.cashBalance,
                 eFloatBalance: input.eFloatBalance,
-                cashInVault: input.cashInVault,
                 cashInVolume: input.cashInVolume,
                 cashInValue: input.cashInValue,
                 cashOutVolume: input.cashOutVolume,
@@ -218,9 +240,7 @@ async function upsertMetric(input) {
             create: {
                 agentLineId: input.agentLineId,
                 metricDate: input.date,
-                cashBalance: input.cashBalance,
                 eFloatBalance: input.eFloatBalance,
-                cashInVault: input.cashInVault,
                 cashInVolume: input.cashInVolume,
                 cashInValue: input.cashInValue,
                 cashOutVolume: input.cashOutVolume,
@@ -264,9 +284,12 @@ async function listMetrics(params) {
             orderBy: [{ metricDate: "desc" }, { createdAt: "desc" }],
         }),
     ]);
-    const sourceLineCounts = await Promise.all(items.map((metric) => getSourceLineCount(metric.branchId, metric.metricDate)));
+    const countMap = await getBatchSourceLineCounts(items);
     return {
-        items: items.map((metric, index) => withSourceLineCount(toMetricResponse(metric), sourceLineCounts[index])),
+        items: items.map((metric) => {
+            const key = `${metric.branchId.toString()}::${metric.metricDate.toISOString().slice(0, 10)}`;
+            return withSourceLineCount(toMetricResponse(metric), countMap.get(key) ?? 0);
+        }),
         page,
         pageSize,
         total,

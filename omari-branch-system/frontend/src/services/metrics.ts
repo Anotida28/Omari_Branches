@@ -1,6 +1,8 @@
 import { api } from "./api";
 import type {
   BranchMetric,
+  MetricSyncParams,
+  MetricSyncResult,
   MetricsListParams,
   PaginatedResponse,
 } from "../types/api";
@@ -12,4 +14,12 @@ export async function listMetrics(
     params,
   });
   return data;
+}
+
+export async function syncMetrics(params: MetricSyncParams = {}): Promise<MetricSyncResult> {
+  const { data } = await api.post<{ message: string; data: MetricSyncResult }>(
+    "/api/metrics/sync",
+    params,
+  );
+  return data.data;
 }

@@ -3,35 +3,21 @@
 > vite --host 127.0.0.1
 
 
-  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m618[22m[2m[0m ms[22m
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m536[22m[2m[0m ms[22m
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
-[2m17:49:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
-[2m17:49:56[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/hooks/useAuth.tsx[22m Could not Fast Refresh ("useAuth" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m17:49:56[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/hooks/useAuth.tsx[22m
-[2m17:50:05[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletTransactionPerformancePage.tsx, /src/index.css[22m
-[2m17:50:14[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletTransactionPerformancePage.tsx, /src/index.css[22m
-[2m17:50:26[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletTransactionPerformancePage.tsx, /src/index.css[22m
-[2m17:50:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletTransactionPerformancePage.tsx, /src/index.css[22m
-[2m17:51:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletTransactionPerformancePage.tsx, /src/index.css[22m
-[2m09:10:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
-[2m09:10:06[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
-[2m09:10:15[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
-[2m09:10:30[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
-[2m09:10:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
-[2m09:13:23[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
-[2m09:13:31[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
-[2m09:13:39[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/WalletOverviewPage.tsx, /src/index.css[22m
-[2m09:34:52[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
-[2m09:34:52[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/hooks/useAuth.tsx[22m Could not Fast Refresh ("useAuth" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m09:34:52[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/hooks/useAuth.tsx[22m
-[2m09:35:28[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/WalletOverviewPage.tsx, /src/pages/WalletCustomer360Page.tsx, /src/pages/WalletInsightsAlertsPage.tsx, /src/pages/WalletCustomerActivityPage.tsx, /src/pages/WalletTransactionPerformancePage.tsx, /src/pages/WalletRetentionDormancyPage.tsx, /src/pages/WalletLiquidityPage.tsx, /src/pages/WalletRevenuePerformancePage.tsx[22m
-[2m09:35:35[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/WalletOverviewPage.tsx, /src/pages/WalletCustomer360Page.tsx, /src/pages/WalletInsightsAlertsPage.tsx, /src/pages/WalletCustomerActivityPage.tsx, /src/pages/WalletTransactionPerformancePage.tsx, /src/pages/WalletRetentionDormancyPage.tsx, /src/pages/WalletLiquidityPage.tsx, /src/pages/WalletRevenuePerformancePage.tsx[22m
-[2m09:35:44[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/layouts/AppLayout.tsx, /src/index.css[22m
-[2m09:35:51[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/layouts/AppLayout.tsx, /src/index.css[22m
-[2m09:35:58[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/routes/AppRoutes.tsx, /src/index.css[22m
-[2m09:36:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/routes/AppRoutes.tsx, /src/index.css[22m
-[2m09:37:11[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
-[2m11:00:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
-[2m11:00:56[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/hooks/useAuth.tsx[22m Could not Fast Refresh ("useAuth" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
-[2m11:00:56[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/hooks/useAuth.tsx[22m
+[2m15:15:04[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/layouts/AppLayout.tsx, /src/index.css[22m
+[2m15:15:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/layouts/AppLayout.tsx, /src/index.css[22m
+[2m15:15:30[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/layouts/AppLayout.tsx, /src/index.css[22m
+[2m15:15:36[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/layouts/AppLayout.tsx, /src/index.css[22m
+[2m15:38:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/hooks/useAuth.tsx, /src/index.css[22m
+[2m15:38:37[22m [36m[1m[vite][22m[39m [33mhmr invalidate [39m[2m/src/hooks/useAuth.tsx[22m Could not Fast Refresh ("useAuth" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m15:38:37[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/hooks/useAuth.tsx[22m
+[2m15:38:55[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/MetricsPage.tsx, /src/pages/ReportsPage.tsx, /src/pages/DashboardPage.tsx, /src/pages/TrendsPage.tsx[22m
+[2m15:39:24[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/MetricsPage.tsx, /src/index.css[22m
+[2m15:39:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/MetricsPage.tsx, /src/index.css[22m
+[2m15:40:05[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/MetricsPage.tsx, /src/index.css[22m
+[2m15:44:49[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/TrendsPage.tsx, /src/index.css[22m
+[2m15:44:54[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/TrendsPage.tsx, /src/index.css[22m
+[2m15:45:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/TrendsPage.tsx, /src/index.css[22m
+[2m15:45:17[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/pages/TrendsPage.tsx, /src/index.css[22m

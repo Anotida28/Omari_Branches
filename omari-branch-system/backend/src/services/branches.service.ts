@@ -405,11 +405,8 @@ export async function createBranch(
   input: BranchCreateInput,
 ): Promise<BranchResponse> {
   const normalizedAgentLines = normalizeAgentLineNumbers(input.agentLineNumbers);
-  const nextIsActive = input.isActive ?? true;
 
-  if (nextIsActive) {
-    await assertAgentLinesAreSafe(normalizedAgentLines);
-  }
+  await assertAgentLinesAreSafe(normalizedAgentLines);
 
   const data: Prisma.BranchCreateInput = {
     city: input.city,
@@ -472,11 +469,7 @@ export async function updateBranch(
     existingBranch.agentLines
       .filter((line) => line.isActive)
       .map((line) => line.lineNumber.trim());
-  const nextIsActive = input.isActive ?? existingBranch.isActive;
-
-  if (nextIsActive) {
-    await assertAgentLinesAreSafe(nextAgentLines, id);
-  }
+  await assertAgentLinesAreSafe(nextAgentLines, id);
 
   const data: Prisma.BranchUpdateInput = {};
 

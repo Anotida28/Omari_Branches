@@ -127,6 +127,23 @@ export type MetricsListParams = {
   pageSize?: number;
 };
 
+export type MetricSyncParams = {
+  branchId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+export type MetricSyncResult = {
+  dateFrom: string;
+  dateTo: string;
+  branchCount: number;
+  lineCount: number;
+  importedRowCount: number;
+  refreshedBranchDateCount: number;
+  missingSourceLineCount: number;
+  missingSourceLines: Array<{ lineNumber: string; branchId: string; branchName: string }>;
+};
+
 export type Expense = {
   id: string;
   branchId: string;
@@ -176,6 +193,47 @@ export type UpdateExpenseInput = {
   notes?: string;
 };
 
+export type RecurringReminder = {
+  id: string;
+  branchId: string;
+  expenseType: ExpenseType;
+  dueDayOfMonth: number;
+  amount: string;
+  currency: string;
+  vendor: string | null;
+  notes: string | null;
+  isActive: boolean;
+  nextDueDate: string;
+  nextReminderDate: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RecurringReminderDetail = RecurringReminder;
+
+export type RecurringReminderListParams = {
+  branchId?: string;
+  expenseType?: ExpenseType;
+  isActive?: boolean;
+  page?: number;
+  pageSize?: number;
+};
+
+export type CreateRecurringReminderInput = {
+  branchId: string;
+  expenseType: ExpenseType;
+  dueDayOfMonth: number;
+  amount: number;
+  currency?: string;
+  vendor?: string;
+  notes?: string;
+  isActive?: boolean;
+  createdBy?: string;
+};
+
+export type UpdateRecurringReminderInput = Partial<CreateRecurringReminderInput>;
+
 export type DashboardStats = {
   totalBranches: number;
   totalExpenses: number;
@@ -208,6 +266,13 @@ export type Recipient = {
   email: string;
   name: string | null;
   isActive: boolean;
+  subscriptions: Array<{
+    id: string;
+    emailType: "REMINDER" | "DAILY_BRANCH_REPORT";
+    branchId: string | null;
+    branchName: string | null;
+    isActive: boolean;
+  }>;
   createdAt: string;
   updatedAt: string;
 };
@@ -216,12 +281,18 @@ export type CreateRecipientInput = {
   email: string;
   name?: string;
   isActive?: boolean;
+  receivesReminders?: boolean;
+  receivesDailyReports?: boolean;
+  reportBranchIds?: Array<string | null>;
 };
 
 export type UpdateRecipientInput = {
   email?: string;
   name?: string;
   isActive?: boolean;
+  receivesReminders?: boolean;
+  receivesDailyReports?: boolean;
+  reportBranchIds?: Array<string | null>;
 };
 
 // ============================================================================

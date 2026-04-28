@@ -31,6 +31,7 @@ import {
   LayoutDashboard,
   LineChart,
   LogOut,
+  Mail,
   Menu,
   RefreshCcw,
   Settings,
@@ -95,6 +96,9 @@ const remittanceCenterItems: NavItem[] = [
     subtitle: "Export branch performance and reminder summaries",
     icon: BarChart3,
   },
+];
+
+const notificationsItems: NavItem[] = [
   {
     to: "/expenses",
     label: "Reminders",
@@ -109,8 +113,8 @@ const remittanceCenterItems: NavItem[] = [
   },
   {
     to: "/settings",
-    label: "Settings",
-    subtitle: "HQ reminder recipients, email tests, and system checks",
+    label: "Notification Settings",
+    subtitle: "Email recipients, subscriptions, and system checks",
     icon: Settings,
   },
 ];
@@ -121,6 +125,12 @@ const navSections: NavSection[] = [
     label: "Remittance Center",
     icon: Building2,
     items: remittanceCenterItems,
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    icon: Mail,
+    items: notificationsItems,
   },
   {
     id: "wallet",
@@ -362,6 +372,7 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     "remittance-center": true,
+    notifications: false,
     wallet: false,
   });
   const isSidebarCollapsed = collapsed && !isMobile;

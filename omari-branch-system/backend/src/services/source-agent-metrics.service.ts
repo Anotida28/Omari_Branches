@@ -141,6 +141,13 @@ function getMatchColumnSql(): "[agent_account]" | "[customer_id]" {
     : "[agent_account]";
 }
 
+// Balance tables use [account_number] in place of [agent_account]
+function getBalanceMatchColumnSql(): "[account_number]" | "[customer_id]" {
+  return env.SOURCE_SQL_AGENT_LINE_MATCH_COLUMN === "customer_id"
+    ? "[customer_id]"
+    : "[account_number]";
+}
+
 function getSourceConfig(): sql.config {
   return {
     server: env.SOURCE_SQL_SERVER ?? "",
@@ -437,11 +444,13 @@ export async function fetchSourceAgentMetricRows(params: {
 async function fetchBalanceRowsFromTable(params: {
   pool: sql.ConnectionPool;
   tableName: QualifiedTableName;
+  matchColumnSql: "[account_number]" | "[customer_id]";
   lineNumbers: string[];
   dateFrom: Date;
   dateTo: Date;
 }): Promise<SourceAgentBalanceRow[]> {
   const rows: SourceAgentBalanceRow[] = [];
+  const { matchColumnSql } = params;
 
   for (const batch of chunkValues(params.lineNumbers, PARAM_BATCH_SIZE)) {
     const request = params.pool.request();
@@ -453,12 +462,12 @@ async function fetchBalanceRowsFromTable(params: {
       WITH ranked_balances AS (
         SELECT
           CAST([balance_date] AS DATE) AS metricDate,
-          LTRIM(RTRIM(CAST([account_number] AS VARCHAR(120)))) AS lineNumber,
+          LTRIM(RTRIM(CAST(${matchColumnSql} AS VARCHAR(120)))) AS lineNumber,
           COALESCE([available_balance], 0) AS eFloatBalance,
           ROW_NUMBER() OVER (
             PARTITION BY
               CAST([balance_date] AS DATE),
-              LTRIM(RTRIM(CAST([account_number] AS VARCHAR(120))))
+              LTRIM(RTRIM(CAST(${matchColumnSql} AS VARCHAR(120))))
             ORDER BY
               TRY_CAST([date_id] AS DATE) DESC,
               [balance_date] DESC
@@ -466,7 +475,7 @@ async function fetchBalanceRowsFromTable(params: {
         FROM [${params.tableName.schema}].[${params.tableName.table}]
         WHERE [balance_date] >= @dateFrom
           AND [balance_date] <= @dateTo
-          AND LTRIM(RTRIM(CAST([account_number] AS VARCHAR(120)))) IN (${inClause})
+          AND LTRIM(RTRIM(CAST(${matchColumnSql} AS VARCHAR(120)))) IN (${inClause})
       )
       SELECT
         metricDate,
@@ -513,10 +522,12 @@ export async function fetchSourceAgentBalanceRows(params: {
   }
 
   const pool = await getPool();
+  const balanceMatchColumnSql = getBalanceMatchColumnSql();
   const [historicalRows, currentRows] = await Promise.all([
     fetchBalanceRowsFromTable({
       pool,
       tableName: getSourceBalanceTable(),
+      matchColumnSql: balanceMatchColumnSql,
       lineNumbers: normalizedLineNumbers,
       dateFrom: params.dateFrom,
       dateTo: params.dateTo,
@@ -524,6 +535,7 @@ export async function fetchSourceAgentBalanceRows(params: {
     fetchBalanceRowsFromTable({
       pool,
       tableName: getSourceCurrentBalanceTable(),
+      matchColumnSql: balanceMatchColumnSql,
       lineNumbers: normalizedLineNumbers,
       dateFrom: params.dateFrom,
       dateTo: params.dateTo,

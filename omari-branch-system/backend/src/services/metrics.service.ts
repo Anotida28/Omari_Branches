@@ -119,6 +119,61 @@ async function getSourceLineCount(
   });
 }
 
+// Returns a map keyed by "branchId::YYYY-MM-DD" -> count of AgentLineMetric rows.
+// Resolves all items in 2 queries instead of 1 per item.
+async function getBatchSourceLineCounts(
+  items: Array<{ branchId: bigint; metricDate: Date }>,
+): Promise<Map<string, number>> {
+  if (items.length === 0) {
+    return new Map();
+  }
+
+  const uniqueBranchIds = Array.from(
+    new Set(items.map((m) => m.branchId.toString())),
+  ).map((id) => BigInt(id));
+
+  const uniqueMetricDates = Array.from(
+    new Set(items.map((m) => m.metricDate.toISOString())),
+  ).map((s) => new Date(s));
+
+  // Query 1: get all agent line IDs that belong to these branches
+  const agentLines = await prisma.branchAgentLine.findMany({
+    where: { branchId: { in: uniqueBranchIds } },
+    select: { id: true, branchId: true },
+  });
+
+  if (agentLines.length === 0) {
+    return new Map();
+  }
+
+  const branchIdByAgentLineId = new Map<string, bigint>(
+    agentLines.map((al) => [al.id.toString(), al.branchId]),
+  );
+
+  // Query 2: count AgentLineMetric rows grouped by (agentLineId, metricDate)
+  const grouped = await prisma.agentLineMetric.groupBy({
+    by: ["agentLineId", "metricDate"],
+    where: {
+      agentLineId: { in: agentLines.map((al) => al.id) },
+      metricDate: { in: uniqueMetricDates },
+    },
+    _count: { _all: true },
+  });
+
+  // Fold agentLine-level counts up to branch-level counts
+  const countMap = new Map<string, number>();
+  for (const row of grouped) {
+    const branchId = branchIdByAgentLineId.get(row.agentLineId.toString());
+    if (!branchId) {
+      continue;
+    }
+    const key = `${branchId.toString()}::${row.metricDate.toISOString().slice(0, 10)}`;
+    countMap.set(key, (countMap.get(key) ?? 0) + row._count._all);
+  }
+
+  return countMap;
+}
+
 export async function recomputeBranchMetricForDate(
   branchId: bigint,
   metricDate: Date,
@@ -345,14 +400,13 @@ export async function listMetrics(
     }),
   ]);
 
-  const sourceLineCounts = await Promise.all(
-    items.map((metric) => getSourceLineCount(metric.branchId, metric.metricDate)),
-  );
+  const countMap = await getBatchSourceLineCounts(items);
 
   return {
-    items: items.map((metric, index) =>
-      withSourceLineCount(toMetricResponse(metric), sourceLineCounts[index]),
-    ),
+    items: items.map((metric) => {
+      const key = `${metric.branchId.toString()}::${metric.metricDate.toISOString().slice(0, 10)}`;
+      return withSourceLineCount(toMetricResponse(metric), countMap.get(key) ?? 0);
+    }),
     page,
     pageSize,
     total,

@@ -10,6 +10,8 @@ import cron from "node-cron";
 
 import { env } from "../config/env";
 import { runAlertEvaluatorJobWithLock } from "./alert-evaluator.job";
+import { runDailyBranchReportJobWithLock } from "./daily-branch-report.job";
+import { runDailyWalletReportJobWithLock } from "./wallet-report.job";
 import {
   runSourceMetricsSyncJobWithLock,
   shouldEnableSourceMetricsSync,
@@ -39,7 +41,9 @@ const scheduledJobs: ScheduledJob[] = [];
  * Daily at 08:00 Africa/Harare (UTC+2)
  * Since node-cron uses system timezone, we run at 06:00 UTC = 08:00 Harare
  */
-const DAILY_ALERT_CRON = "0 6 * * *"; // 06:00 UTC = 08:00 Harare (UTC+2)
+const DAILY_ALERT_CRON = "0 6 * * *";         // 06:00 UTC = 08:00 Harare (UTC+2)
+const DAILY_BRANCH_REPORT_CRON = "0 6 * * *"; // 06:00 UTC = 08:00 Harare (UTC+2)
+const DAILY_WALLET_REPORT_CRON = "0 6 * * *"; // 06:00 UTC = 08:00 Harare (UTC+2)
 const SOURCE_METRICS_SYNC_CRON = env.SOURCE_SQL_SYNC_CRON;
 
 // ============================================================================
@@ -104,6 +108,58 @@ async function runDailySourceMetricsSync(): Promise<void> {
   }
 }
 
+async function runDailyBranchReports(): Promise<void> {
+  console.log(`[Scheduler] Running daily branch report emailer at ${new Date().toISOString()}`);
+
+  const { executed, result, error } = await runDailyBranchReportJobWithLock();
+
+  if (!executed) {
+    console.log(`[Scheduler] Daily branch report job skipped - another instance is running`);
+    return;
+  }
+
+  if (error) {
+    console.error(`[Scheduler] Daily branch report job failed with error:`, error);
+    return;
+  }
+
+  if (result) {
+    console.log(`[Scheduler] Daily branch report job completed:`, {
+      reportDate: result.reportDate,
+      recipients: result.recipientCount,
+      sent: result.sentCount,
+      failed: result.failedCount,
+      skipped: result.skippedAlreadySent + result.skippedNoMetrics,
+    });
+  }
+}
+
+async function runDailyWalletReports(): Promise<void> {
+  console.log(`[Scheduler] Running daily wallet report emailer at ${new Date().toISOString()}`);
+
+  const { executed, result, error } = await runDailyWalletReportJobWithLock();
+
+  if (!executed) {
+    console.log(`[Scheduler] Daily wallet report job skipped - another instance is running`);
+    return;
+  }
+
+  if (error) {
+    console.error(`[Scheduler] Daily wallet report job failed with error:`, error);
+    return;
+  }
+
+  if (result) {
+    console.log(`[Scheduler] Daily wallet report job completed:`, {
+      reportDate: result.reportDate,
+      recipients: result.recipientCount,
+      sent: result.sentCount,
+      failed: result.failedCount,
+      skipped: result.skippedAlreadySent,
+    });
+  }
+}
+
 // ============================================================================
 // Scheduler Management
 // ============================================================================
@@ -121,6 +177,22 @@ export function startScheduler(): void {
     name: "daily-alert-evaluator",
     cronExpression: DAILY_ALERT_CRON,
     task: alertTask,
+  });
+
+  const reportTask = cron.schedule(DAILY_BRANCH_REPORT_CRON, runDailyBranchReports);
+
+  scheduledJobs.push({
+    name: "daily-branch-report-emailer",
+    cronExpression: DAILY_BRANCH_REPORT_CRON,
+    task: reportTask,
+  });
+
+  const walletReportTask = cron.schedule(DAILY_WALLET_REPORT_CRON, runDailyWalletReports);
+
+  scheduledJobs.push({
+    name: "daily-wallet-report-emailer",
+    cronExpression: DAILY_WALLET_REPORT_CRON,
+    task: walletReportTask,
   });
 
   if (shouldEnableSourceMetricsSync()) {
@@ -170,6 +242,24 @@ export async function triggerAlertJobManually(): Promise<{
 }> {
   console.log(`[Scheduler] Manually triggering alert evaluator`);
   return runAlertEvaluatorJobWithLock();
+}
+
+export async function triggerDailyBranchReportJobManually(): Promise<{
+  executed: boolean;
+  result?: any;
+  error?: Error;
+}> {
+  console.log(`[Scheduler] Manually triggering daily branch report emailer`);
+  return runDailyBranchReportJobWithLock();
+}
+
+export async function triggerDailyWalletReportJobManually(): Promise<{
+  executed: boolean;
+  result?: any;
+  error?: Error;
+}> {
+  console.log(`[Scheduler] Manually triggering daily wallet report emailer`);
+  return runDailyWalletReportJobWithLock();
 }
 
 /**

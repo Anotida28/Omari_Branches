@@ -255,10 +255,7 @@ async function getBranchById(id) {
 }
 async function createBranch(input) {
     const normalizedAgentLines = normalizeAgentLineNumbers(input.agentLineNumbers);
-    const nextIsActive = input.isActive ?? true;
-    if (nextIsActive) {
-        await assertAgentLinesAreSafe(normalizedAgentLines);
-    }
+    await assertAgentLinesAreSafe(normalizedAgentLines);
     const data = {
         city: input.city,
         label: input.label,
@@ -309,10 +306,7 @@ async function updateBranch(id, input) {
         existingBranch.agentLines
             .filter((line) => line.isActive)
             .map((line) => line.lineNumber.trim());
-    const nextIsActive = input.isActive ?? existingBranch.isActive;
-    if (nextIsActive) {
-        await assertAgentLinesAreSafe(nextAgentLines, id);
-    }
+    await assertAgentLinesAreSafe(nextAgentLines, id);
     const data = {};
     if (input.city !== undefined) {
         data.city = input.city;

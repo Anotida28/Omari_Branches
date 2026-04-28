@@ -63,30 +63,6 @@ async function main() {
   const currentPeriod = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}`;
 
   for (const branch of allBranches) {
-    await prisma.branchMetric.upsert({
-      where: {
-        uq_branch_date: {
-          branchId: branch.id,
-          metricDate: today,
-        },
-      },
-      update: {},
-      create: {
-        branchId: branch.id,
-        metricDate: today,
-        eFloatBalance: 0,
-        cashInVolume: 0,
-        cashInValue: 0,
-        cashOutVolume: 0,
-        cashOutValue: 0,
-        totalTransactionVolume: 0,
-        totalTransactionValue: 0,
-        commissionOnDeposits: 0,
-        commissionOnWithdrawals: 0,
-        totalCommission: 0,
-      },
-    });
-
     const existingExpense = await prisma.expense.findFirst({
       where: {
         branchId: branch.id,

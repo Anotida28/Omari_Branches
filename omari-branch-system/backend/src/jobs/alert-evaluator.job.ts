@@ -21,8 +21,10 @@ import {
   type EligibleExpenseInput,
 } from "../services/alert-evaluation.service";
 import { sendAlertEmail, type AlertEmailPayload } from "../services/email.service";
+import { createEmailLog, EmailSendStatus, EmailType } from "../services/emailer.service";
 import { withLock } from "../services/job-lock.service";
 import { getActiveRecipientEmails } from "../services/recipients.service";
+import { dueDateForMonth, periodForDate } from "../services/recurring-reminders.service";
 
 // ============================================================================
 // Constants
@@ -41,6 +43,7 @@ const EXPENSE_DATE_RANGE_DAYS = 60;
 export type AlertJobResult = {
   evaluationDate: string;
   totalCandidates: number;
+  totalRecurringCandidates: number;
   skippedAlreadySent: number;
   skippedNoRecipients: number;
   sentCount: number;
@@ -52,6 +55,19 @@ type BranchInfo = {
   city: string;
   label: string;
   displayName: string;
+};
+
+type RecurringReminderCandidate = {
+  alertKey: string;
+  recurringReminderId: bigint;
+  branchId: bigint;
+  expenseType: string;
+  period: string;
+  dueDate: Date;
+  amount: number;
+  ruleId: bigint;
+  ruleType: string;
+  dayOffset: number;
 };
 
 // ============================================================================
@@ -141,22 +157,20 @@ async function isAlertAlreadySent(
   return count > 0;
 }
 
-/**
- * Get branch info for display in emails.
- */
-async function getBranchInfo(branchId: bigint): Promise<BranchInfo | null> {
-  const branch = await prisma.branch.findUnique({
-    where: { id: branchId },
-    select: { city: true, label: true },
+async function loadBranchMap(branchIds: bigint[]): Promise<Map<string, BranchInfo>> {
+  if (branchIds.length === 0) return new Map();
+
+  const branches = await prisma.branch.findMany({
+    where: { id: { in: branchIds } },
+    select: { id: true, city: true, label: true },
   });
 
-  if (!branch) return null;
-
-  return {
-    city: branch.city,
-    label: branch.label,
-    displayName: `${branch.city} - ${branch.label}`,
-  };
+  return new Map(
+    branches.map((b) => [
+      b.id.toString(),
+      { city: b.city, label: b.label, displayName: `${b.city} - ${b.label}` },
+    ]),
+  );
 }
 
 /**
@@ -190,6 +204,172 @@ function formatAmount(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
+function doesRecurringRuleMatch(rule: AlertRuleInput, daysToDue: number): boolean {
+  if (!rule.isActive) return false;
+  if (rule.ruleType === "DUE_REMINDER") {
+    return daysToDue === Math.abs(rule.dayOffset);
+  }
+  if (rule.ruleType === "OVERDUE_ESCALATION") {
+    return daysToDue < 0 && Math.abs(daysToDue) === rule.dayOffset;
+  }
+  return false;
+}
+
+function buildRecurringCandidateKey(params: {
+  recurringReminderId: bigint;
+  ruleId: bigint;
+  dueDate: Date;
+}): string {
+  return [
+    "recurring",
+    params.recurringReminderId.toString(),
+    params.ruleId.toString(),
+    formatDateString(params.dueDate),
+  ].join(":");
+}
+
+async function loadRecurringReminderCandidates(
+  today: Date,
+  rules: AlertRuleInput[],
+): Promise<RecurringReminderCandidate[]> {
+  const reminders = await prisma.recurringExpenseReminder.findMany({
+    where: { isActive: true },
+  });
+  const activeRules = rules.filter((rule) => rule.isActive);
+  const candidates: RecurringReminderCandidate[] = [];
+
+  for (const reminder of reminders) {
+    const monthOffsets = [-1, 0, 1];
+    for (const monthOffset of monthOffsets) {
+      const dueDate = dueDateForMonth(
+        today.getUTCFullYear(),
+        today.getUTCMonth() + monthOffset,
+        reminder.dueDayOfMonth,
+      );
+      const daysToDue = Math.round((dueDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+
+      for (const rule of activeRules) {
+        if (!doesRecurringRuleMatch(rule, daysToDue)) {
+          continue;
+        }
+
+        candidates.push({
+          alertKey: buildRecurringCandidateKey({
+            recurringReminderId: reminder.id,
+            ruleId: rule.id,
+            dueDate,
+          }),
+          recurringReminderId: reminder.id,
+          branchId: reminder.branchId,
+          expenseType: reminder.expenseType,
+          period: periodForDate(dueDate),
+          dueDate,
+          amount: Number(reminder.amount.toString()) || 0,
+          ruleId: rule.id,
+          ruleType: rule.ruleType,
+          dayOffset: rule.dayOffset,
+        });
+      }
+    }
+  }
+
+  return candidates;
+}
+
+async function isRecurringReminderAlreadySent(
+  candidate: RecurringReminderCandidate,
+  email: string,
+): Promise<boolean> {
+  const count = await prisma.emailLog.count({
+    where: {
+      emailType: EmailType.REMINDER,
+      recurringReminderId: candidate.recurringReminderId,
+      sentTo: email,
+      reportDate: candidate.dueDate,
+      status: EmailSendStatus.SENT,
+      metadata: `${candidate.ruleType}:${candidate.dayOffset}`,
+    },
+  });
+
+  return count > 0;
+}
+
+async function processRecurringReminderCandidates(
+  candidates: RecurringReminderCandidate[],
+  recipients: string[],
+  result: AlertJobResult,
+  branchMap: Map<string, BranchInfo>,
+): Promise<void> {
+  for (const candidate of candidates) {
+    if (recipients.length === 0) {
+      result.skippedNoRecipients++;
+      await createEmailLog({
+        emailType: EmailType.REMINDER,
+        sentTo: "no-recipients",
+        subject: `Reminder: ${candidate.expenseType} ${candidate.period}`,
+        status: EmailSendStatus.SKIPPED,
+        branchId: candidate.branchId,
+        recurringReminderId: candidate.recurringReminderId,
+        reportDate: candidate.dueDate,
+        metadata: `${candidate.ruleType}:${candidate.dayOffset}`,
+        errorMessage: "No active reminder recipients configured",
+      });
+      continue;
+    }
+
+    const branchName =
+      branchMap.get(candidate.branchId.toString())?.displayName ??
+      `Branch ${candidate.branchId}`;
+
+    for (const email of recipients) {
+      if (await isRecurringReminderAlreadySent(candidate, email)) {
+        result.skippedAlreadySent++;
+        continue;
+      }
+
+      const payload: AlertEmailPayload = {
+        to: email,
+        branchName,
+        expenseType: candidate.expenseType,
+        period: candidate.period,
+        dueDate: formatDateString(candidate.dueDate),
+        amount: formatAmount(candidate.amount),
+        alertType: candidate.ruleType,
+        dayOffset: candidate.dayOffset,
+      };
+
+      const sendResult = await sendAlertEmail(payload);
+
+      if (sendResult.success) {
+        result.sentCount++;
+        await createEmailLog({
+          emailType: EmailType.REMINDER,
+          sentTo: email,
+          subject: `Reminder: ${branchName} ${candidate.expenseType} ${candidate.period}`,
+          status: EmailSendStatus.SENT,
+          branchId: candidate.branchId,
+          recurringReminderId: candidate.recurringReminderId,
+          reportDate: candidate.dueDate,
+          metadata: `${candidate.ruleType}:${candidate.dayOffset}`,
+        });
+      } else {
+        result.failedCount++;
+        await createEmailLog({
+          emailType: EmailType.REMINDER,
+          sentTo: email,
+          subject: `Reminder: ${branchName} ${candidate.expenseType} ${candidate.period}`,
+          status: EmailSendStatus.FAILED,
+          errorMessage: sendResult.error,
+          branchId: candidate.branchId,
+          recurringReminderId: candidate.recurringReminderId,
+          reportDate: candidate.dueDate,
+          metadata: `${candidate.ruleType}:${candidate.dayOffset}`,
+        });
+      }
+    }
+  }
+}
+
 // ============================================================================
 // Main Job Function
 // ============================================================================
@@ -207,6 +387,7 @@ export async function runAlertEvaluatorJob(): Promise<AlertJobResult> {
   const result: AlertJobResult = {
     evaluationDate,
     totalCandidates: 0,
+    totalRecurringCandidates: 0,
     skippedAlreadySent: 0,
     skippedNoRecipients: 0,
     sentCount: 0,
@@ -227,8 +408,20 @@ export async function runAlertEvaluatorJob(): Promise<AlertJobResult> {
     const evaluation = evaluateAlerts(today, expenses, rules);
     result.totalCandidates = evaluation.candidates.length;
     const recipients = await getActiveRecipientEmails();
+    const recurringCandidates = await loadRecurringReminderCandidates(today, rules);
+    result.totalRecurringCandidates = recurringCandidates.length;
+
+    const branchMap = await loadBranchMap(
+      Array.from(
+        new Set([
+          ...evaluation.candidates.map((c) => c.branchId),
+          ...recurringCandidates.map((c) => c.branchId),
+        ]),
+      ),
+    );
 
     console.log(`[AlertJob] Found ${evaluation.candidates.length} alert candidates`);
+    console.log(`[AlertJob] Found ${recurringCandidates.length} recurring reminder candidates`);
 
     // Process each candidate
     for (const candidate of evaluation.candidates) {
@@ -245,20 +438,18 @@ export async function runAlertEvaluatorJob(): Promise<AlertJobResult> {
         if (recipients.length === 0) {
           result.skippedNoRecipients++;
           console.log(`[AlertJob] Skipping ${candidate.alertKey} - no HQ recipients`);
-
-          // Log as SKIPPED
           await logAlertResult(
             candidate,
             "no-recipients",
             "SKIPPED",
-            "No active HQ reminder recipients configured"
+            "No active HQ reminder recipients configured",
           );
           continue;
         }
 
-        // Get branch info
-        const branchInfo = await getBranchInfo(candidate.branchId);
-        const branchName = branchInfo?.displayName || `Branch ${candidate.branchId}`;
+        const branchName =
+          branchMap.get(candidate.branchId.toString())?.displayName ??
+          `Branch ${candidate.branchId}`;
 
         // Send to each recipient
         for (const email of recipients) {
@@ -291,6 +482,8 @@ export async function runAlertEvaluatorJob(): Promise<AlertJobResult> {
         console.error(`[AlertJob] Error processing ${candidate.alertKey}:`, error);
       }
     }
+
+    await processRecurringReminderCandidates(recurringCandidates, recipients, result, branchMap);
 
     console.log(`[AlertJob] Completed: sent=${result.sentCount}, failed=${result.failedCount}, skipped=${result.skippedAlreadySent + result.skippedNoRecipients}`);
 

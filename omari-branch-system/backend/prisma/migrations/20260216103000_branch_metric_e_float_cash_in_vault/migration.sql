@@ -1,4 +1,0 @@
--- AlterTable
-ALTER TABLE `BranchMetric`
-    ADD COLUMN `eFloatBalance` DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
-    ADD COLUMN `cashInVault` DECIMAL(18, 2) NOT NULL DEFAULT 0.00;

@@ -5,7 +5,12 @@ import {
   getAlertLogByIdController,
   getAlertStatsController,
 } from "../controllers/alert-logs.controller";
-import { triggerAlertJobManually, getScheduledJobs } from "../jobs/scheduler";
+import {
+  triggerAlertJobManually,
+  triggerDailyBranchReportJobManually,
+  triggerDailyWalletReportJobManually,
+  getScheduledJobs,
+} from "../jobs/scheduler";
 
 const router = Router();
 
@@ -40,6 +45,66 @@ router.post("/trigger", async (_req: Request, res: Response, next: NextFunction)
 
     res.json({
       message: "Alert evaluation job completed",
+      executed: true,
+      result,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/alerts/trigger-daily-report - Manually trigger daily branch report emails
+router.post("/trigger-daily-report", async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { executed, result, error } = await triggerDailyBranchReportJobManually();
+
+    if (!executed) {
+      return res.status(409).json({
+        message: "Job is already running on another instance",
+        executed: false,
+      });
+    }
+
+    if (error) {
+      return res.status(500).json({
+        message: "Job failed with error",
+        error: error.message,
+        executed: true,
+      });
+    }
+
+    res.json({
+      message: "Daily branch report job completed",
+      executed: true,
+      result,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/alerts/trigger-wallet-report - Manually trigger daily wallet report emails
+router.post("/trigger-wallet-report", async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { executed, result, error } = await triggerDailyWalletReportJobManually();
+
+    if (!executed) {
+      return res.status(409).json({
+        message: "Job is already running on another instance",
+        executed: false,
+      });
+    }
+
+    if (error) {
+      return res.status(500).json({
+        message: "Job failed with error",
+        error: error.message,
+        executed: true,
+      });
+    }
+
+    res.json({
+      message: "Daily wallet report job completed",
       executed: true,
       result,
     });

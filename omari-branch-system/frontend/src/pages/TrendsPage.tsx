@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
@@ -15,9 +15,11 @@ import {
   YAxis,
 } from "recharts";
 import {
+  Alert,
   Box,
   Button,
   ButtonGroup,
+  CircularProgress,
   Divider,
   MenuItem,
   Paper,
@@ -25,12 +27,14 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { RefreshCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { chartPalette, glassPanelSx } from "../app/theme";
 import { getErrorMessage } from "../services/api";
 import { listBranches } from "../services/branches";
 import { formatCurrency } from "../services/format";
+import { syncMetrics } from "../services/metrics";
 import { fetchTrendsData } from "../services/trends";
 import { ErrorState } from "../shared/components/ErrorState";
 import { FilterBar } from "../shared/components/FilterBar";
@@ -151,6 +155,7 @@ function ChartModeToggle({
 }
 
 export default function TrendsPage() {
+  const queryClient = useQueryClient();
   const [focusedChart, setFocusedChart] = useState<
     | "efloat"
     | "cash"
@@ -200,6 +205,14 @@ export default function TrendsPage() {
       }),
   });
 
+  const syncMutation = useMutation({
+    mutationFn: syncMetrics,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trends"] });
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+    },
+  });
+
   const branchName = useMemo(() => {
     if (!branchId) {
       return "All Branches";
@@ -231,47 +244,79 @@ export default function TrendsPage() {
   return (
     <section className="space-y-5 motion-fade-up">
       <FilterBar>
-        <Stack direction={{ xs: "column", lg: "row" }} spacing={1.2}>
-          <TextField
-            select
-            label="Branch"
-            value={branchId}
-            onChange={(event) => updateParams({ branchId: event.target.value || undefined })}
-            sx={{ minWidth: { xs: "100%", lg: 220 } }}
-          >
-            <MenuItem value="">All branches</MenuItem>
-            {(branchesQuery.data?.items ?? []).map((branch) => (
-              <MenuItem key={branch.id} value={branch.id}>
-                {branch.displayName}
-              </MenuItem>
-            ))}
-          </TextField>
+        <Stack spacing={1.2}>
+          <Stack direction={{ xs: "column", lg: "row" }} spacing={1.2}>
+            <TextField
+              select
+              label="Branch"
+              value={branchId}
+              onChange={(event) => updateParams({ branchId: event.target.value || undefined })}
+              sx={{ minWidth: { xs: "100%", lg: 220 } }}
+            >
+              <MenuItem value="">All branches</MenuItem>
+              {(branchesQuery.data?.items ?? []).map((branch) => (
+                <MenuItem key={branch.id} value={branch.id}>
+                  {branch.displayName}
+                </MenuItem>
+              ))}
+            </TextField>
 
-          <TextField
-            label="Date From"
-            type="date"
-            value={dateFrom}
-            onChange={(event) => updateParams({ dateFrom: event.target.value || undefined })}
-            InputLabelProps={{ shrink: true }}
-            sx={{ minWidth: { xs: "100%", lg: 170 } }}
-          />
+            <TextField
+              label="Date From"
+              type="date"
+              value={dateFrom}
+              onChange={(event) => updateParams({ dateFrom: event.target.value || undefined })}
+              InputLabelProps={{ shrink: true }}
+              sx={{ minWidth: { xs: "100%", lg: 170 } }}
+            />
 
-          <TextField
-            label="Date To"
-            type="date"
-            value={dateTo}
-            onChange={(event) => updateParams({ dateTo: event.target.value || undefined })}
-            InputLabelProps={{ shrink: true }}
-            sx={{ minWidth: { xs: "100%", lg: 170 } }}
-          />
+            <TextField
+              label="Date To"
+              type="date"
+              value={dateTo}
+              onChange={(event) => updateParams({ dateTo: event.target.value || undefined })}
+              InputLabelProps={{ shrink: true }}
+              sx={{ minWidth: { xs: "100%", lg: 170 } }}
+            />
 
-          <Button
-            variant="outlined"
-            onClick={() => setSearchParams({}, { replace: true })}
-            sx={{ width: { xs: "100%", lg: "auto" }, whiteSpace: "nowrap" }}
-          >
-            Reset Filters
-          </Button>
+            <Button
+              variant="outlined"
+              onClick={() => setSearchParams({}, { replace: true })}
+              sx={{ width: { xs: "100%", lg: "auto" }, whiteSpace: "nowrap" }}
+            >
+              Reset Filters
+            </Button>
+
+            <Button
+              variant="contained"
+              startIcon={syncMutation.isPending ? <CircularProgress size={14} color="inherit" /> : <RefreshCcw size={14} />}
+              disabled={syncMutation.isPending}
+              onClick={() =>
+                syncMutation.mutate({
+                  dateFrom,
+                  dateTo,
+                  branchId: branchId || undefined,
+                })
+              }
+              sx={{ width: { xs: "100%", lg: "auto" }, whiteSpace: "nowrap" }}
+            >
+              {syncMutation.isPending ? "Syncing…" : "Sync Window"}
+            </Button>
+          </Stack>
+
+          {syncMutation.isSuccess ? (
+            <Alert severity="success" variant="outlined" sx={{ py: 0.5 }}>
+              Synced {syncMutation.data.importedRowCount} rows across {syncMutation.data.branchCount} branches
+              &nbsp;({syncMutation.data.dateFrom} – {syncMutation.data.dateTo})
+              {syncMutation.data.missingSourceLineCount > 0 && (
+                <> &mdash; <strong>{syncMutation.data.missingSourceLineCount} line{syncMutation.data.missingSourceLineCount !== 1 ? "s" : ""} not found in source</strong></>
+              )}
+            </Alert>
+          ) : syncMutation.isError ? (
+            <Alert severity="error" variant="outlined" sx={{ py: 0.5 }}>
+              {getErrorMessage(syncMutation.error)}
+            </Alert>
+          ) : null}
         </Stack>
       </FilterBar>
 

@@ -2743,3 +2743,44 @@ export function getWalletInsightsAlerts(input: WalletInsightsAlertsInput): Promi
 export function getWalletVisaAnalytics(input: WalletVisaAnalyticsInput): Promise<WalletVisaAnalyticsResponse> {
   return walletCached(cacheKey("visa", input), () => _getWalletVisaAnalytics(input));
 }
+
+// ─── Daily summary for the wallet report emailer ─────────────────────────────
+
+export type WalletDailySummaryRow = {
+  currency: string;
+  totalVolume: number;
+  totalValue: number;
+  totalCommission: number;
+  activeAccounts: number;
+};
+
+export async function getWalletDailySummary(
+  reportDate: Date,
+): Promise<WalletDailySummaryRow[]> {
+  const pool = await getPool();
+  const tx = getTxTable();
+  const request = pool.request();
+  request.input("reportDate", sql.Date, reportDate);
+
+  const result = await request.query(`
+    SELECT
+      [Currency],
+      COALESCE(SUM(CAST([Volume] AS BIGINT)), 0)                                   AS totalVolume,
+      COALESCE(SUM([TransactionAmount]), 0)                                         AS totalValue,
+      COALESCE(ABS(SUM(CASE WHEN [NetFee] < 0 THEN [NetFee] ELSE 0 END)), 0)       AS totalCommission,
+      COUNT(DISTINCT [AccountId])                                                    AS activeAccounts
+    FROM [${tx.schema}].[${tx.table}] WITH (NOLOCK)
+    WHERE [Date] = @reportDate
+      AND [Currency] IN ('USD', 'ZWL')
+    GROUP BY [Currency]
+    ORDER BY [Currency]
+  `);
+
+  return (result.recordset as Array<Record<string, unknown>>).map((row) => ({
+    currency: String(row.Currency ?? ""),
+    totalVolume: Math.trunc(toNumber(row.totalVolume)),
+    totalValue: toNumber(row.totalValue),
+    totalCommission: toNumber(row.totalCommission),
+    activeAccounts: Math.trunc(toNumber(row.activeAccounts)),
+  }));
+}

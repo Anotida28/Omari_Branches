@@ -16,12 +16,21 @@ const recipientIdSchema = z
   .transform((value) => BigInt(value));
 
 const emailSchema = z.string().email("Invalid email format").min(1);
+const branchScopeSchema = z.union([
+  z.literal("all"),
+  z.string().regex(/^\d+$/),
+  z.number().int().nonnegative().transform((value) => String(value)),
+  z.null(),
+]);
 
 const createRecipientSchema = z
   .object({
     email: emailSchema,
     name: z.string().optional(),
     isActive: z.boolean().optional(),
+    receivesReminders: z.boolean().optional(),
+    receivesDailyReports: z.boolean().optional(),
+    reportBranchIds: z.array(branchScopeSchema).optional(),
   })
   .strict();
 
@@ -30,6 +39,9 @@ const updateRecipientSchema = z
     email: emailSchema.optional(),
     name: z.string().optional(),
     isActive: z.boolean().optional(),
+    receivesReminders: z.boolean().optional(),
+    receivesDailyReports: z.boolean().optional(),
+    reportBranchIds: z.array(branchScopeSchema).optional(),
   })
   .strict()
   .refine((data) => Object.keys(data).length > 0, {

@@ -1,20 +1,25 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   Button,
+  Chip,
+  CircularProgress,
   MenuItem,
+  Stack,
   TableCell,
   TableRow,
   TextField,
+  Typography,
 } from "@mui/material";
+import { RefreshCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { Pagination } from "../components/ui/Pagination";
 import { getErrorMessage } from "../services/api";
 import { listBranches } from "../services/branches";
 import { formatCurrency, toMoneyNumber } from "../services/format";
-import { listMetrics } from "../services/metrics";
+import { listMetrics, syncMetrics } from "../services/metrics";
 import { DataTable } from "../shared/components/DataTable";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
@@ -27,6 +32,7 @@ function parsePage(value: string | null): number {
 }
 
 export default function MetricsPage() {
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const page = parsePage(searchParams.get("page"));
@@ -63,6 +69,13 @@ export default function MetricsPage() {
       }),
   });
 
+  const syncMutation = useMutation({
+    mutationFn: syncMetrics,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["metrics"] });
+    },
+  });
+
   const branchMap = useMemo(
     () =>
       new Map(
@@ -83,10 +96,73 @@ export default function MetricsPage() {
 
   return (
     <section className="space-y-5 motion-fade-up">
-      <Alert severity="info" variant="outlined">
-        Branch metrics are synced from the source system. Manual create and delete actions are no
-        longer available in the UI.
-      </Alert>
+      <Stack direction={{ xs: "column", sm: "row" }} alignItems={{ sm: "center" }} justifyContent="space-between" spacing={1.5}>
+        <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
+          {syncMutation.isSuccess ? (
+            <Alert severity="success" variant="outlined" sx={{ py: 0.4 }}>
+              Synced {syncMutation.data.importedRowCount} rows across {syncMutation.data.branchCount} branches
+              &nbsp;({syncMutation.data.dateFrom} – {syncMutation.data.dateTo})
+              {syncMutation.data.missingSourceLineCount > 0 && (
+                <> &mdash; <strong>{syncMutation.data.missingSourceLineCount} lines not found in source</ strong></>
+              )}
+            </Alert>
+          ) : syncMutation.isError ? (
+            <Alert severity="error" variant="outlined" sx={{ py: 0.4 }}>
+              {getErrorMessage(syncMutation.error)}
+            </Alert>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Metrics are synced daily from the source system.
+            </Typography>
+          )}
+        </Stack>
+
+        <Stack direction="row" spacing={1} flexShrink={0}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={syncMutation.isPending ? <CircularProgress size={14} /> : <RefreshCcw size={14} />}
+            disabled={syncMutation.isPending}
+            onClick={() => syncMutation.mutate({})}
+          >
+            {syncMutation.isPending ? "Syncing…" : "Sync Now"}
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            color="secondary"
+            startIcon={syncMutation.isPending ? <CircularProgress size={14} /> : <RefreshCcw size={14} />}
+            disabled={syncMutation.isPending}
+            onClick={() => {
+              const now = new Date();
+              const y = now.getFullYear();
+              const m = String(now.getMonth() + 1).padStart(2, "0");
+              const d = String(now.getDate()).padStart(2, "0");
+              syncMutation.mutate({
+                dateFrom: `${y}-${m}-01`,
+                dateTo: `${y}-${m}-${d}`,
+                branchId: branchId || undefined,
+              });
+            }}
+          >
+            Sync This Month
+          </Button>
+        </Stack>
+      </Stack>
+
+      {syncMutation.data?.missingSourceLines && syncMutation.data.missingSourceLines.length > 0 ? (
+        <Alert severity="warning" variant="outlined">
+          <Stack spacing={0.4}>
+            <Typography variant="body2" fontWeight={600}>Lines not found in source system:</Typography>
+            {syncMutation.data.missingSourceLines.map((line) => (
+              <Stack key={line.lineNumber} direction="row" spacing={1}>
+                <Chip label={line.lineNumber} size="small" />
+                <Typography variant="body2" color="text.secondary">{line.branchName}</Typography>
+              </Stack>
+            ))}
+          </Stack>
+        </Alert>
+      ) : null}
 
       {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
 

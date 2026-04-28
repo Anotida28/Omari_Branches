@@ -1,64 +1,110 @@
-RequestError: Connection lost - read ECONNRESET
-    at handleError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\mssql\lib\tedious\request.js:384:15)
-    at Connection.emit (node:events:520:22)
-    at Connection.emit (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:1927:18)
-    at Connection.socketError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:2338:12)
-    at Socket.<anonymous> (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:2020:42)
-    at Socket.emit (node:events:520:22)
-    at emitErrorNT (node:internal/streams/destroy:170:8)
-    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
-    at processTicksAndRejections (node:internal/process/task_queues:90:21) {
-  code: 'EREQUEST',
-  originalError: Error: Connection lost - read ECONNRESET
-      at handleError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\mssql\lib\tedious\request.js:382:19)
-      at Connection.emit (node:events:520:22)
-      at Connection.emit (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:1927:18)
-      at Connection.socketError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:2338:12)
-      at Socket.<anonymous> (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:2020:42)
-      at Socket.emit (node:events:520:22)
-      at emitErrorNT (node:internal/streams/destroy:170:8)
-      at emitErrorCloseNT (node:internal/streams/destroy:129:3)
-      at processTicksAndRejections (node:internal/process/task_queues:90:21) {
-    info: ConnectionError: Connection lost - read ECONNRESET
-        at Connection.socketError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:2338:26)
-        at Socket.<anonymous> (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:2020:42)
-        at Socket.emit (node:events:520:22)
-        at emitErrorNT (node:internal/streams/destroy:170:8)
-        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
-        at processTicksAndRejections (node:internal/process/task_queues:90:21) {
-      code: 'ESOCKET',
-      [cause]: [Error]
-    }
+PrismaClientKnownRequestError: 
+Invalid `prisma.recurringExpenseReminder.findMany()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\recurring-reminders.service.ts:225:37
+
+  222 
+  223 const [total, items] = await Promise.all([
+  224   prisma.recurringExpenseReminder.count({ where }),
+→ 225   prisma.recurringExpenseReminder.findMany(
+The table `dbo.RecurringExpenseReminder` does not exist in the current database.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async Promise.all (index 1)
+    at listRecurringReminders (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\recurring-reminders.service.ts:223:26)
+    at listRecurringRemindersHandler (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\controllers\recurring-reminders.controller.ts:118:14) {
+  code: 'P2021',
+  meta: {
+    modelName: 'RecurringExpenseReminder',
+    table: 'dbo.RecurringExpenseReminder'
   },
-  number: undefined,
-  lineNumber: undefined,
-  state: undefined,
-  class: undefined,
-  serverName: undefined,
-  procName: undefined
+  clientVersion: '6.19.2'
 }
-RequestError: Timeout: Request failed to complete in 30000ms
-    at C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\mssql\lib\tedious\request.js:449:19
-    at Array.forEach (<anonymous>)
-    at Request.userCallback (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\mssql\lib\tedious\request.js:446:46)
-    at Request.callback (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\request.ts:379:14)
-    at C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:3801:24
-    at processTicksAndRejections (node:internal/process/task_queues:104:5) {
-  code: 'ETIMEOUT',
-  originalError: RequestError: Timeout: Request failed to complete in 30000ms
-      at Connection.requestTimeout (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:2221:21)
-      at Timeout._onTimeout (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\tedious\src\connection.ts:2170:14)
-      at listOnTimeout (node:internal/timers:605:17)
-      at processTimers (node:internal/timers:541:7) {
-    code: 'ETIMEOUT'
+PrismaClientKnownRequestError: 
+Invalid `prisma.recurringExpenseReminder.findMany()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\recurring-reminders.service.ts:225:37
+
+  222 
+  223 const [total, items] = await Promise.all([
+  224   prisma.recurringExpenseReminder.count({ where }),
+→ 225   prisma.recurringExpenseReminder.findMany(
+The table `dbo.RecurringExpenseReminder` does not exist in the current database.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async Promise.all (index 1)
+    at listRecurringReminders (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\recurring-reminders.service.ts:223:26)
+    at listRecurringRemindersHandler (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\controllers\recurring-reminders.controller.ts:118:14) {
+  code: 'P2021',
+  meta: {
+    modelName: 'RecurringExpenseReminder',
+    table: 'dbo.RecurringExpenseReminder'
   },
-  number: 'ETIMEOUT',
-  lineNumber: undefined,
-  state: undefined,
-  class: undefined,
-  serverName: undefined,
-  procName: undefined,
-  precedingErrors: []
+  clientVersion: '6.19.2'
+}
+PrismaClientKnownRequestError: 
+Invalid `prisma.user.findUnique()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\middlewares\auth.ts:71:36
+
+  68   return;
+  69 }
+  70 
+→ 71 const user = await prisma.user.findUnique(
+Timed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 41)
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at requireAuthenticatedUser (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\middlewares\auth.ts:71:18) {
+  code: 'P2024',
+  meta: { modelName: 'User', connection_limit: 41, timeout: 10 },
+  clientVersion: '6.19.2'
+}
+PrismaClientKnownRequestError: 
+Invalid `prisma.expense.findMany()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\expenses.service.ts:235:20
+
+  232 
+  233 const [total, expenses] = await Promise.all([
+  234   prisma.expense.count({ where }),
+→ 235   prisma.expense.findMany(
+Can't reach database server at `172.16.3.21:1433`
+
+Please make sure your database server is running at `172.16.3.21:1433`.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async Promise.all (index 1)
+    at listExpenses (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\expenses.service.ts:233:29)
+    at listExpensesHandler (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\controllers\expenses.controller.ts:212:20) {
+  code: 'P1001',
+  meta: { modelName: 'Expense', database_location: '172.16.3.21:1433' },
+  clientVersion: '6.19.2'
+}
+PrismaClientKnownRequestError: 
+Invalid `prisma.branchMetric.count()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\metrics.service.ts:394:25
+
+  391 }
+  392 
+  393 const [total, items] = await Promise.all([
+→ 394   prisma.branchMetric.count(
+Can't reach database server at `172.16.3.21:1433`
+
+Please make sure your database server is running at `172.16.3.21:1433`.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async Promise.all (index 0)
+    at listMetrics (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\metrics.service.ts:393:26)
+    at listMetricsHandler (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\controllers\metrics.controller.ts:202:20) {
+  code: 'P1001',
+  meta: { modelName: 'BranchMetric', database_location: '172.16.3.21:1433' },
+  clientVersion: '6.19.2'
 }
 PrismaClientKnownRequestError: 
 Invalid `prisma.user.findUnique()` invocation in
@@ -98,5 +144,91 @@ Please make sure your database server is running at `172.16.3.21:1433`.
     at requireAuthenticatedUser (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\middlewares\auth.ts:71:18) {
   code: 'P1001',
   meta: { modelName: 'User', database_location: '172.16.3.21:1433' },
+  clientVersion: '6.19.2'
+}
+PrismaClientKnownRequestError: 
+Invalid `prisma.user.findUnique()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\middlewares\auth.ts:71:36
+
+  68   return;
+  69 }
+  70 
+→ 71 const user = await prisma.user.findUnique(
+Can't reach database server at `172.16.3.21:1433`
+
+Please make sure your database server is running at `172.16.3.21:1433`.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at requireAuthenticatedUser (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\middlewares\auth.ts:71:18) {
+  code: 'P1001',
+  meta: { modelName: 'User', database_location: '172.16.3.21:1433' },
+  clientVersion: '6.19.2'
+}
+PrismaClientKnownRequestError: 
+Invalid `prisma.branch.findMany()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\branches.service.ts:366:19
+
+  363 
+  364 const [total, items] = await Promise.all([
+  365   prisma.branch.count({ where }),
+→ 366   prisma.branch.findMany(
+Can't reach database server at `172.16.3.21:1433`
+
+Please make sure your database server is running at `172.16.3.21:1433`.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async Promise.all (index 1)
+    at listBranches (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\branches.service.ts:364:26)
+    at listBranchesHandler (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\controllers\branches.controller.ts:89:20) {
+  code: 'P1001',
+  meta: { modelName: 'Branch', database_location: '172.16.3.21:1433' },
+  clientVersion: '6.19.2'
+}
+PrismaClientKnownRequestError: 
+Invalid `prisma.expense.findMany()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\expenses.service.ts:235:20
+
+  232 
+  233 const [total, expenses] = await Promise.all([
+  234   prisma.expense.count({ where }),
+→ 235   prisma.expense.findMany(
+Can't reach database server at `172.16.3.21:1433`
+
+Please make sure your database server is running at `172.16.3.21:1433`.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async Promise.all (index 1)
+    at listExpenses (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\expenses.service.ts:233:29)
+    at listExpensesHandler (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\controllers\expenses.controller.ts:212:20) {
+  code: 'P1001',
+  meta: { modelName: 'Expense', database_location: '172.16.3.21:1433' },
+  clientVersion: '6.19.2'
+}
+PrismaClientKnownRequestError: 
+Invalid `prisma.branchMetric.findMany()` invocation in
+C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\metrics.service.ts:395:25
+
+  392 
+  393 const [total, items] = await Promise.all([
+  394   prisma.branchMetric.count({ where }),
+→ 395   prisma.branchMetric.findMany(
+Can't reach database server at `172.16.3.21:1433`
+
+Please make sure your database server is running at `172.16.3.21:1433`.
+    at ei.handleRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async Promise.all (index 1)
+    at listMetrics (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\services\metrics.service.ts:393:26)
+    at listMetricsHandler (C:\Users\om526127\Documents\GitHub\Projects\Omari_Branches\omari-branch-system\backend\src\controllers\metrics.controller.ts:202:20) {
+  code: 'P1001',
+  meta: { modelName: 'BranchMetric', database_location: '172.16.3.21:1433' },
   clientVersion: '6.19.2'
 }
