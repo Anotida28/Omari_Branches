@@ -371,6 +371,76 @@ async function processRecurringReminderCandidates(
 }
 
 // ============================================================================
+// Retry
+// ============================================================================
+
+async function retryFailedAlerts(
+  today: Date,
+  recipients: string[],
+  result: AlertJobResult,
+): Promise<void> {
+  const failedLogs = await prisma.alertLog.findMany({
+    where: { triggerLocalDate: today, status: "FAILED" },
+    include: {
+      expense: true,
+      rule: true,
+    },
+  });
+
+  if (failedLogs.length === 0) return;
+
+  console.log(`[AlertJob] Retrying ${failedLogs.length} failed alert(s)...`);
+
+  const branchIds = [...new Set(failedLogs.map((l) => l.expense.branchId))];
+  const retryBranchMap = await loadBranchMap(branchIds);
+
+  for (const log of failedLogs) {
+    if (!recipients.includes(log.sentTo)) continue;
+
+    const alreadySent = await prisma.alertLog.count({
+      where: { expenseId: log.expenseId, ruleId: log.ruleId, triggerLocalDate: today, status: "SENT" },
+    });
+    if (alreadySent > 0) continue;
+
+    const branchName =
+      retryBranchMap.get(log.expense.branchId.toString())?.displayName ??
+      `Branch ${log.expense.branchId}`;
+
+    const payload: AlertEmailPayload = {
+      to: log.sentTo,
+      branchName,
+      expenseType: log.expense.expenseType,
+      period: log.expense.period,
+      dueDate: formatDateString(log.expense.dueDate),
+      amount: formatAmount(Number(log.expense.amount.toString()) || 0),
+      alertType: log.rule.ruleType,
+      dayOffset: log.rule.dayOffset,
+    };
+
+    const sendResult = await sendAlertEmail(payload);
+
+    if (sendResult.success) {
+      result.sentCount++;
+      await prisma.alertLog.create({
+        data: {
+          expenseId: log.expenseId,
+          ruleId: log.ruleId,
+          ruleType: log.ruleType,
+          dayOffset: log.dayOffset,
+          triggerLocalDate: today,
+          sentTo: log.sentTo,
+          status: "SENT",
+          errorMessage: null,
+        },
+      });
+      console.log(`[AlertJob] Retry OK: expense ${log.expenseId} → ${log.sentTo}`);
+    } else {
+      console.error(`[AlertJob] Retry failed: expense ${log.expenseId} → ${log.sentTo}: ${sendResult.error}`);
+    }
+  }
+}
+
+// ============================================================================
 // Main Job Function
 // ============================================================================
 
@@ -484,6 +554,8 @@ export async function runAlertEvaluatorJob(): Promise<AlertJobResult> {
     }
 
     await processRecurringReminderCandidates(recurringCandidates, recipients, result, branchMap);
+
+    await retryFailedAlerts(today, recipients, result);
 
     console.log(`[AlertJob] Completed: sent=${result.sentCount}, failed=${result.failedCount}, skipped=${result.skippedAlreadySent + result.skippedNoRecipients}`);
 

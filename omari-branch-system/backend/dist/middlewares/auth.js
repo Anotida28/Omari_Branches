@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireWriteAccess = exports.requireAuthenticatedUser = void 0;
+exports.requireWriteAccess = exports.requireSuperAdmin = exports.requireAuthenticatedUser = void 0;
 const env_1 = require("../config/env");
 const prisma_1 = require("../db/prisma");
 const token_1 = require("../utils/token");
@@ -69,6 +69,18 @@ const requireAuthenticatedUser = async (req, _res, next) => {
     }
 };
 exports.requireAuthenticatedUser = requireAuthenticatedUser;
+const requireSuperAdmin = (req, _res, next) => {
+    if (!req.authUser) {
+        next(toHttpError("Unauthorized", 401));
+        return;
+    }
+    if (req.authUser.role !== prisma_enums_1.UserRole.SUPER_ADMIN) {
+        next(toHttpError("Forbidden: Super Admin access required", 403));
+        return;
+    }
+    next();
+};
+exports.requireSuperAdmin = requireSuperAdmin;
 const requireWriteAccess = (req, _res, next) => {
     if (READ_ONLY_METHODS.has(req.method.toUpperCase())) {
         next();

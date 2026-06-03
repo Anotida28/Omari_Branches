@@ -25,6 +25,7 @@
 import sql from "mssql";
 
 import { env } from "../config/env";
+import { getSourcePool, isSourceDbConfigured } from "../db/source-db";
 
 const PARAM_BATCH_SIZE = 400;
 
@@ -76,8 +77,6 @@ export type SourceMetricMappingDescription = {
   importedFields: Array<{ source: string; target: string }>;
   defaultedFields: string[];
 };
-
-let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 function normalizeSourceValue(value: unknown): string {
   if (value === null || value === undefined) {
@@ -148,22 +147,6 @@ function getBalanceMatchColumnSql(): "[account_number]" | "[customer_id]" {
     : "[account_number]";
 }
 
-function getSourceConfig(): sql.config {
-  return {
-    server: env.SOURCE_SQL_SERVER ?? "",
-    port: env.SOURCE_SQL_PORT,
-    database: env.SOURCE_SQL_DATABASE ?? "",
-    user: env.SOURCE_SQL_USER ?? "",
-    password: env.SOURCE_SQL_PASSWORD ?? "",
-    options: {
-      encrypt: env.SOURCE_SQL_ENCRYPT,
-      serverName: env.SOURCE_SQL_TLS_SERVER_NAME,
-      trustServerCertificate: env.SOURCE_SQL_TRUST_SERVER_CERTIFICATE,
-    },
-    connectionTimeout: env.SOURCE_SQL_CONNECT_TIMEOUT_MS,
-    requestTimeout: env.SOURCE_SQL_REQUEST_TIMEOUT_MS,
-  };
-}
 
 function chunkValues<T>(values: T[], chunkSize: number): T[][] {
   const chunks: T[][] = [];
@@ -202,12 +185,7 @@ function buildRequestedLineCte(
 }
 
 export function isSourceMetricsConfigured(): boolean {
-  return Boolean(
-    env.SOURCE_SQL_SERVER &&
-      env.SOURCE_SQL_DATABASE &&
-      env.SOURCE_SQL_USER &&
-      env.SOURCE_SQL_PASSWORD,
-  );
+  return isSourceDbConfigured();
 }
 
 export function describeSourceMetricMapping(): SourceMetricMappingDescription {
@@ -266,22 +244,6 @@ export function describeSourceMetricMapping(): SourceMetricMappingDescription {
   };
 }
 
-async function getPool(): Promise<sql.ConnectionPool> {
-  if (!isSourceMetricsConfigured()) {
-    throw new Error("Source SQL metrics connection is not configured.");
-  }
-
-  if (!poolPromise) {
-    poolPromise = new sql.ConnectionPool(getSourceConfig())
-      .connect()
-      .catch((error: unknown) => {
-        poolPromise = null;
-        throw error;
-      });
-  }
-
-  return poolPromise;
-}
 
 export async function findSourceAgentsByLineNumbers(
   lineNumbers: string[],
@@ -298,7 +260,7 @@ export async function findSourceAgentsByLineNumbers(
     return new Map();
   }
 
-  const pool = await getPool();
+  const pool = await getSourcePool();
   const { schema, table } = getSourceSummaryTable();
   const matchColumnSql = getMatchColumnSql();
   const references = new Map<string, SourceAgentReference>();
@@ -367,7 +329,7 @@ export async function fetchSourceAgentMetricRows(params: {
     return [];
   }
 
-  const pool = await getPool();
+  const pool = await getSourcePool();
   const { schema, table } = getSourceSummaryTable();
   const matchColumnSql = getMatchColumnSql();
   const importedRows: SourceAgentMetricRow[] = [];
@@ -475,7 +437,7 @@ async function fetchBalanceRowsFromTable(params: {
         FROM [${params.tableName.schema}].[${params.tableName.table}]
         WHERE [balance_date] >= @dateFrom
           AND [balance_date] <= @dateTo
-          AND LTRIM(RTRIM(CAST(${matchColumnSql} AS VARCHAR(120)))) IN (${inClause})
+          AND ${matchColumnSql} IN (${inClause})
       )
       SELECT
         metricDate,
@@ -521,7 +483,7 @@ export async function fetchSourceAgentBalanceRows(params: {
     return [];
   }
 
-  const pool = await getPool();
+  const pool = await getSourcePool();
   const balanceMatchColumnSql = getBalanceMatchColumnSql();
   const [historicalRows, currentRows] = await Promise.all([
     fetchBalanceRowsFromTable({

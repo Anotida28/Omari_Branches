@@ -1,6 +1,7 @@
 import sql from "mssql";
 
 import { env } from "../config/env";
+import { getSourcePool, isSourceDbConfigured } from "../db/source-db";
 import { walletCached } from "../utils/wallet-cache";
 
 export class WalletServiceError extends Error {
@@ -554,8 +555,6 @@ export const USE_CASE_TYPES: Record<string, Partial<Record<Currency, readonly st
   },
 };
 
-let poolPromise: Promise<sql.ConnectionPool> | null = null;
-
 function parseQualifiedTableName(value: string): QualifiedTableName {
   const [schema, table] = value.split(".");
   return { schema, table };
@@ -583,6 +582,12 @@ function daysBetween(start: Date, end: Date): number {
   return Math.max(0, Math.floor((endDate.getTime() - startDate.getTime()) / 86_400_000));
 }
 
+const DAILY_GRAIN_MAX_DAYS = 60;
+
+function useDailyGrain(dateFrom: Date, dateTo: Date): boolean {
+  return daysBetween(dateFrom, dateTo) <= DAILY_GRAIN_MAX_DAYS;
+}
+
 function getDormancyStatus(daysSinceLastActivity: number): WalletCustomer360Summary["dormancyStatus"] {
   if (daysSinceLastActivity > 90) return "dormant";
   if (daysSinceLastActivity > 30) return "watch";
@@ -597,47 +602,15 @@ function toNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function getSourceConfig(): sql.config {
-  return {
-    server: env.SOURCE_SQL_SERVER ?? "",
-    port: env.SOURCE_SQL_PORT,
-    database: env.SOURCE_SQL_DATABASE ?? "",
-    user: env.SOURCE_SQL_USER ?? "",
-    password: env.SOURCE_SQL_PASSWORD ?? "",
-    options: {
-      encrypt: env.SOURCE_SQL_ENCRYPT,
-      trustServerCertificate: env.SOURCE_SQL_TRUST_SERVER_CERTIFICATE,
-      serverName: env.SOURCE_SQL_TLS_SERVER_NAME,
-    },
-    connectionTimeout: env.SOURCE_SQL_CONNECT_TIMEOUT_MS,
-    requestTimeout: env.SOURCE_SQL_REQUEST_TIMEOUT_MS,
-  };
-}
-
 function ensureSourceConfigured(): void {
-  if (
-    !env.SOURCE_SQL_SERVER ||
-    !env.SOURCE_SQL_DATABASE ||
-    !env.SOURCE_SQL_USER ||
-    !env.SOURCE_SQL_PASSWORD
-  ) {
+  if (!isSourceDbConfigured()) {
     throw new WalletServiceError("Source SQL metrics connection is not configured.", 503);
   }
 }
 
 async function getPool(): Promise<sql.ConnectionPool> {
   ensureSourceConfigured();
-
-  if (!poolPromise) {
-    poolPromise = new sql.ConnectionPool(getSourceConfig())
-      .connect()
-      .catch((error: unknown) => {
-        poolPromise = null;
-        throw error;
-      });
-  }
-
-  return poolPromise;
+  return getSourcePool();
 }
 
 // Build safe SQL IN list from hardcoded constant string arrays only
@@ -2117,30 +2090,29 @@ async function _getWalletCustomerActivityGrowth(
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
 
+  const dailyEnabled = useDailyGrain(dateFrom, dateTo);
+
   const [dailyTrendRaw, monthlyTrendRaw, frequencyBuckets] = await Promise.all([
-    queryActivityTrend({ currency, dateFrom, dateTo, grain: "daily" }),
+    dailyEnabled ? queryActivityTrend({ currency, dateFrom, dateTo, grain: "daily" }) : Promise.resolve([]),
     queryActivityTrend({ currency, dateFrom, dateTo, grain: "monthly" }),
     queryFrequencyBuckets({ currency, dateFrom, dateTo }),
   ]);
 
-  const dailyTrend = dailyTrendRaw.map((row) => ({
+  const mapActivityRow = (row: { period: string; activeCustomers: number; newCustomers: number; transactionVolume: number }) => ({
     period: row.period,
     activeCustomers: row.activeCustomers,
     newCustomers: row.newCustomers,
     returningCustomers: Math.max(0, row.activeCustomers - row.newCustomers),
     transactionVolume: row.transactionVolume,
-  }));
-  const monthlyTrend = monthlyTrendRaw.map((row) => ({
-    period: row.period,
-    activeCustomers: row.activeCustomers,
-    newCustomers: row.newCustomers,
-    returningCustomers: Math.max(0, row.activeCustomers - row.newCustomers),
-    transactionVolume: row.transactionVolume,
-  }));
+  });
 
+  const dailyTrend = dailyTrendRaw.map(mapActivityRow);
+  const monthlyTrend = monthlyTrendRaw.map(mapActivityRow);
+
+  const kpiSource = dailyEnabled ? dailyTrend : monthlyTrend;
   const totalActiveCustomers = frequencyBuckets.reduce((sum, b) => sum + b.customers, 0);
-  const newCustomers = dailyTrend.reduce((sum, p) => sum + p.newCustomers, 0);
-  const transactionVolume = dailyTrend.reduce((sum, p) => sum + p.transactionVolume, 0);
+  const newCustomers = kpiSource.reduce((sum, p) => sum + p.newCustomers, 0);
+  const transactionVolume = kpiSource.reduce((sum, p) => sum + p.transactionVolume, 0);
 
   return {
     period: { dateFrom: formatDate(dateFrom), dateTo: formatDate(dateTo) },
@@ -2209,9 +2181,11 @@ async function _getWalletTransactionPerformance(
   const dateTo = normalizeDateOnly(input.dateTo);
   const useCaseFilter = buildUseCaseFilter(input.useCase, currency);
 
+  const dailyEnabled = useDailyGrain(dateFrom, dateTo);
+
   const [kpis, dailyTrend, monthlyTrend, distribution, profitabilityByDepositMethod] = await Promise.all([
     queryTransactionPerformanceKpis({ currency, dateFrom, dateTo, useCaseFilter }),
-    queryTransactionPerformanceTrend({ currency, dateFrom, dateTo, grain: "daily", useCaseFilter }),
+    dailyEnabled ? queryTransactionPerformanceTrend({ currency, dateFrom, dateTo, grain: "daily", useCaseFilter }) : Promise.resolve([]),
     queryTransactionPerformanceTrend({ currency, dateFrom, dateTo, grain: "monthly", useCaseFilter }),
     queryTransactionDistribution({ currency, dateFrom, dateTo, useCaseFilter }),
     queryDepositMethodProfitability({ currency, dateFrom, dateTo }),
@@ -2243,9 +2217,11 @@ async function _getWalletRevenuePerformance(
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
 
+  const dailyEnabled = useDailyGrain(dateFrom, dateTo);
+
   const [kpis, dailyTrend, monthlyTrend] = await Promise.all([
     queryRevenuePerformanceKpis({ currency, dateFrom, dateTo }),
-    queryRevenuePerformanceTrend({ currency, dateFrom, dateTo, grain: "daily" }),
+    dailyEnabled ? queryRevenuePerformanceTrend({ currency, dateFrom, dateTo, grain: "daily" }) : Promise.resolve([]),
     queryRevenuePerformanceTrend({ currency, dateFrom, dateTo, grain: "monthly" }),
   ]);
 
@@ -2678,9 +2654,11 @@ async function _getWalletVisaAnalytics(input: WalletVisaAnalyticsInput): Promise
   const dateFrom = normalizeDateOnly(input.dateFrom);
   const dateTo = normalizeDateOnly(input.dateTo);
 
+  const dailyEnabled = useDailyGrain(dateFrom, dateTo);
+
   const [kpis, dailyTrend, monthlyTrend, typeBreakdown] = await Promise.all([
     queryVisaKpis({ currency, dateFrom, dateTo }),
-    queryVisaTrend({ currency, dateFrom, dateTo, grain: "daily" }),
+    dailyEnabled ? queryVisaTrend({ currency, dateFrom, dateTo, grain: "daily" }) : Promise.resolve([]),
     queryVisaTrend({ currency, dateFrom, dateTo, grain: "monthly" }),
     queryVisaTypeBreakdown({ currency, dateFrom, dateTo }),
   ]);

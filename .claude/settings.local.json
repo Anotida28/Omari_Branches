@@ -19,7 +19,8 @@
       "Bash(npx tsc *)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
       "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
-      "Bash(npx ts-node *)"
+      "Bash(npx ts-node *)",
+      "Bash(sqlcmd -S \"172.16.3.21,1433\" -d \"Omari-Branches\" -U \"Devuser\" -P \"RuvaMakoAno28\" -Q \"SELECT name FROM sys.tables;\")"
     ]
   }
 }

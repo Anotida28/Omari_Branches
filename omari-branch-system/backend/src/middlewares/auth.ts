@@ -95,6 +95,24 @@ export const requireAuthenticatedUser: RequestHandler = async (
   }
 };
 
+export const requireSuperAdmin: RequestHandler = (
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void => {
+  if (!req.authUser) {
+    next(toHttpError("Unauthorized", 401));
+    return;
+  }
+
+  if (req.authUser.role !== UserRole.SUPER_ADMIN) {
+    next(toHttpError("Forbidden: Super Admin access required", 403));
+    return;
+  }
+
+  next();
+};
+
 export const requireWriteAccess: RequestHandler = (
   req: Request,
   _res: Response,

@@ -34,6 +34,10 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).optional(),
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  FRONTEND_URL: z.preprocess(
+    normalizeOptionalString,
+    z.string().url().optional(),
+  ),
   ACCESS_GATEWAY_ENABLED: z.preprocess(
     normalizeOptionalBoolean,
     z.boolean().default(true),
