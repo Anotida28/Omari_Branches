@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, CircleDollarSign, Receipt, Search, UserCheck, UserRound } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, CircleDollarSign, Database, Receipt, Search, UserCheck, UserRound } from "lucide-react";
 import { useEffect } from "react";
 import {
   Alert,
@@ -38,8 +38,10 @@ import { useSearchParams } from "react-router-dom";
 
 import { chartPalette, glassPanelSx } from "../app/theme";
 import { getErrorMessage } from "../services/api";
+import { fetchSnapshotStatus, triggerSnapshotSync } from "../services/admin";
 import { formatCurrency, formatDate } from "../services/format";
 import { fetchWalletCustomer360Detail, fetchWalletCustomer360List } from "../services/wallet";
+import { useAuth } from "../hooks/useAuth";
 import { FilterBar } from "../shared/components/FilterBar";
 import { FocusDialog } from "../shared/components/FocusDialog";
 import { StatCard } from "../shared/components/StatCard";
@@ -141,6 +143,23 @@ export default function WalletCustomer360Page() {
   const [focusedChart, setFocusedChart] = useState<"valueTrend" | "depositVs" | null>(null);
   const [valueTrendMode, setValueTrendMode] = useState<ChartMode>("line");
   const [depositVsMode, setDepositVsMode] = useState<ChartMode>("bar");
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
+
+  const snapshotQuery = useQuery({
+    queryKey: ["admin", "wallet-snapshot-status"],
+    queryFn: fetchSnapshotStatus,
+    staleTime: 60 * 1000,
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: triggerSnapshotSync,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin", "wallet-snapshot-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["wallet", "customer-360"] });
+    },
+  });
 
   const initialDateTo = toInputDate(new Date());
   const initialDateFrom = toInputDate(shiftDays(new Date(), -29));
@@ -199,8 +218,41 @@ export default function WalletCustomer360Page() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const snapshotRefreshedAt = snapshotQuery.data?.refreshedAt
+    ? new Date(snapshotQuery.data.refreshedAt).toLocaleString()
+    : null;
+  const snapshotIsStale = snapshotQuery.data?.isStale ?? false;
+  const snapshotCount = snapshotQuery.data?.customerCount ?? 0;
+
   return (
     <section className="space-y-5 motion-fade-up">
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Database size={14} style={{ opacity: 0.5 }} />
+          {snapshotCount > 0 ? (
+            <Typography variant="caption" color={snapshotIsStale ? "warning.main" : "text.secondary"}>
+              Snapshot: {snapshotCount.toLocaleString()} customers
+              {snapshotRefreshedAt ? ` · refreshed ${snapshotRefreshedAt}` : ""}
+              {snapshotIsStale ? " · stale" : ""}
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="warning.main">
+              Snapshot not populated — showing live data (slow)
+            </Typography>
+          )}
+        </Stack>
+        {isSuperAdmin && (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={syncMutation.isPending ? undefined : <Database size={14} />}
+            disabled={syncMutation.isPending}
+            onClick={() => syncMutation.mutate()}
+          >
+            {syncMutation.isPending ? "Syncing…" : "Sync Snapshot"}
+          </Button>
+        )}
+      </Stack>
       <FilterBar>
         <Stack direction={{ xs: "column", xl: "row" }} spacing={1.2} alignItems={{ xs: "stretch", xl: "center" }}>
           <ButtonGroup size="small" variant="outlined">

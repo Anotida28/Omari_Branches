@@ -1,7 +1,9 @@
 import sql from "mssql";
+import { Prisma } from "@prisma/client";
 
 import { env } from "../config/env";
 import { getSourcePool, isSourceDbConfigured } from "../db/source-db";
+import { prisma } from "../db/prisma";
 import { walletCached } from "../utils/wallet-cache";
 
 export class WalletServiceError extends Error {
@@ -2274,12 +2276,92 @@ async function _getWalletLiquidity(
   };
 }
 
+async function listCustomer360FromSnapshot(
+  input: WalletCustomer360ListInput,
+  asOfDate: Date,
+  page: number,
+  pageSize: number,
+): Promise<WalletCustomer360ListResponse | null> {
+  const snapshotCount = await prisma.walletCustomerActivitySnapshot.count();
+  if (snapshotCount === 0) return null;
+
+  const search = input.search?.trim();
+  const status = input.status ?? "all";
+  const dormantCutoff = addDays(asOfDate, -90);
+  const activeCutoff = addDays(asOfDate, -29);
+
+  const where: Prisma.WalletCustomerActivitySnapshotWhereInput = {
+    ...(search
+      ? {
+          OR: [
+            { customerId: { contains: search } },
+            { fullName: { contains: search } },
+            { mobileNumber: { contains: search } },
+          ],
+        }
+      : {}),
+    ...(status === "active_a30"
+      ? { lastSeenDate: { gte: activeCutoff, lte: asOfDate } }
+      : status === "dormant_90"
+        ? { lastSeenDate: { lt: dormantCutoff } }
+        : {}),
+  };
+
+  const [total, rows] = await Promise.all([
+    prisma.walletCustomerActivitySnapshot.count({ where }),
+    prisma.walletCustomerActivitySnapshot.findMany({
+      where,
+      orderBy: { lifetimeTransactionValue: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+  ]);
+
+  const latestRefresh = await prisma.walletCustomerActivitySnapshot.findFirst({
+    orderBy: { refreshedAt: "desc" },
+    select: { refreshedAt: true },
+  });
+
+  const items: WalletCustomer360Summary[] = rows.map((row) => {
+    const lastSeenDate = row.lastSeenDate;
+    const daysSinceLastActivity = daysBetween(lastSeenDate, asOfDate);
+    return {
+      customerId: row.customerId,
+      fullName: row.fullName,
+      mobileNumber: row.mobileNumber,
+      firstSeenDate: formatDate(row.firstSeenDate),
+      lastSeenDate: formatDate(lastSeenDate),
+      daysSinceLastActivity,
+      dormancyStatus: getDormancyStatus(daysSinceLastActivity),
+      lifetimeTransactionValue: Number(row.lifetimeTransactionValue),
+      lifetimeTransactionVolume: row.lifetimeTransactionVolume,
+      lifetimeCommission: Number(row.lifetimeCommission),
+      last30DayTransactionValue: Number(row.last30DayTransactionValue),
+      last60DayTransactionValue: Number(row.last60DayTransactionValue),
+    };
+  });
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    metadata: {
+      dataFreshnessTimestamp: latestRefresh?.refreshedAt.toISOString() ?? new Date().toISOString(),
+    },
+  };
+}
+
 async function _listWalletCustomer360(
   input: WalletCustomer360ListInput,
 ): Promise<WalletCustomer360ListResponse> {
   const asOfDate = normalizeDateOnly(input.asOfDate);
   const page = Math.max(1, Math.trunc(input.page));
   const pageSize = Math.min(100, Math.max(5, Math.trunc(input.pageSize)));
+
+  // Use snapshot when populated — falls back to live source DB query when empty.
+  const fromSnapshot = await listCustomer360FromSnapshot(input, asOfDate, page, pageSize);
+  if (fromSnapshot) return fromSnapshot;
 
   const { items, total } = await queryCustomer360List({
     currency: input.currency,

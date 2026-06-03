@@ -16,6 +16,7 @@ import {
   runSourceMetricsSyncJobWithLock,
   shouldEnableSourceMetricsSync,
 } from "./source-metrics-sync.job";
+import { runWalletSnapshotJobWithLock } from "./wallet-snapshot.job";
 
 // ============================================================================
 // Types
@@ -41,9 +42,10 @@ const scheduledJobs: ScheduledJob[] = [];
  * Daily at 08:00 Africa/Harare (UTC+2)
  * Since node-cron uses system timezone, we run at 06:00 UTC = 08:00 Harare
  */
-const DAILY_ALERT_CRON = "0 6 * * *";         // 06:00 UTC = 08:00 Harare (UTC+2)
-const DAILY_BRANCH_REPORT_CRON = "0 6 * * *"; // 06:00 UTC = 08:00 Harare (UTC+2)
-const DAILY_WALLET_REPORT_CRON = "0 6 * * *"; // 06:00 UTC = 08:00 Harare (UTC+2)
+const DAILY_ALERT_CRON = "0 6 * * *";                // 06:00 UTC = 08:00 Harare (UTC+2)
+const DAILY_BRANCH_REPORT_CRON = "0 6 * * *";        // 06:00 UTC = 08:00 Harare (UTC+2)
+const DAILY_WALLET_REPORT_CRON = "0 6 * * *";        // 06:00 UTC = 08:00 Harare (UTC+2)
+const WALLET_SNAPSHOT_CRON = "0 3 * * 0";            // 03:00 UTC Sunday = 05:00 Harare (weekly)
 const SOURCE_METRICS_SYNC_CRON = env.SOURCE_SQL_SYNC_CRON;
 
 // ============================================================================
@@ -160,6 +162,30 @@ async function runDailyWalletReports(): Promise<void> {
   }
 }
 
+async function runWeeklyWalletSnapshot(): Promise<void> {
+  console.log(`[Scheduler] Running wallet customer snapshot sync at ${new Date().toISOString()}`);
+
+  const { executed, result, error } = await runWalletSnapshotJobWithLock();
+
+  if (!executed) {
+    console.log(`[Scheduler] Wallet snapshot job skipped - another instance is running`);
+    return;
+  }
+
+  if (error) {
+    console.error(`[Scheduler] Wallet snapshot job failed:`, error);
+    return;
+  }
+
+  if (result) {
+    console.log(`[Scheduler] Wallet snapshot job completed:`, {
+      customers: result.customerCount,
+      durationMs: result.durationMs,
+      refreshedAt: result.refreshedAt,
+    });
+  }
+}
+
 // ============================================================================
 // Scheduler Management
 // ============================================================================
@@ -193,6 +219,13 @@ export function startScheduler(): void {
     name: "daily-wallet-report-emailer",
     cronExpression: DAILY_WALLET_REPORT_CRON,
     task: walletReportTask,
+  });
+
+  const walletSnapshotTask = cron.schedule(WALLET_SNAPSHOT_CRON, runWeeklyWalletSnapshot);
+  scheduledJobs.push({
+    name: "wallet-customer-snapshot",
+    cronExpression: WALLET_SNAPSHOT_CRON,
+    task: walletSnapshotTask,
   });
 
   if (shouldEnableSourceMetricsSync()) {

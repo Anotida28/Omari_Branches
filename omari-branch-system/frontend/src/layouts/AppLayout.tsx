@@ -40,6 +40,7 @@ import {
   SidebarOpen,
   UserRound,
   Users,
+  UserCog,
   Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -200,16 +201,37 @@ const navItems = navSections.flatMap((section) => section.items);
 const EXPANDED_WIDTH = 280;
 const COLLAPSED_WIDTH = 88;
 
+const NAV_ITEM_SX = {
+  mb: 0.7,
+  minHeight: 44,
+  borderRadius: 2.5,
+  px: 1.2,
+  justifyContent: "center",
+  color: "text.secondary",
+  "&.active": {
+    bgcolor: "primary.main",
+    color: "primary.contrastText",
+    boxShadow: "0 10px 20px rgba(12, 95, 63, 0.26)",
+    "& .MuiListItemIcon-root": { color: "primary.contrastText" },
+  },
+  "&:not(.active):hover": {
+    bgcolor: "rgba(12, 95, 63, 0.11)",
+    color: "text.primary",
+  },
+} as const;
+
 function SidebarLinks({
   collapsed,
   expandedSections,
   onToggleSection,
   onNavigate,
+  isSuperAdmin,
 }: {
   collapsed: boolean;
   expandedSections: Record<string, boolean>;
   onToggleSection: (sectionId: string) => void;
   onNavigate?: () => void;
+  isSuperAdmin: boolean;
 }) {
   if (collapsed) {
     return (
@@ -255,6 +277,20 @@ function SidebarLinks({
             </ListItemButton>
           );
         })}
+        {isSuperAdmin && (
+          <Tooltip title="User Management" placement="right">
+            <ListItemButton
+              component={NavLink}
+              to="/users"
+              onClick={onNavigate}
+              sx={NAV_ITEM_SX}
+            >
+              <ListItemIcon sx={{ minWidth: 0, justifyContent: "center", color: "inherit" }}>
+                <UserCog size={18} />
+              </ListItemIcon>
+            </ListItemButton>
+          </Tooltip>
+        )}
       </List>
     );
   }
@@ -358,6 +394,42 @@ function SidebarLinks({
           </Box>
         );
       })}
+
+      {isSuperAdmin && (
+        <>
+          <Divider sx={{ my: 0.8 }} />
+          <ListItemButton
+            component={NavLink}
+            to="/users"
+            onClick={onNavigate}
+            sx={{
+              mb: 0.5,
+              minHeight: 44,
+              borderRadius: 2.5,
+              px: 1.6,
+              color: "text.secondary",
+              "&.active": {
+                bgcolor: "primary.main",
+                color: "primary.contrastText",
+                boxShadow: "0 10px 20px rgba(12, 95, 63, 0.26)",
+                "& .MuiListItemIcon-root": { color: "primary.contrastText" },
+              },
+              "&:not(.active):hover": {
+                bgcolor: "rgba(12, 95, 63, 0.11)",
+                color: "text.primary",
+              },
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 34, justifyContent: "center", color: "inherit" }}>
+              <UserCog size={18} />
+            </ListItemIcon>
+            <ListItemText
+              primary="User Management"
+              primaryTypographyProps={{ fontSize: 14, fontWeight: 600 }}
+            />
+          </ListItemButton>
+        </>
+      )}
     </List>
   );
 }
@@ -382,8 +454,9 @@ export default function AppLayout() {
     [collapsed, isMobile],
   );
   const currentPage = useMemo(() => {
-    if (location.pathname === "/") {
-      return navItems[0];
+    if (location.pathname === "/") return navItems[0];
+    if (location.pathname.startsWith("/users")) {
+      return { label: "User Management", subtitle: "Manage system access, roles, and user accounts" };
     }
     return navItems.find((item) => item.to !== "/" && location.pathname.startsWith(item.to)) ?? navItems[0];
   }, [location.pathname]);
@@ -420,6 +493,7 @@ export default function AppLayout() {
         expandedSections={expandedSections}
         onToggleSection={handleToggleSection}
         onNavigate={isMobile ? () => setMobileOpen(false) : undefined}
+        isSuperAdmin={user?.role === "SUPER_ADMIN"}
       />
       <Box sx={{ mt: "auto" }}>
         <Divider />

@@ -2,6 +2,8 @@ import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
 
 import { sendEmail } from "../services/email.service";
+import { runWalletSnapshotJobWithLock } from "../jobs/wallet-snapshot.job";
+import { getSnapshotStatus } from "../services/wallet-snapshot-sync.service";
 
 const testEmailSchema = z
   .object({
@@ -63,5 +65,42 @@ export async function sendTestEmailHandler(
       error: "Email delivery failed",
       details,
     });
+  }
+}
+
+export async function getWalletSnapshotStatusHandler(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const status = await getSnapshotStatus();
+    res.json({ data: status });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function triggerWalletSnapshotHandler(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { executed, result, error } = await runWalletSnapshotJobWithLock();
+
+    if (!executed) {
+      res.status(409).json({ error: "Snapshot sync is already running" });
+      return;
+    }
+
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+
+    res.json({ ok: true, data: result });
+  } catch (error) {
+    next(error);
   }
 }

@@ -21,6 +21,8 @@ import WalletRevenuePerformancePage from "../pages/WalletRevenuePerformancePage"
 import WalletTransactionPerformancePage from "../pages/WalletTransactionPerformancePage";
 import WalletVisaAnalyticsPage from "../pages/WalletVisaAnalyticsPage";
 import { ProtectedRoute } from "./ProtectedRoute";
+import { SuperAdminRoute } from "./SuperAdminRoute";
+import UsersPage from "../pages/UsersPage";
 
 const TrendsPage = lazy(() => import("../pages/TrendsPage"));
 
@@ -80,6 +82,14 @@ export function AppRoutes() {
         <Route path="/wallet/customer-360" element={<WalletCustomer360Page />} />
         <Route path="/wallet/insights-alerts" element={<WalletInsightsAlertsPage />} />
         <Route path="/wallet/visa-analytics" element={<WalletVisaAnalyticsPage />} />
+        <Route
+          path="/users"
+          element={
+            <SuperAdminRoute>
+              <UsersPage />
+            </SuperAdminRoute>
+          }
+        />
       </Route>
 
       <Route
