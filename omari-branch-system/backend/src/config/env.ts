@@ -38,6 +38,10 @@ const envSchema = z.object({
     normalizeOptionalString,
     z.string().url().optional(),
   ),
+  AUTH_EXTERNAL_ENABLED: z.preprocess(
+    normalizeOptionalBoolean,
+    z.boolean().default(true),
+  ),
   ACCESS_GATEWAY_ENABLED: z.preprocess(
     normalizeOptionalBoolean,
     z.boolean().default(true),

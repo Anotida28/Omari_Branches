@@ -81,7 +81,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/wallet", walletLimiter);
 app.use("/api", apiLimiter, requireAuthenticatedUser, requireWriteAccess, routes);
 
-if (hasFrontendBuild) {
+if (env.NODE_ENV === "production" && hasFrontendBuild) {
   app.use(express.static(frontendDistPath));
 
   // SPA fallback: let non-API routes resolve to the built frontend app.
