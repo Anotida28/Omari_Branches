@@ -107,7 +107,7 @@ app.get("/health", async (_req, res) => {
 app.use("/api/auth", auth_routes_1.default);
 app.use("/api/wallet", walletLimiter);
 app.use("/api", apiLimiter, auth_1.requireAuthenticatedUser, auth_1.requireWriteAccess, routes_1.default);
-if (hasFrontendBuild) {
+if (env_1.env.NODE_ENV === "production" && hasFrontendBuild) {
     app.use(express_1.default.static(frontendDistPath));
     // SPA fallback: let non-API routes resolve to the built frontend app.
     app.get("*", (req, res, next) => {

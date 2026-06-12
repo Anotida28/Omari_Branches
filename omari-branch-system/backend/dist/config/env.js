@@ -34,6 +34,7 @@ const envSchema = zod_1.z.object({
     PORT: zod_1.z.coerce.number().int().positive().default(4000),
     DATABASE_URL: zod_1.z.string().min(1, "DATABASE_URL is required"),
     FRONTEND_URL: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().url().optional()),
+    AUTH_EXTERNAL_ENABLED: zod_1.z.preprocess(normalizeOptionalBoolean, zod_1.z.boolean().default(true)),
     ACCESS_GATEWAY_ENABLED: zod_1.z.preprocess(normalizeOptionalBoolean, zod_1.z.boolean().default(true)),
     AUTH_EXTERNAL_URL: zod_1.z.string().url().default("http://180.10.1.222:3002/authenticate/login"),
     AUTH_EXTERNAL_TIMEOUT_MS: zod_1.z.coerce.number().int().min(500).max(60000).default(8000),

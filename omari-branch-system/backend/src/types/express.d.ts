@@ -7,6 +7,7 @@ declare global {
         id: bigint;
         username: string;
         role: UserRole;
+        name?: string;
       };
     }
   }

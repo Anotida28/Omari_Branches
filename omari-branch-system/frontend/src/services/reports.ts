@@ -1,16 +1,5 @@
-import { listBranches } from "./branches";
-import { listExpenses } from "./expenses";
-import { toMoneyNumber } from "./format";
-import { listMetrics } from "./metrics";
-import type {
-  Branch,
-  BranchMetric,
-  Expense,
-  ExpenseType,
-  PaginatedResponse,
-} from "../types/api";
-
-const PAGE_SIZE = 100;
+import { api } from "./api";
+import type { ExpenseType } from "../types/api";
 
 export type ReportsFilters = {
   branchId?: string;
@@ -76,93 +65,15 @@ export type ReportsData = {
   expenses: ReportExpenseLine[];
 };
 
-type BranchSummaryAccumulator = {
-  branchId: string;
-  branchName: string;
-  expenseCount: number;
-  totalAmount: number;
-};
-
-type PerformanceSummaryAccumulator = {
-  branchId: string;
-  branchName: string;
-  metricsCount: number;
-  totalCashInValue: number;
-  totalCashOutValue: number;
-  totalTransactionValue: number;
-  totalCommission: number;
-  latestEFloatBalance: number;
-  latestMetricDate: string | null;
-};
-
-type TypeSummaryAccumulator = {
-  expenseType: ExpenseType;
-  expenseCount: number;
-  totalAmount: number;
-};
-
-async function fetchAllPages<T>(
-  fetchPage: (page: number, pageSize: number) => Promise<PaginatedResponse<T>>,
-): Promise<T[]> {
-  const items: T[] = [];
-  let page = 1;
-  let total = 0;
-
-  do {
-    const response = await fetchPage(page, PAGE_SIZE);
-    items.push(...response.items);
-    total = response.total;
-    page += 1;
-  } while ((page - 1) * PAGE_SIZE < total);
-
-  return items;
-}
-
-function toUtcDateOnly(value: string): Date {
-  const parsed = new Date(value);
-  return new Date(
-    Date.UTC(
-      parsed.getUTCFullYear(),
-      parsed.getUTCMonth(),
-      parsed.getUTCDate(),
-    ),
-  );
-}
-
-function isDueDateInRange(dueDate: string, dateFrom: string, dateTo: string): boolean {
-  const due = toUtcDateOnly(dueDate);
-  const from = toUtcDateOnly(dateFrom);
-  const to = toUtcDateOnly(dateTo);
-  return due.getTime() >= from.getTime() && due.getTime() <= to.getTime();
-}
-
-function toExpenseLine(expense: Expense, branchNameById: Map<string, string>): ReportExpenseLine {
-  return {
-    id: expense.id,
-    branchId: expense.branchId,
-    branchName: branchNameById.get(expense.branchId) ?? expense.branchId,
-    expenseType: expense.expenseType,
-    period: expense.period,
-    dueDate: expense.dueDate,
-    amount: toMoneyNumber(expense.amount),
-    vendor: expense.vendor,
-    currency: expense.currency,
-  };
-}
-
-function computeLatestEFloatBalance(metrics: BranchMetric[]): number {
-  if (metrics.length === 0) {
-    return 0;
-  }
-
-  const latestDate = metrics.reduce(
-    (latest, metric) => (metric.date > latest ? metric.date : latest),
-    metrics[0].date,
-  );
-
-  return metrics
-    .filter((metric) => metric.date === latestDate)
-    .reduce((sum, metric) => sum + toMoneyNumber(metric.eFloatBalance), 0);
+export async function fetchReportsData(filters: ReportsFilters): Promise<ReportsData> {
+  const { data } = await api.get<{ data: ReportsData }>("/api/reports/data", {
+    params: {
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      ...(filters.branchId ? { branchId: filters.branchId } : {}),
+    },
+  });
+  return data.data;
 }
 
 function toCsv(rows: string[][]): string {
@@ -173,146 +84,6 @@ function toCsv(rows: string[][]): string {
         .join(","),
     )
     .join("\n");
-}
-
-export async function fetchReportsData(filters: ReportsFilters): Promise<ReportsData> {
-  const [branches, expenses, metrics] = await Promise.all([
-    fetchAllPages((page, pageSize) => listBranches({ page, pageSize })),
-    fetchAllPages((page, pageSize) =>
-      listExpenses({
-        page,
-        pageSize,
-        branchId: filters.branchId,
-      }),
-    ),
-    fetchAllPages((page, pageSize) =>
-      listMetrics({
-        page,
-        pageSize,
-        branchId: filters.branchId,
-        dateFrom: filters.dateFrom,
-        dateTo: filters.dateTo,
-      }),
-    ),
-  ]);
-
-  const branchNameById = new Map(
-    branches.map((branch: Branch) => [branch.id, branch.displayName]),
-  );
-
-  const expensesInRange = expenses
-    .filter((expense) => isDueDateInRange(expense.dueDate, filters.dateFrom, filters.dateTo))
-    .map((expense) => toExpenseLine(expense, branchNameById))
-    .sort((a, b) => b.dueDate.localeCompare(a.dueDate));
-
-  const branchSummaryMap = new Map<string, BranchSummaryAccumulator>();
-  const performanceSummaryMap = new Map<string, PerformanceSummaryAccumulator>();
-  const typeSummaryMap = new Map<ExpenseType, TypeSummaryAccumulator>();
-
-  let totalAmount = 0;
-
-  for (const expense of expensesInRange) {
-    totalAmount += expense.amount;
-
-    const branchSummary = branchSummaryMap.get(expense.branchId) ?? {
-      branchId: expense.branchId,
-      branchName: expense.branchName,
-      expenseCount: 0,
-      totalAmount: 0,
-    };
-
-    branchSummary.expenseCount += 1;
-    branchSummary.totalAmount += expense.amount;
-    branchSummaryMap.set(expense.branchId, branchSummary);
-
-    const typeSummary = typeSummaryMap.get(expense.expenseType) ?? {
-      expenseType: expense.expenseType,
-      expenseCount: 0,
-      totalAmount: 0,
-    };
-    typeSummary.expenseCount += 1;
-    typeSummary.totalAmount += expense.amount;
-    typeSummaryMap.set(expense.expenseType, typeSummary);
-  }
-
-  for (const metric of metrics) {
-    const branchName = branchNameById.get(metric.branchId) ?? metric.branchId;
-    const performanceSummary = performanceSummaryMap.get(metric.branchId) ?? {
-      branchId: metric.branchId,
-      branchName,
-      metricsCount: 0,
-      totalCashInValue: 0,
-      totalCashOutValue: 0,
-      totalTransactionValue: 0,
-      totalCommission: 0,
-      latestEFloatBalance: 0,
-      latestMetricDate: null,
-    };
-
-    performanceSummary.metricsCount += 1;
-    performanceSummary.totalCashInValue += toMoneyNumber(metric.cashInValue);
-    performanceSummary.totalCashOutValue += toMoneyNumber(metric.cashOutValue);
-    performanceSummary.totalTransactionValue += toMoneyNumber(metric.totalTransactionValue);
-    performanceSummary.totalCommission += toMoneyNumber(metric.totalCommission);
-
-    if (!performanceSummary.latestMetricDate || metric.date > performanceSummary.latestMetricDate) {
-      performanceSummary.latestMetricDate = metric.date;
-      performanceSummary.latestEFloatBalance = toMoneyNumber(metric.eFloatBalance);
-    }
-
-    performanceSummaryMap.set(metric.branchId, performanceSummary);
-  }
-
-  const branchSummary = [...branchSummaryMap.values()].sort(
-    (a, b) => b.totalAmount - a.totalAmount,
-  );
-
-  const performanceSummary = [...performanceSummaryMap.values()]
-    .map(({ latestMetricDate: _latestMetricDate, ...row }) => row)
-    .sort((a, b) => b.totalTransactionValue - a.totalTransactionValue);
-
-  const expenseTypeSummary = [...typeSummaryMap.values()].sort(
-    (a, b) => b.totalAmount - a.totalAmount,
-  );
-
-  const totalCashInValue = metrics.reduce(
-    (sum, metric) => sum + toMoneyNumber(metric.cashInValue),
-    0,
-  );
-  const totalCashOutValue = metrics.reduce(
-    (sum, metric) => sum + toMoneyNumber(metric.cashOutValue),
-    0,
-  );
-  const totalTransactionValue = metrics.reduce(
-    (sum, metric) => sum + toMoneyNumber(metric.totalTransactionValue),
-    0,
-  );
-  const totalCommission = metrics.reduce(
-    (sum, metric) => sum + toMoneyNumber(metric.totalCommission),
-    0,
-  );
-
-  return {
-    generatedAt: new Date().toISOString(),
-    filters,
-    availableBranches: branches
-      .map((branch) => ({ id: branch.id, displayName: branch.displayName }))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName)),
-    totals: {
-      expenseCount: expensesInRange.length,
-      totalAmount,
-      metricsCount: metrics.length,
-      totalCashInValue,
-      totalCashOutValue,
-      totalTransactionValue,
-      totalCommission,
-      latestEFloatBalance: computeLatestEFloatBalance(metrics),
-    },
-    branchSummary,
-    performanceSummary,
-    expenseTypeSummary,
-    expenses: expensesInRange,
-  };
 }
 
 export function buildReportSummaryCsv(data: ReportsData): string {

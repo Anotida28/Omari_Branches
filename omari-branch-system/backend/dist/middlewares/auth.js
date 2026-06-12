@@ -61,6 +61,7 @@ const requireAuthenticatedUser = async (req, _res, next) => {
             id: user.id,
             username: user.username,
             role: (0, prisma_enums_1.isUserRole)(user.role) ? user.role : prisma_enums_1.UserRole.VIEWER,
+            ...(payload.name ? { name: payload.name } : {}),
         };
         next();
     }

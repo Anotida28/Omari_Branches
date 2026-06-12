@@ -318,7 +318,7 @@ export async function syncSourceMetrics(
       if (createRows.length > 0) {
         await createMetricRowsInBatches(tx, createRows);
       }
-    });
+    }, { timeout: 120_000 });
 
     const refreshedBranchDateCount = await recomputeBranchMetricsForWindow(
       branches.map((branch) => branch.id),

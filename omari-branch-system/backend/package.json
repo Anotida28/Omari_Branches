@@ -4,11 +4,11 @@
   "private": true,
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "prisma generate && tsc -p tsconfig.json",
+    "dev": "node scripts/prepare-prisma-client.js && ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "node scripts/prepare-prisma-client.js && tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "db:bootstrap": "prisma generate && prisma db push && node prisma/seed.js",
-    "prisma:generate": "prisma generate",
+    "db:bootstrap": "node scripts/prepare-prisma-client.js && prisma db push && node prisma/seed.js",
+    "prisma:generate": "node scripts/prepare-prisma-client.js",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
     "prisma:seed": "node prisma/seed.js"

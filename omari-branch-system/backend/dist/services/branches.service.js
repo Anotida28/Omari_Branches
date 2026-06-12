@@ -229,6 +229,11 @@ async function listBranches(params) {
                 agentLines: {
                     where: { isActive: true },
                     orderBy: { lineNumber: "asc" },
+                    select: {
+                        id: true,
+                        lineNumber: true,
+                        isActive: true,
+                    },
                 },
             },
             orderBy: [{ city: "asc" }, { label: "asc" }],
@@ -248,6 +253,11 @@ async function getBranchById(id) {
             agentLines: {
                 where: { isActive: true },
                 orderBy: { lineNumber: "asc" },
+                select: {
+                    id: true,
+                    lineNumber: true,
+                    isActive: true,
+                },
             },
         },
     });
@@ -278,6 +288,11 @@ async function createBranch(input) {
                 agentLines: {
                     where: { isActive: true },
                     orderBy: { lineNumber: "asc" },
+                    select: {
+                        id: true,
+                        lineNumber: true,
+                        isActive: true,
+                    },
                 },
             },
         });
@@ -293,6 +308,11 @@ async function updateBranch(id, input) {
         include: {
             agentLines: {
                 orderBy: { lineNumber: "asc" },
+                select: {
+                    id: true,
+                    lineNumber: true,
+                    isActive: true,
+                },
             },
         },
     });
@@ -331,6 +351,11 @@ async function updateBranch(id, input) {
                 agentLines: {
                     where: { isActive: true },
                     orderBy: { lineNumber: "asc" },
+                    select: {
+                        id: true,
+                        lineNumber: true,
+                        isActive: true,
+                    },
                 },
             },
         });

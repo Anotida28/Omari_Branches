@@ -20,6 +20,7 @@ export async function syncMetrics(params: MetricSyncParams = {}): Promise<Metric
   const { data } = await api.post<{ message: string; data: MetricSyncResult }>(
     "/api/metrics/sync",
     params,
+    { timeout: 300_000 },
   );
   return data.data;
 }
