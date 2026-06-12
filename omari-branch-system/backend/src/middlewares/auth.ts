@@ -15,6 +15,7 @@ export type AuthenticatedRequestUser = {
   id: bigint;
   username: string;
   role: UserRoleValue;
+  name?: string;
 };
 
 function toHttpError(message: string, status: number): HttpError {
@@ -87,6 +88,7 @@ export const requireAuthenticatedUser: RequestHandler = async (
       id: user.id,
       username: user.username,
       role: isUserRole(user.role) ? user.role : UserRole.VIEWER,
+      ...(payload.name ? { name: payload.name } : {}),
     };
 
     next();

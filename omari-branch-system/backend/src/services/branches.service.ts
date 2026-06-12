@@ -35,7 +35,13 @@ export type BranchUpdateInput = {
 
 type BranchWithAgentLines = Prisma.BranchGetPayload<{
   include: {
-    agentLines: true;
+    agentLines: {
+      select: {
+        id: true;
+        lineNumber: true;
+        isActive: true;
+      };
+    };
   };
 }>;
 
@@ -371,6 +377,11 @@ export async function listBranches(
         agentLines: {
           where: { isActive: true },
           orderBy: { lineNumber: "asc" },
+          select: {
+            id: true,
+            lineNumber: true,
+            isActive: true,
+          },
         },
       },
       orderBy: [{ city: "asc" }, { label: "asc" }],
@@ -394,6 +405,11 @@ export async function getBranchById(
       agentLines: {
         where: { isActive: true },
         orderBy: { lineNumber: "asc" },
+        select: {
+          id: true,
+          lineNumber: true,
+          isActive: true,
+        },
       },
     },
   });
@@ -434,6 +450,11 @@ export async function createBranch(
         agentLines: {
           where: { isActive: true },
           orderBy: { lineNumber: "asc" },
+          select: {
+            id: true,
+            lineNumber: true,
+            isActive: true,
+          },
         },
       },
     });
@@ -452,6 +473,11 @@ export async function updateBranch(
     include: {
       agentLines: {
         orderBy: { lineNumber: "asc" },
+        select: {
+          id: true,
+          lineNumber: true,
+          isActive: true,
+        },
       },
     },
   });
@@ -504,6 +530,11 @@ export async function updateBranch(
         agentLines: {
           where: { isActive: true },
           orderBy: { lineNumber: "asc" },
+          select: {
+            id: true,
+            lineNumber: true,
+            isActive: true,
+          },
         },
       },
     });

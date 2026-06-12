@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   CalendarClock,
+  Database,
   DollarSign,
+  RefreshCw,
   ShieldCheck,
   TrendingUp,
   UserPlus,
@@ -39,7 +41,9 @@ import {
 import { useSearchParams } from "react-router-dom";
 
 import { chartPalette, glassPanelSx } from "../app/theme";
+import { useAuth } from "../hooks/useAuth";
 import { getErrorMessage } from "../services/api";
+import { fetchSnapshotStatus, triggerSnapshotSync } from "../services/admin";
 import { formatCurrency, formatDate } from "../services/format";
 import { fetchWalletOverview } from "../services/wallet";
 import { FilterBar } from "../shared/components/FilterBar";
@@ -126,6 +130,9 @@ const datePresets: DatePreset[] = [
 
 export default function WalletOverviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "SUPER_ADMIN";
 
   const initialDateTo = toInputDate(new Date());
   const initialDateFrom = toInputDate(shiftDays(new Date(), -29));
@@ -158,6 +165,20 @@ export default function WalletOverviewPage() {
         currency,
       }),
     staleTime: 5 * 60 * 1000,
+  });
+
+  const snapshotQuery = useQuery({
+    queryKey: ["admin", "wallet-snapshot-status"],
+    queryFn: fetchSnapshotStatus,
+    staleTime: 60 * 1000,
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: triggerSnapshotSync,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin", "wallet-snapshot-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["wallet"] });
+    },
   });
 
   const insights = useMemo(() => {
@@ -289,8 +310,49 @@ export default function WalletOverviewPage() {
     ];
   }, [walletQuery.data]);
 
+  const snapshotRefreshedAt = snapshotQuery.data?.refreshedAt
+    ? new Date(snapshotQuery.data.refreshedAt).toLocaleString()
+    : null;
+  const snapshotIsStale = snapshotQuery.data?.isStale ?? false;
+  const snapshotCount = snapshotQuery.data?.customerCount ?? 0;
+
   return (
     <section className="space-y-5 motion-fade-up">
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Database size={14} style={{ opacity: 0.5 }} />
+          {snapshotCount > 0 ? (
+            <Typography variant="caption" color={snapshotIsStale ? "warning.main" : "text.secondary"}>
+              Snapshot: {snapshotCount.toLocaleString()} customers
+              {snapshotRefreshedAt ? ` · refreshed ${snapshotRefreshedAt}` : ""}
+              {snapshotIsStale ? " · stale" : ""}
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="warning.main">
+              Snapshot not populated — showing live data (slow)
+            </Typography>
+          )}
+        </Stack>
+        {isSuperAdmin ? (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={syncMutation.isPending ? undefined : <RefreshCw size={14} />}
+            disabled={syncMutation.isPending}
+            onClick={() => syncMutation.mutate()}
+          >
+            {syncMutation.isPending ? "Refreshing…" : "Refresh Data"}
+          </Button>
+        ) : null}
+      </Stack>
+
+      {syncMutation.isError ? (
+        <Alert severity="error">Unable to refresh wallet data right now. Please try again in a moment.</Alert>
+      ) : null}
+      {syncMutation.isSuccess ? (
+        <Alert severity="success">Refresh triggered. The dashboard will update once the snapshot finishes.</Alert>
+      ) : null}
+
       <FilterBar>
         <Stack direction={{ xs: "column", lg: "row" }} spacing={1.2} alignItems={{ xs: "stretch", lg: "center" }}>
           <ButtonGroup size="small" variant="outlined">

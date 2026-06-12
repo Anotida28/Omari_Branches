@@ -11,6 +11,7 @@ export type AuthTokenPayload = {
   sub: string;
   username: string;
   role: UserRoleValue;
+  name?: string;
   iat: number;
   exp: number;
 };
@@ -19,6 +20,7 @@ type BasePayload = {
   sub: string;
   username: string;
   role: string;
+  name?: string;
 };
 
 function toBase64Url(value: string): string {
@@ -107,6 +109,7 @@ export function createAuthToken(payload: BasePayload, secret: string, expiresIn:
     sub: payload.sub,
     username: payload.username,
     role: normalizedRole,
+    ...(payload.name ? { name: payload.name } : {}),
     iat: issuedAtSeconds,
     exp,
   };

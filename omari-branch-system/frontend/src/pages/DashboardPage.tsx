@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   Building2,
   DollarSign,
   Activity,
   FileText,
+  RefreshCcw,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -25,6 +26,7 @@ import {
   Button,
   ButtonGroup,
   Chip,
+  CircularProgress,
   Divider,
   Paper,
   Skeleton,
@@ -36,6 +38,7 @@ import { chartPalette, glassPanelSx } from "../app/theme";
 import { getErrorMessage } from "../services/api";
 import { fetchDashboardOverview } from "../services/dashboard";
 import { formatCurrency } from "../services/format";
+import { syncMetrics } from "../services/metrics";
 import { fetchTrendsData } from "../services/trends";
 import { ErrorState } from "../shared/components/ErrorState";
 import { FocusDialog } from "../shared/components/FocusDialog";
@@ -115,6 +118,8 @@ function ChartModeToggle({
 export default function DashboardPage() {
   const [performanceExpanded, setPerformanceExpanded] = useState(false);
   const [performanceMode, setPerformanceMode] = useState<ChartMode>("line");
+  const queryClient = useQueryClient();
+
   const overviewQuery = useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: fetchDashboardOverview,
@@ -132,6 +137,14 @@ export default function DashboardPage() {
     },
   });
 
+  const syncMutation = useMutation({
+    mutationFn: syncMetrics,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["metrics"] });
+    },
+  });
+
   if (overviewQuery.isError) {
     return (
       <section className="space-y-5 motion-fade-up">
@@ -144,6 +157,32 @@ export default function DashboardPage() {
 
   return (
     <section className="space-y-5 motion-fade-up">
+      <Stack direction={{ xs: "column", sm: "row" }} alignItems={{ sm: "center" }} justifyContent="space-between" spacing={1.5}>
+        <Typography variant="body2" color="text.secondary">
+          Refresh the latest source metrics to update the remittance dashboard immediately.
+        </Typography>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={syncMutation.isPending ? <CircularProgress size={14} /> : <RefreshCcw size={14} />}
+          disabled={syncMutation.isPending}
+          onClick={() => syncMutation.mutate({})}
+        >
+          {syncMutation.isPending ? "Refreshing…" : "Refresh Data"}
+        </Button>
+      </Stack>
+
+      {syncMutation.isSuccess ? (
+        <Alert severity="success" variant="outlined">
+          Sync completed. The dashboard will refresh with the latest source metrics.
+        </Alert>
+      ) : null}
+      {syncMutation.isError ? (
+        <Alert severity="error" variant="outlined">
+          {getErrorMessage(syncMutation.error)}
+        </Alert>
+      ) : null}
+
       <Box
         className="motion-stagger"
         sx={{

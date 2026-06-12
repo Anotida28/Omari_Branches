@@ -198,7 +198,13 @@ export async function listAlertLogs(
       orderBy: { sentAt: "desc" },
       include: {
         expense: {
-          include: {
+          select: {
+            id: true,
+            branchId: true,
+            expenseType: true,
+            period: true,
+            dueDate: true,
+            amount: true,
             branch: {
               select: {
                 id: true,
@@ -230,7 +236,13 @@ export async function getAlertLogById(
     where: { id },
     include: {
       expense: {
-        include: {
+        select: {
+          id: true,
+          branchId: true,
+          expenseType: true,
+          period: true,
+          dueDate: true,
+          amount: true,
           branch: {
             select: {
               id: true,

@@ -120,18 +120,19 @@ const notificationsItems: NavItem[] = [
   },
 ];
 
+const notificationsSection: NavSection = {
+  id: "notifications",
+  label: "Notifications",
+  icon: Mail,
+  items: notificationsItems,
+};
+
 const navSections: NavSection[] = [
   {
     id: "remittance-center",
     label: "Remittance Center",
     icon: Building2,
     items: remittanceCenterItems,
-  },
-  {
-    id: "notifications",
-    label: "Notifications",
-    icon: Mail,
-    items: notificationsItems,
   },
   {
     id: "wallet",
@@ -196,7 +197,7 @@ const navSections: NavSection[] = [
   },
 ];
 
-const navItems = navSections.flatMap((section) => section.items);
+const navItems = [...navSections.flatMap((section) => section.items), ...notificationsSection.items];
 
 const EXPANDED_WIDTH = 280;
 const COLLAPSED_WIDTH = 88;
@@ -236,7 +237,7 @@ function SidebarLinks({
   if (collapsed) {
     return (
       <List sx={{ px: 1, py: 1.2 }}>
-        {navItems.map((item) => {
+        {navSections.flatMap((s) => s.items).map((item) => {
           const Icon = item.icon;
           return (
             <ListItemButton
@@ -291,6 +292,23 @@ function SidebarLinks({
             </ListItemButton>
           </Tooltip>
         )}
+        {notificationsSection.items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Tooltip key={item.to} title={item.label} placement="right">
+              <ListItemButton
+                component={NavLink}
+                to={item.to}
+                onClick={onNavigate}
+                sx={NAV_ITEM_SX}
+              >
+                <ListItemIcon sx={{ minWidth: 0, justifyContent: "center", color: "inherit" }}>
+                  <Icon size={18} />
+                </ListItemIcon>
+              </ListItemButton>
+            </Tooltip>
+          );
+        })}
       </List>
     );
   }
@@ -395,41 +413,102 @@ function SidebarLinks({
         );
       })}
 
+      <Divider sx={{ my: 0.8 }} />
       {isSuperAdmin && (
-        <>
-          <Divider sx={{ my: 0.8 }} />
-          <ListItemButton
-            component={NavLink}
-            to="/users"
-            onClick={onNavigate}
-            sx={{
-              mb: 0.5,
-              minHeight: 44,
-              borderRadius: 2.5,
-              px: 1.6,
-              color: "text.secondary",
-              "&.active": {
-                bgcolor: "primary.main",
-                color: "primary.contrastText",
-                boxShadow: "0 10px 20px rgba(12, 95, 63, 0.26)",
-                "& .MuiListItemIcon-root": { color: "primary.contrastText" },
-              },
-              "&:not(.active):hover": {
-                bgcolor: "rgba(12, 95, 63, 0.11)",
-                color: "text.primary",
-              },
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 34, justifyContent: "center", color: "inherit" }}>
-              <UserCog size={18} />
-            </ListItemIcon>
-            <ListItemText
-              primary="User Management"
-              primaryTypographyProps={{ fontSize: 14, fontWeight: 600 }}
-            />
-          </ListItemButton>
-        </>
+        <ListItemButton
+          component={NavLink}
+          to="/users"
+          onClick={onNavigate}
+          sx={{
+            mb: 0.5,
+            minHeight: 44,
+            borderRadius: 2.5,
+            px: 1.6,
+            color: "text.secondary",
+            "&.active": {
+              bgcolor: "primary.main",
+              color: "primary.contrastText",
+              boxShadow: "0 10px 20px rgba(12, 95, 63, 0.26)",
+              "& .MuiListItemIcon-root": { color: "primary.contrastText" },
+            },
+            "&:not(.active):hover": {
+              bgcolor: "rgba(12, 95, 63, 0.11)",
+              color: "text.primary",
+            },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 34, justifyContent: "center", color: "inherit" }}>
+            <UserCog size={18} />
+          </ListItemIcon>
+          <ListItemText
+            primary="User Management"
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 600 }}
+          />
+        </ListItemButton>
       )}
+      <Box sx={{ mb: 0.8 }}>
+        <ListItemButton
+          onClick={() => onToggleSection(notificationsSection.id)}
+          sx={{
+            mb: 0.4,
+            minHeight: 44,
+            borderRadius: 2.5,
+            px: 1.6,
+            color: "text.secondary",
+            "&:hover": {
+              bgcolor: "rgba(12, 95, 63, 0.11)",
+              color: "text.primary",
+            },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 34, justifyContent: "center", color: "inherit" }}>
+            <Mail size={18} />
+          </ListItemIcon>
+          <ListItemText
+            primary={notificationsSection.label}
+            primaryTypographyProps={{ fontSize: 14, fontWeight: 600 }}
+          />
+          {(expandedSections[notificationsSection.id] ?? false) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </ListItemButton>
+        {(expandedSections[notificationsSection.id] ?? false) &&
+          notificationsSection.items.map((item) => {
+            const ItemIcon = item.icon;
+            return (
+              <ListItemButton
+                key={item.to}
+                component={NavLink}
+                to={item.to}
+                onClick={onNavigate}
+                sx={{
+                  mb: 0.5,
+                  ml: 1.2,
+                  minHeight: 40,
+                  borderRadius: 2,
+                  px: 1.4,
+                  color: "text.secondary",
+                  "&.active": {
+                    bgcolor: "primary.main",
+                    color: "primary.contrastText",
+                    boxShadow: "0 10px 20px rgba(12, 95, 63, 0.26)",
+                    "& .MuiListItemIcon-root": { color: "primary.contrastText" },
+                  },
+                  "&:not(.active):hover": {
+                    bgcolor: "rgba(12, 95, 63, 0.11)",
+                    color: "text.primary",
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 30, justifyContent: "center", color: "inherit" }}>
+                  <ItemIcon size={16} />
+                </ListItemIcon>
+                <ListItemText
+                  primary={item.label}
+                  primaryTypographyProps={{ fontSize: 13.5, fontWeight: 600 }}
+                />
+              </ListItemButton>
+            );
+          })}
+      </Box>
     </List>
   );
 }
@@ -622,7 +701,7 @@ export default function AppLayout() {
                   variant="outlined"
                 />
               )}
-              <Chip label={user?.username ?? "unknown"} size="small" />
+              <Chip label={user?.name ?? user?.username ?? "unknown"} size="small" />
             </Stack>
           </Toolbar>
         </AppBar>

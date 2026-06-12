@@ -106,7 +106,7 @@ type ExternalAuthResult =
   | { outcome: "unavailable"; message: string };
 
 type AccessGatewayResult =
-  | { outcome: "authorized" }
+  | { outcome: "authorized"; name?: string }
   | { outcome: "forbidden"; message: string }
   | { outcome: "unavailable"; message: string };
 
@@ -173,6 +173,41 @@ async function callExternalAuth(username: string, password: string): Promise<Ext
   }
 }
 
+function extractNameFromPayload(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+
+  function walk(node: unknown): string | undefined {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return undefined;
+    const record = node as Record<string, unknown>;
+
+    for (const key of ["fullName", "full_name", "displayName", "display_name", "name"]) {
+      if (typeof record[key] === "string" && (record[key] as string).trim()) {
+        return (record[key] as string).trim();
+      }
+    }
+
+    if (typeof record.firstName === "string" && typeof record.lastName === "string") {
+      const full = `${record.firstName.trim()} ${record.lastName.trim()}`.trim();
+      if (full) return full;
+    }
+    if (typeof record.first_name === "string" && typeof record.last_name === "string") {
+      const full = `${record.first_name.trim()} ${record.last_name.trim()}`.trim();
+      if (full) return full;
+    }
+
+    for (const value of Object.values(record)) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const found = walk(value);
+        if (found) return found;
+      }
+    }
+
+    return undefined;
+  }
+
+  return walk(payload);
+}
+
 async function verifyGatewayAccess(username: string): Promise<AccessGatewayResult> {
   if (!env.ACCESS_GATEWAY_ENABLED) {
     return { outcome: "authorized" };
@@ -207,7 +242,7 @@ async function verifyGatewayAccess(username: string): Promise<AccessGatewayResul
 
     const payload = await tryReadJson(response);
     return payloadContainsUsername(payload, username)
-      ? { outcome: "authorized" }
+      ? { outcome: "authorized", name: extractNameFromPayload(payload) }
       : { outcome: "forbidden", message: "User not authorized by access gateway" };
   } catch (error) {
     if ((error as { name?: string }).name === "AbortError") {
@@ -257,13 +292,18 @@ async function upsertAuthenticatedUser(username: string): Promise<{ id: bigint; 
   });
 }
 
-function issueLoginSuccess(res: Parameters<RequestHandler>[1], user: { id: bigint; username: string; role: string }) {
+function issueLoginSuccess(
+  res: Parameters<RequestHandler>[1],
+  user: { id: bigint; username: string; role: string },
+  name?: string,
+) {
   const role = isUserRole(user.role) ? user.role : UserRole.VIEWER;
   const token = createAuthToken(
     {
       sub: user.id.toString(),
       username: user.username,
       role,
+      ...(name ? { name } : {}),
     },
     env.JWT_SECRET,
     env.JWT_EXPIRES_IN,
@@ -277,6 +317,7 @@ function issueLoginSuccess(res: Parameters<RequestHandler>[1], user: { id: bigin
     user: {
       username: user.username,
       role,
+      ...(name ? { name } : {}),
       lastLogin: new Date().toISOString(),
     },
   });
@@ -333,7 +374,7 @@ export const loginHandler: RequestHandler = async (req, res, next) => {
     }
 
     const user = await upsertAuthenticatedUser(normalizedUsername);
-    issueLoginSuccess(res, user);
+    issueLoginSuccess(res, user, access.name);
   } catch (error) {
     if (typeof (error as Partial<AuthFlowError>).status === "number" && error instanceof Error) {
       res.status((error as AuthFlowError).status).json({
@@ -358,6 +399,7 @@ export const getCurrentUserHandler: RequestHandler = async (req, res) => {
       id: req.authUser.id.toString(),
       username: req.authUser.username,
       role: req.authUser.role,
+      ...(req.authUser.name ? { name: req.authUser.name } : {}),
     },
   });
 };

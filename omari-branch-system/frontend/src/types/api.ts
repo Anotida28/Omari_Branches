@@ -21,6 +21,7 @@ export type AuthUser = {
   id: string;
   username: string;
   role: UserRole;
+  name?: string;
 };
 
 export type AuthLoginApiResponse = {

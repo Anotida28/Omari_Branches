@@ -57,6 +57,7 @@ function readStoredUser(): AuthUser | null {
         id: parsed.id,
         username: parsed.username,
         role: parsed.role,
+        ...(typeof parsed.name === "string" && parsed.name ? { name: parsed.name } : {}),
       };
     }
   } catch {
