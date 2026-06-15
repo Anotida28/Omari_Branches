@@ -104,14 +104,15 @@ function stripHtml(input: string): string {
 }
 
 function normalizeBulkMailerMessage(opts: SendEmailOptions): string {
-  const preferred = opts.text?.trim();
-  if (preferred) {
-    return preferred;
+  // Prefer HTML so the mailer renders a rich email; fall back to plain text
+  const html = opts.html?.trim();
+  if (html) {
+    return html;
   }
 
-  const fromHtml = stripHtml(opts.html);
-  if (fromHtml) {
-    return fromHtml;
+  const text = opts.text?.trim();
+  if (text) {
+    return text;
   }
 
   throw new Error("Bulk mailer requires a non-empty message body");
