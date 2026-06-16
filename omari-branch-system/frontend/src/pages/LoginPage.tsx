@@ -379,7 +379,7 @@ export default function LoginPage() {
             }}
           >
             <Typography variant="h6" sx={{ mb: 1, color: "inherit", maxWidth: 360 }}>
-              Real-time branch visibility starts with one secure login.
+              Branch performance, wallet analytics, and reminder oversight — all behind one secure login.
             </Typography>
           </Paper>
         </Box>
