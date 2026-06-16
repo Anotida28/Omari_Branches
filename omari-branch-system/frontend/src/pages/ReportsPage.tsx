@@ -38,6 +38,7 @@ import { EmptyState } from "../shared/components/EmptyState";
 import { ErrorState } from "../shared/components/ErrorState";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
+import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
 import { FocusDialog } from "../shared/components/FocusDialog";
 
 function toInputDate(date: Date): string {
@@ -207,11 +208,21 @@ export default function ReportsPage() {
       </FilterBar>
 
       {reportsQuery.isLoading ? (
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="body2" color="text.secondary">
-            Building report...
-          </Typography>
-        </Paper>
+        <Box
+          sx={{
+            display: "grid",
+            gap: 2,
+            gridTemplateColumns: {
+              xs: "1fr",
+              md: "repeat(2, minmax(0, 1fr))",
+              xl: "repeat(3, minmax(0, 1fr))",
+            },
+          }}
+        >
+          {Array.from({ length: 6 }).map((_, index) => (
+            <StatCardSkeleton key={index} />
+          ))}
+        </Box>
       ) : !report ? (
         <EmptyState
           title="No report data"

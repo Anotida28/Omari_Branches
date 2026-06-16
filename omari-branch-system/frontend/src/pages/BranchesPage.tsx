@@ -38,6 +38,7 @@ import {
 import { ConfirmDialog } from "../shared/components/ConfirmDialog";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
+import { TableSkeletonRows } from "../shared/components/TableSkeletonRows";
 import type { Branch, CreateBranchInput, SourceAgentReference } from "../types/api";
 
 const PAGE_SIZE = 10;
@@ -330,11 +331,7 @@ export default function BranchesPage() {
             </TableHead>
             <TableBody>
               {branchesQuery.isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
-                    Loading branches...
-                  </TableCell>
-                </TableRow>
+                <TableSkeletonRows columns={6} />
               ) : rows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 5 }}>

@@ -7,6 +7,7 @@ import {
   ButtonGroup,
   Chip,
   Paper,
+  Skeleton,
   Stack,
   TextField,
   Typography,
@@ -19,6 +20,7 @@ import { formatCurrency, formatDate } from "../services/format";
 import { fetchWalletInsightsAlerts } from "../services/wallet";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
+import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
 import type { WalletInsightAlertItem, WalletInsightAlertSeverity } from "../types/api";
 
 function toInputDate(date: Date): string {
@@ -163,7 +165,28 @@ export default function WalletInsightsAlertsPage() {
       {insightsQuery.isError ? <Alert severity="error">{getErrorMessage(insightsQuery.error)}</Alert> : null}
 
       {insightsQuery.isLoading ? (
-        <Alert severity="info">Loading insights and alerts...</Alert>
+        <Stack spacing={2}>
+          <Box
+            sx={{
+              display: "grid",
+              gap: 2,
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(2, minmax(0, 1fr))",
+                xl: "repeat(4, minmax(0, 1fr))",
+              },
+            }}
+          >
+            {Array.from({ length: 4 }).map((_, index) => (
+              <StatCardSkeleton key={index} />
+            ))}
+          </Box>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "repeat(2, minmax(0, 1fr))" } }}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} variant="rounded" height={180} />
+            ))}
+          </Box>
+        </Stack>
       ) : insightsQuery.data ? (
         <>
           <Box

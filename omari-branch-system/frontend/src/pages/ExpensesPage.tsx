@@ -10,6 +10,7 @@ import {
   FormControlLabel,
   MenuItem,
   Paper,
+  Skeleton,
   Stack,
   Switch,
   Table,
@@ -40,6 +41,7 @@ import { ConfirmDialog } from "../shared/components/ConfirmDialog";
 import { DrawerPanel } from "../shared/components/DrawerPanel";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
+import { TableSkeletonRows } from "../shared/components/TableSkeletonRows";
 import type {
   CreateRecurringReminderInput,
   ExpenseType,
@@ -401,11 +403,7 @@ export default function ExpensesPage() {
             </TableHead>
             <TableBody>
               {remindersQuery.isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 4, color: "text.secondary" }}>
-                    Loading monthly reminders...
-                  </TableCell>
-                </TableRow>
+                <TableSkeletonRows columns={7} />
               ) : rows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} sx={{ py: 5 }}>
@@ -500,7 +498,11 @@ export default function ExpensesPage() {
         width={760}
       >
         {detailQuery.isLoading ? (
-          <Typography variant="body2" color="text.secondary">Loading reminder detail...</Typography>
+          <Stack spacing={1.4}>
+            <Skeleton variant="text" width="50%" height={28} />
+            <Skeleton variant="rounded" height={120} />
+            <Skeleton variant="rounded" height={80} />
+          </Stack>
         ) : !detailQuery.data ? (
           <EmptyState title="No reminder selected" description="Select a reminder to view details." />
         ) : (

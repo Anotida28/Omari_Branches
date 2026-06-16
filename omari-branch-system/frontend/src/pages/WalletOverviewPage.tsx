@@ -46,8 +46,10 @@ import { getErrorMessage } from "../services/api";
 import { fetchSnapshotStatus, triggerSnapshotSync } from "../services/admin";
 import { formatCurrency, formatDate } from "../services/format";
 import { fetchWalletOverview } from "../services/wallet";
+import { ChartSkeleton } from "../shared/components/ChartSkeleton";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
+import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
 
 const GENDER_COLORS = { Male: chartPalette.primary, Female: chartPalette.danger };
 const AGE_COLORS = ["#73c394", "#1b7f57", "#c98b2c", "#c44b45"];
@@ -333,17 +335,27 @@ export default function WalletOverviewPage() {
             </Typography>
           )}
         </Stack>
-        {isSuperAdmin ? (
+        <Stack direction="row" spacing={1} alignItems="center">
           <Button
             size="small"
             variant="outlined"
-            startIcon={syncMutation.isPending ? undefined : <RefreshCw size={14} />}
-            disabled={syncMutation.isPending}
-            onClick={() => syncMutation.mutate()}
+            onClick={() => setSearchParams({}, { replace: true })}
+            sx={{ whiteSpace: "nowrap" }}
           >
-            {syncMutation.isPending ? "Refreshing…" : "Refresh Data"}
+            Reset Filters
           </Button>
-        ) : null}
+          {isSuperAdmin ? (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={syncMutation.isPending ? undefined : <RefreshCw size={14} />}
+              disabled={syncMutation.isPending}
+              onClick={() => syncMutation.mutate()}
+            >
+              {syncMutation.isPending ? "Refreshing…" : "Refresh Data"}
+            </Button>
+          ) : null}
+        </Stack>
       </Stack>
 
       {syncMutation.isError ? (
@@ -406,21 +418,33 @@ export default function WalletOverviewPage() {
             }
             label="Compare with previous period"
           />
-
-          <Button
-            variant="outlined"
-            onClick={() => setSearchParams({}, { replace: true })}
-            sx={{ width: { xs: "100%", lg: "auto" }, whiteSpace: "nowrap" }}
-          >
-            Reset Filters
-          </Button>
         </Stack>
       </FilterBar>
 
       {walletQuery.isError ? <Alert severity="error">{getErrorMessage(walletQuery.error)}</Alert> : null}
 
       {walletQuery.isLoading ? (
-        <Alert severity="info">Loading wallet overview...</Alert>
+        <Stack spacing={2}>
+          <Box
+            sx={{
+              display: "grid",
+              gap: 2,
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(2, minmax(0, 1fr))",
+                xl: "repeat(4, minmax(0, 1fr))",
+              },
+            }}
+          >
+            {Array.from({ length: 8 }).map((_, index) => (
+              <StatCardSkeleton key={index} />
+            ))}
+          </Box>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+            <ChartSkeleton height={220} />
+            <ChartSkeleton height={220} />
+          </Box>
+        </Stack>
       ) : walletQuery.data ? (
         <>
           <Box

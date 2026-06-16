@@ -119,6 +119,23 @@ function createRowKey(lineNumber: string, metricDate: Date): string {
   return `${lineNumber}::${formatDate(metricDate)}`;
 }
 
+function enumerateDates(dateFrom: Date, dateTo: Date): Date[] {
+  const dates: Date[] = [];
+  const cursor = new Date(
+    Date.UTC(dateFrom.getUTCFullYear(), dateFrom.getUTCMonth(), dateFrom.getUTCDate()),
+  );
+  const end = new Date(
+    Date.UTC(dateTo.getUTCFullYear(), dateTo.getUTCMonth(), dateTo.getUTCDate()),
+  );
+
+  while (cursor.getTime() <= end.getTime()) {
+    dates.push(new Date(cursor.getTime()));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
 async function createMetricRowsInBatches(
   tx: Prisma.TransactionClient,
   rows: Prisma.AgentLineMetricCreateManyInput[],
@@ -241,6 +258,9 @@ export async function syncSourceMetrics(
     const agentLineIdByLineNumber = new Map(
       lineItems.map((item) => [item.lineNumber, item.agentLineId] as const),
     );
+    const lineNumberByAgentLineId = new Map(
+      lineItems.map((item) => [item.agentLineId, item.lineNumber] as const),
+    );
     const agentLineIds = Array.from(
       new Set(lineItems.map((item) => item.agentLineId)),
     );
@@ -270,36 +290,78 @@ export async function syncSourceMetrics(
       } satisfies Prisma.AgentLineMetricCreateManyInput);
     }
 
+    // Real balance snapshots reported by the source for this window, keyed by line + date.
+    const balanceByLineAndDate = new Map<string, number>();
     for (const row of balanceRows) {
       const agentLineId = agentLineIdByLineNumber.get(row.lineNumber);
       if (!agentLineId) {
         continue;
       }
+      balanceByLineAndDate.set(createRowKey(row.lineNumber, row.metricDate), row.eFloatBalance);
+    }
 
-      const key = createRowKey(row.lineNumber, row.metricDate);
-      const existing = createRowsByKey.get(key);
+    // Seed carry-forward with each line's last known balance before this window,
+    // so a gap at the very start of the window doesn't fall back to 0.
+    const matchedAgentLineIds = agentLineIds.filter((agentLineId) => {
+      const lineNumber = lineNumberByAgentLineId.get(agentLineId);
+      return lineNumber !== undefined && sourceReferences.has(lineNumber);
+    });
 
-      if (existing) {
-        existing.eFloatBalance = row.eFloatBalance;
-        continue;
+    const priorBalanceRows = matchedAgentLineIds.length > 0
+      ? await prisma.agentLineMetric.findMany({
+          where: {
+            agentLineId: { in: matchedAgentLineIds },
+            metricDate: { lt: params.dateFrom },
+          },
+          orderBy: { metricDate: "desc" },
+          select: { agentLineId: true, eFloatBalance: true },
+        })
+      : [];
+
+    const carryBalanceByAgentLineId = new Map<bigint, number>();
+    for (const row of priorBalanceRows) {
+      if (!carryBalanceByAgentLineId.has(row.agentLineId)) {
+        carryBalanceByAgentLineId.set(row.agentLineId, Number(row.eFloatBalance));
       }
+    }
 
-      createRowsByKey.set(key, {
-        agentLineId,
-        metricDate: row.metricDate,
-        eFloatBalance: row.eFloatBalance,
-        cashInVolume: 0,
-        cashInValue: 0,
-        cashOutVolume: 0,
-        cashOutValue: 0,
-        totalTransactionVolume: 0,
-        totalTransactionValue: 0,
-        commissionOnDeposits: 0,
-        commissionOnWithdrawals: 0,
-        totalCommission: 0,
-        notes: createSourceSyncNote(),
-        createdBy: "SOURCE_SYNC",
-      } satisfies Prisma.AgentLineMetricCreateManyInput);
+    const metricDates = enumerateDates(params.dateFrom, params.dateTo);
+
+    // Only carry-forward balances for lines the source actually knows about.
+    // Lines with no source match at all stay untouched (no synthetic data).
+    for (const agentLineId of matchedAgentLineIds) {
+      const lineNumber = lineNumberByAgentLineId.get(agentLineId)!;
+      let carry = carryBalanceByAgentLineId.get(agentLineId) ?? 0;
+
+      for (const metricDate of metricDates) {
+        const key = createRowKey(lineNumber, metricDate);
+        const realBalance = balanceByLineAndDate.get(key);
+        const resolvedBalance = realBalance !== undefined ? realBalance : carry;
+        carry = resolvedBalance;
+
+        const existing = createRowsByKey.get(key);
+        if (existing) {
+          existing.eFloatBalance = resolvedBalance;
+          continue;
+        }
+
+        createRowsByKey.set(key, {
+          agentLineId,
+          metricDate,
+          eFloatBalance: resolvedBalance,
+          cashInVolume: 0,
+          cashInValue: 0,
+          cashOutVolume: 0,
+          cashOutValue: 0,
+          totalTransactionVolume: 0,
+          totalTransactionValue: 0,
+          commissionOnDeposits: 0,
+          commissionOnWithdrawals: 0,
+          totalCommission: 0,
+          notes: realBalance !== undefined ? createSourceSyncNote() : `${createSourceSyncNote()}:CARRIED`,
+          createdBy: "SOURCE_SYNC",
+        } satisfies Prisma.AgentLineMetricCreateManyInput);
+      }
     }
 
     const createRows = Array.from(createRowsByKey.values());

@@ -23,6 +23,7 @@ import { listMetrics, syncMetrics } from "../services/metrics";
 import { DataTable } from "../shared/components/DataTable";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
+import { TableSkeletonRows } from "../shared/components/TableSkeletonRows";
 
 const PAGE_SIZE = 10;
 
@@ -247,11 +248,7 @@ export default function MetricsPage() {
         }
         body={
           metricsQuery.isLoading ? (
-            <TableRow>
-              <TableCell colSpan={14} align="center" sx={{ py: 4, color: "text.secondary" }}>
-                Loading metrics...
-              </TableCell>
-            </TableRow>
+            <TableSkeletonRows columns={14} />
           ) : (metricsQuery.data?.items.length ?? 0) === 0 ? (
             <TableRow>
               <TableCell colSpan={14} sx={{ py: 5 }}>

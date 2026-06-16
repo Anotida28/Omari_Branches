@@ -36,9 +36,11 @@ import { listBranches } from "../services/branches";
 import { formatCurrency } from "../services/format";
 import { syncMetrics } from "../services/metrics";
 import { fetchTrendsData } from "../services/trends";
+import { ChartSkeleton } from "../shared/components/ChartSkeleton";
 import { ErrorState } from "../shared/components/ErrorState";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
+import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
 import { FocusDialog } from "../shared/components/FocusDialog";
 
 function toInputDate(date: Date): string {
@@ -321,11 +323,27 @@ export default function TrendsPage() {
       </FilterBar>
 
       {trendsQuery.isLoading ? (
-        <Paper sx={{ p: 3, ...glassPanelSx }}>
-          <Typography variant="body2" color="text.secondary">
-            Loading analytics...
-          </Typography>
-        </Paper>
+        <Stack spacing={2}>
+          <Box
+            sx={{
+              display: "grid",
+              gap: 2,
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "repeat(2, minmax(0, 1fr))",
+                xl: "repeat(4, minmax(0, 1fr))",
+              },
+            }}
+          >
+            {Array.from({ length: 4 }).map((_, index) => (
+              <StatCardSkeleton key={index} />
+            ))}
+          </Box>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "repeat(2, minmax(0, 1fr))" } }}>
+            <ChartSkeleton height={260} />
+            <ChartSkeleton height={260} />
+          </Box>
+        </Stack>
       ) : trendsQuery.data ? (
         <>
           <Box

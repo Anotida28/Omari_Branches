@@ -42,9 +42,12 @@ import { fetchSnapshotStatus, triggerSnapshotSync } from "../services/admin";
 import { formatCurrency, formatDate } from "../services/format";
 import { fetchWalletCustomer360Detail, fetchWalletCustomer360List } from "../services/wallet";
 import { useAuth } from "../hooks/useAuth";
+import { ChartSkeleton } from "../shared/components/ChartSkeleton";
 import { FilterBar } from "../shared/components/FilterBar";
 import { FocusDialog } from "../shared/components/FocusDialog";
 import { StatCard } from "../shared/components/StatCard";
+import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
+import { TableSkeletonRows } from "../shared/components/TableSkeletonRows";
 
 function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -319,10 +322,7 @@ export default function WalletCustomer360Page() {
           <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
             Customer Directory
           </Typography>
-          {listQuery.isLoading ? (
-            <Alert severity="info">Loading customers...</Alert>
-          ) : (
-            <>
+          <>
               <TableContainer sx={{ maxHeight: 560 }}>
                 <Table stickyHeader size="small">
                   <TableHead>
@@ -333,7 +333,9 @@ export default function WalletCustomer360Page() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {(listQuery.data?.items ?? []).map((customer) => (
+                    {listQuery.isLoading ? (
+                      <TableSkeletonRows columns={3} />
+                    ) : (listQuery.data?.items ?? []).map((customer) => (
                       <TableRow
                         key={customer.customerId}
                         hover
@@ -376,11 +378,22 @@ export default function WalletCustomer360Page() {
                 rowsPerPageOptions={[10, 25, 50, 100]}
               />
             </>
-          )}
         </Paper>
 
         {detailQuery.isLoading ? (
-          <Alert severity="info" sx={{ order: 1 }}>Loading customer 360...</Alert>
+          <Stack spacing={2} sx={{ order: 1 }}>
+            <Paper sx={{ p: 2.2, ...glassPanelSx }}>
+              <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" } }}>
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <StatCardSkeleton key={index} />
+                ))}
+              </Box>
+            </Paper>
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+              <ChartSkeleton height={280} />
+              <ChartSkeleton height={280} />
+            </Box>
+          </Stack>
         ) : detailQuery.data ? (
           <Stack spacing={2} sx={{ order: 1 }}>
             <Paper sx={{ p: 2.2, ...glassPanelSx }}>

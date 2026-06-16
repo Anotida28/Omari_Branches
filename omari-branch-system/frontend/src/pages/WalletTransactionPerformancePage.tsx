@@ -42,9 +42,11 @@ import { chartPalette, glassPanelSx } from "../app/theme";
 import { getErrorMessage } from "../services/api";
 import { formatCurrency, formatDate } from "../services/format";
 import { fetchWalletTransactionPerformance } from "../services/wallet";
+import { ChartSkeleton } from "../shared/components/ChartSkeleton";
 import { FilterBar } from "../shared/components/FilterBar";
 import { FocusDialog } from "../shared/components/FocusDialog";
 import { StatCard } from "../shared/components/StatCard";
+import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
 
 function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -224,7 +226,18 @@ export default function WalletTransactionPerformancePage() {
       {performanceQuery.isError ? <Alert severity="error">{getErrorMessage(performanceQuery.error)}</Alert> : null}
 
       {performanceQuery.isLoading ? (
-        <Alert severity="info">Loading transaction performance...</Alert>
+        <Stack spacing={2}>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" } }}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <StatCardSkeleton key={index} />
+            ))}
+          </Box>
+          <ChartSkeleton height={260} />
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "1.35fr 1fr" } }}>
+            <ChartSkeleton height={300} />
+            <ChartSkeleton height={300} />
+          </Box>
+        </Stack>
       ) : performanceQuery.data ? (
         <>
           <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" } }}>

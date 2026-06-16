@@ -30,6 +30,7 @@ import { DrawerPanel } from "../shared/components/DrawerPanel";
 import { EmptyState } from "../shared/components/EmptyState";
 import { FilterBar } from "../shared/components/FilterBar";
 import { StatCard } from "../shared/components/StatCard";
+import { TableSkeletonRows } from "../shared/components/TableSkeletonRows";
 import type {
   AlertLog,
   AlertSendStatus,
@@ -264,11 +265,7 @@ export default function AlertsPage() {
         }
         body={
           logsQuery.isLoading ? (
-            <TableRow>
-              <TableCell colSpan={5} align="center" sx={{ py: 4, color: "text.secondary" }}>
-                Loading reminder logs...
-              </TableCell>
-            </TableRow>
+            <TableSkeletonRows columns={5} />
           ) : (logsQuery.data?.items.length ?? 0) === 0 ? (
             <TableRow>
               <TableCell colSpan={5} sx={{ py: 4 }}>

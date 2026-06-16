@@ -9,6 +9,7 @@ import {
   Chip,
   Divider,
   Paper,
+  Skeleton,
   Stack,
   Table,
   TableBody,
@@ -37,9 +38,11 @@ import { chartPalette, glassPanelSx } from "../app/theme";
 import { getErrorMessage } from "../services/api";
 import { formatCurrency, formatDate } from "../services/format";
 import { fetchWalletVisaAnalytics } from "../services/wallet";
+import { ChartSkeleton } from "../shared/components/ChartSkeleton";
 import { FilterBar } from "../shared/components/FilterBar";
 import { FocusDialog } from "../shared/components/FocusDialog";
 import { StatCard } from "../shared/components/StatCard";
+import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
 
 function toInputDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -213,7 +216,22 @@ export default function WalletVisaAnalyticsPage() {
       {visaQuery.isError ? <Alert severity="error">{getErrorMessage(visaQuery.error)}</Alert> : null}
 
       {visaQuery.isLoading ? (
-        <Alert severity="info">Loading Visa analytics...</Alert>
+        <Stack spacing={2}>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" } }}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <StatCardSkeleton key={index} />
+            ))}
+          </Box>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" } }}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} variant="rounded" height={90} />
+            ))}
+          </Box>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "1.5fr 1fr" } }}>
+            <ChartSkeleton height={300} />
+            <ChartSkeleton height={300} />
+          </Box>
+        </Stack>
       ) : visaQuery.data ? (
         <>
           <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" } }}>

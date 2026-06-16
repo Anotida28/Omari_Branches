@@ -29,7 +29,6 @@ import {
   CircularProgress,
   Divider,
   Paper,
-  Skeleton,
   Stack,
   Typography,
 } from "@mui/material";
@@ -40,10 +39,12 @@ import { fetchDashboardOverview } from "../services/dashboard";
 import { formatCurrency } from "../services/format";
 import { syncMetrics } from "../services/metrics";
 import { fetchTrendsData } from "../services/trends";
+import { ChartSkeleton } from "../shared/components/ChartSkeleton";
 import { ErrorState } from "../shared/components/ErrorState";
 import { FocusDialog } from "../shared/components/FocusDialog";
 import { RankingList } from "../shared/components/RankingList";
 import { StatCard } from "../shared/components/StatCard";
+import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
 
 type PerformanceTooltipProps = {
   active?: boolean;
@@ -196,13 +197,7 @@ export default function DashboardPage() {
         }}
       >
         {overviewQuery.isLoading ? (
-          Array.from({ length: 4 }).map((_, index) => (
-            <Paper key={index} sx={{ p: 2.2, ...glassPanelSx }}>
-              <Skeleton width={130} />
-              <Skeleton width={90} height={36} />
-              <Skeleton width={160} />
-            </Paper>
-          ))
+          Array.from({ length: 4 }).map((_, index) => <StatCardSkeleton key={index} />)
         ) : overviewQuery.data ? (
           <>
             <StatCard
@@ -308,7 +303,7 @@ export default function DashboardPage() {
             </Box>
           ) : null}
           {trendsQuery.isLoading ? (
-            <Skeleton variant="rounded" height={280} />
+            <ChartSkeleton height={280} />
           ) : trendsQuery.isError ? (
             <Alert severity="warning">{getErrorMessage(trendsQuery.error)}</Alert>
           ) : trendsQuery.data?.cashTrend.length ? (

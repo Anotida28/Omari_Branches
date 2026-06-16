@@ -8,6 +8,7 @@ import {
   IconButton,
   MenuItem,
   Paper,
+  Skeleton,
   Stack,
   Switch,
   TextField,
@@ -324,9 +325,11 @@ export default function SettingsPage() {
           {recipientMutationError ? <Alert severity="error">{recipientMutationError}</Alert> : null}
 
           {recipientsQuery.isLoading ? (
-            <Typography variant="body2" color="text.secondary">
-              Loading reminder recipients...
-            </Typography>
+            <Stack spacing={1}>
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Skeleton key={index} variant="rounded" height={56} />
+              ))}
+            </Stack>
           ) : recipientsQuery.isError ? (
             <Alert severity="error">{getErrorMessage(recipientsQuery.error)}</Alert>
           ) : recipients.length === 0 ? (
@@ -495,7 +498,7 @@ export default function SettingsPage() {
             API base URL: {import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:4000"}
           </Typography>
           {healthQuery.isLoading ? (
-            <Typography variant="body2">Checking API health...</Typography>
+            <Skeleton variant="rounded" height={36} width="40%" />
           ) : healthQuery.isError ? (
             <Alert severity="error">{getErrorMessage(healthQuery.error)}</Alert>
           ) : (
