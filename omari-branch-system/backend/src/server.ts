@@ -1,14 +1,15 @@
 import "./config/env";
 import app from "./app";
 import { startScheduler, stopScheduler } from "./jobs/scheduler";
+import { releaseAllLocks } from "./services/job-lock.service";
 
 const port = Number(process.env.PORT || 4000);
 
-const server = app.listen(port, () => {
+const server = app.listen(port, async () => {
   console.log(`API listening on http://localhost:${port}`);
   console.log(`Health: http://localhost:${port}/health`);
 
-  // Start the job scheduler
+  await releaseAllLocks();
   startScheduler();
 });
 

@@ -1,5 +1,3 @@
-import { Prisma } from "@prisma/client";
-
 import { prisma } from "../db/prisma";
 
 /**
@@ -102,6 +100,30 @@ export async function acquireLock(
     }
 
     return null;
+  }
+}
+
+/**
+ * Expire all currently held locks so a freshly started process can re-acquire them.
+ * Call this once at server startup to clear zombie locks left by a crashed process.
+ */
+export async function releaseAllLocks(): Promise<void> {
+  try {
+    const updated = await prisma.jobLock.updateMany({
+      where: {
+        lockedUntil: {
+          gt: new Date(),
+        },
+      },
+      data: {
+        lockedUntil: new Date(0),
+      },
+    });
+    if (updated.count > 0) {
+      console.log(`[JobLock] Released ${updated.count} stale lock(s) from previous process`);
+    }
+  } catch (error) {
+    console.warn("[JobLock] Could not release stale locks on startup:", error);
   }
 }
 

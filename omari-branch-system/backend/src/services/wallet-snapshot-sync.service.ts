@@ -17,6 +17,7 @@ export type WalletSnapshotSyncResult = {
   customerCount: number;
   durationMs: number;
   refreshedAt: string;
+  mode: "full" | "incremental";
 };
 
 type SnapshotRow = {
@@ -59,7 +60,15 @@ function normalizeString(value: unknown): string | null {
   return s.length > 0 ? s : null;
 }
 
-async function fetchSnapshotRowsFromSource(): Promise<SnapshotRow[]> {
+/**
+ * Fetch customer snapshot rows from the source DB.
+ *
+ * Full mode (sinceDate = undefined): returns all customers with any USD transaction.
+ * Incremental mode (sinceDate provided): returns only customers who had at least one
+ * transaction on or after sinceDate, but computes their FULL lifetime aggregates so the
+ * stored record is always accurate.
+ */
+async function fetchSnapshotRowsFromSource(sinceDate?: Date): Promise<SnapshotRow[]> {
   const pool = await getSourcePool();
   const tx = parseTable(env.SOURCE_SQL_TRANSACTIONS_TABLE);
   const acct = parseTable(env.SOURCE_SQL_USD_ACCOUNTS_TABLE);
@@ -74,47 +83,106 @@ async function fetchSnapshotRowsFromSource(): Promise<SnapshotRow[]> {
   request.input("last30", sql.Date, last30);
   request.input("last60", sql.Date, last60);
 
-  const result = await request.query(`
-    WITH customer_tx AS (
+  // Build the query — incremental mode adds an active_cifs CTE to restrict which customers
+  // we process, while still aggregating their full transaction history.
+  let query: string;
+
+  if (sinceDate) {
+    request.input("sinceDate", sql.Date, sinceDate);
+    query = `
+      WITH active_cifs AS (
+        SELECT DISTINCT a.[CIF]
+        FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+        JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+        WHERE t.[Date] >= @sinceDate AND t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+      ),
+      customer_tx AS (
+        SELECT
+          a.[CIF],
+          MIN(CAST(t.[Date] AS DATE))                                                AS firstSeenDate,
+          MAX(CAST(t.[Date] AS DATE))                                                AS lastSeenDate,
+          COALESCE(SUM(t.[TransactionAmount]), 0)                                    AS lifetimeTransactionValue,
+          COALESCE(SUM(CAST(t.[Volume] AS BIGINT)), 0)                               AS lifetimeTransactionVolume,
+          COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS lifetimeCommission,
+          COALESCE(SUM(CASE WHEN t.[Date] >= @last30 THEN t.[TransactionAmount] ELSE 0 END), 0) AS last30DayTransactionValue,
+          COALESCE(SUM(CASE WHEN t.[Date] >= @last60 THEN t.[TransactionAmount] ELSE 0 END), 0) AS last60DayTransactionValue,
+          COUNT(*)                                                                   AS sourceRowCount
+        FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+        JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+        JOIN active_cifs ac ON a.[CIF] = ac.[CIF]
+        WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+        GROUP BY a.[CIF]
+      ),
+      customer_info AS (
+        SELECT
+          c.[CIF],
+          MAX(LTRIM(RTRIM(CAST(c.[FirstName] AS VARCHAR(255))))) AS firstName,
+          MAX(LTRIM(RTRIM(CAST(c.[LastName]  AS VARCHAR(255))))) AS lastName,
+          MAX(LTRIM(RTRIM(CAST(c.[MobileNumber] AS VARCHAR(120))))) AS mobileNumber
+        FROM [${cust.schema}].[${cust.table}] c WITH (NOLOCK)
+        JOIN active_cifs ac ON c.[CIF] = ac.[CIF]
+        GROUP BY c.[CIF]
+      )
       SELECT
-        a.[CIF],
-        MIN(CAST(t.[Date] AS DATE))                                                AS firstSeenDate,
-        MAX(CAST(t.[Date] AS DATE))                                                AS lastSeenDate,
-        COALESCE(SUM(t.[TransactionAmount]), 0)                                    AS lifetimeTransactionValue,
-        COALESCE(SUM(CAST(t.[Volume] AS BIGINT)), 0)                               AS lifetimeTransactionVolume,
-        COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS lifetimeCommission,
-        COALESCE(SUM(CASE WHEN t.[Date] >= @last30 THEN t.[TransactionAmount] ELSE 0 END), 0) AS last30DayTransactionValue,
-        COALESCE(SUM(CASE WHEN t.[Date] >= @last60 THEN t.[TransactionAmount] ELSE 0 END), 0) AS last60DayTransactionValue,
-        COUNT(*)                                                                   AS sourceRowCount
-      FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
-      JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
-      WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
-      GROUP BY a.[CIF]
-    ),
-    customer_info AS (
+        ctx.[CIF]                                                                     AS customerId,
+        NULLIF(LTRIM(RTRIM(CONCAT(ci.firstName, ' ', ci.lastName))), ' ')            AS fullName,
+        NULLIF(ci.mobileNumber, '')                                                   AS mobileNumber,
+        ctx.firstSeenDate,
+        ctx.lastSeenDate,
+        ctx.lifetimeTransactionValue,
+        ctx.lifetimeTransactionVolume,
+        ctx.lifetimeCommission,
+        ctx.last30DayTransactionValue,
+        ctx.last60DayTransactionValue,
+        ctx.sourceRowCount
+      FROM customer_tx ctx
+      LEFT JOIN customer_info ci ON ctx.[CIF] = ci.[CIF]
+    `;
+  } else {
+    query = `
+      WITH customer_tx AS (
+        SELECT
+          a.[CIF],
+          MIN(CAST(t.[Date] AS DATE))                                                AS firstSeenDate,
+          MAX(CAST(t.[Date] AS DATE))                                                AS lastSeenDate,
+          COALESCE(SUM(t.[TransactionAmount]), 0)                                    AS lifetimeTransactionValue,
+          COALESCE(SUM(CAST(t.[Volume] AS BIGINT)), 0)                               AS lifetimeTransactionVolume,
+          COALESCE(ABS(SUM(CASE WHEN t.[NetFee] < 0 THEN t.[NetFee] ELSE 0 END)), 0) AS lifetimeCommission,
+          COALESCE(SUM(CASE WHEN t.[Date] >= @last30 THEN t.[TransactionAmount] ELSE 0 END), 0) AS last30DayTransactionValue,
+          COALESCE(SUM(CASE WHEN t.[Date] >= @last60 THEN t.[TransactionAmount] ELSE 0 END), 0) AS last60DayTransactionValue,
+          COUNT(*)                                                                   AS sourceRowCount
+        FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
+        JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
+        WHERE t.[Currency] = @currency AND a.[CIF] IS NOT NULL
+        GROUP BY a.[CIF]
+      ),
+      customer_info AS (
+        SELECT
+          [CIF],
+          MAX(LTRIM(RTRIM(CAST([FirstName] AS VARCHAR(255))))) AS firstName,
+          MAX(LTRIM(RTRIM(CAST([LastName]  AS VARCHAR(255))))) AS lastName,
+          MAX(LTRIM(RTRIM(CAST([MobileNumber] AS VARCHAR(120))))) AS mobileNumber
+        FROM [${cust.schema}].[${cust.table}] WITH (NOLOCK)
+        GROUP BY [CIF]
+      )
       SELECT
-        [CIF],
-        MAX(LTRIM(RTRIM(CAST([FirstName] AS VARCHAR(255))))) AS firstName,
-        MAX(LTRIM(RTRIM(CAST([LastName]  AS VARCHAR(255))))) AS lastName,
-        MAX(LTRIM(RTRIM(CAST([MobileNumber] AS VARCHAR(120))))) AS mobileNumber
-      FROM [${cust.schema}].[${cust.table}] WITH (NOLOCK)
-      GROUP BY [CIF]
-    )
-    SELECT
-      ctx.[CIF]                                                                     AS customerId,
-      NULLIF(LTRIM(RTRIM(CONCAT(ci.firstName, ' ', ci.lastName))), ' ')            AS fullName,
-      NULLIF(ci.mobileNumber, '')                                                   AS mobileNumber,
-      ctx.firstSeenDate,
-      ctx.lastSeenDate,
-      ctx.lifetimeTransactionValue,
-      ctx.lifetimeTransactionVolume,
-      ctx.lifetimeCommission,
-      ctx.last30DayTransactionValue,
-      ctx.last60DayTransactionValue,
-      ctx.sourceRowCount
-    FROM customer_tx ctx
-    LEFT JOIN customer_info ci ON ctx.[CIF] = ci.[CIF]
-  `);
+        ctx.[CIF]                                                                     AS customerId,
+        NULLIF(LTRIM(RTRIM(CONCAT(ci.firstName, ' ', ci.lastName))), ' ')            AS fullName,
+        NULLIF(ci.mobileNumber, '')                                                   AS mobileNumber,
+        ctx.firstSeenDate,
+        ctx.lastSeenDate,
+        ctx.lifetimeTransactionValue,
+        ctx.lifetimeTransactionVolume,
+        ctx.lifetimeCommission,
+        ctx.last30DayTransactionValue,
+        ctx.last60DayTransactionValue,
+        ctx.sourceRowCount
+      FROM customer_tx ctx
+      LEFT JOIN customer_info ci ON ctx.[CIF] = ci.[CIF]
+    `;
+  }
+
+  const result = await request.query(query);
 
   return (result.recordset as Array<Record<string, unknown>>).map((row) => ({
     customerId: String(row.customerId),
@@ -139,37 +207,31 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
-export async function syncWalletCustomerSnapshot(): Promise<WalletSnapshotSyncResult> {
-  if (!isSourceDbConfigured()) {
-    throw new WalletSnapshotSyncError("Source SQL connection is not configured.", 503);
-  }
+async function getLastRefreshedAt(): Promise<Date | null> {
+  const latest = await prisma.walletCustomerActivitySnapshot.findFirst({
+    orderBy: { refreshedAt: "desc" },
+    select: { refreshedAt: true },
+  });
+  return latest?.refreshedAt ?? null;
+}
 
-  const startMs = Date.now();
-  const refreshedAt = new Date();
-
-  console.log("[WalletSnapshot] Fetching customer aggregates from source DB...");
+/**
+ * Run a full sync: clears the entire table and re-populates from source.
+ * Used on first run and on the weekly Sunday reset.
+ */
+async function runFullSync(refreshedAt: Date): Promise<number> {
+  console.log("[WalletSnapshot] Running FULL sync — fetching all customer aggregates from source DB...");
   const rows = await fetchSnapshotRowsFromSource();
-  console.log(`[WalletSnapshot] Fetched ${rows.length} customer records from source DB.`);
+  console.log(`[WalletSnapshot] Fetched ${rows.length} customer records.`);
 
-  // Full refresh: clear and re-populate
   await prisma.walletCustomerActivitySnapshot.deleteMany({});
-  console.log("[WalletSnapshot] Cleared existing snapshot. Inserting new records...");
+  console.log("[WalletSnapshot] Cleared existing snapshot. Inserting records...");
 
   const batches = chunkArray(rows, BATCH_SIZE);
   for (let i = 0; i < batches.length; i++) {
     await prisma.walletCustomerActivitySnapshot.createMany({
       data: batches[i].map((row) => ({
-        customerId: row.customerId,
-        fullName: row.fullName,
-        mobileNumber: row.mobileNumber,
-        firstSeenDate: row.firstSeenDate,
-        lastSeenDate: row.lastSeenDate,
-        lifetimeTransactionValue: row.lifetimeTransactionValue,
-        lifetimeTransactionVolume: row.lifetimeTransactionVolume,
-        lifetimeCommission: row.lifetimeCommission,
-        last30DayTransactionValue: row.last30DayTransactionValue,
-        last60DayTransactionValue: row.last60DayTransactionValue,
-        sourceRowCount: row.sourceRowCount,
+        ...row,
         refreshedAt,
       })),
     });
@@ -179,10 +241,94 @@ export async function syncWalletCustomerSnapshot(): Promise<WalletSnapshotSyncRe
     }
   }
 
+  return rows.length;
+}
+
+/**
+ * Run an incremental sync: fetches only customers active since sinceDate, then upserts
+ * their records. Inactive customers are left untouched.
+ */
+async function runIncrementalSync(sinceDate: Date, refreshedAt: Date): Promise<number> {
+  console.log(`[WalletSnapshot] Running INCREMENTAL sync — fetching customers active since ${sinceDate.toISOString()}...`);
+  const rows = await fetchSnapshotRowsFromSource(sinceDate);
+  console.log(`[WalletSnapshot] Fetched ${rows.length} changed customer records.`);
+
+  if (rows.length === 0) {
+    return 0;
+  }
+
+  const batches = chunkArray(rows, BATCH_SIZE);
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    const ids = batch.map((r) => r.customerId);
+
+    // Delete existing records for this batch of customers then reinsert with fresh data.
+    await prisma.$transaction([
+      prisma.walletCustomerActivitySnapshot.deleteMany({
+        where: { customerId: { in: ids } },
+      }),
+      prisma.walletCustomerActivitySnapshot.createMany({
+        data: batch.map((row) => ({
+          ...row,
+          refreshedAt,
+        })),
+      }),
+    ]);
+
+    if ((i + 1) % 20 === 0 || i === batches.length - 1) {
+      console.log(`[WalletSnapshot] Upserted batch ${i + 1}/${batches.length} (${Math.min((i + 1) * BATCH_SIZE, rows.length)}/${rows.length} records)`);
+    }
+  }
+
+  return rows.length;
+}
+
+/**
+ * Sync the wallet customer snapshot.
+ *
+ * - full: always clears and re-populates the entire table (used for the weekly Sunday job).
+ * - incremental (default): if a previous snapshot exists and is recent, only processes
+ *   customers who have been active since the last sync minus a 1-day buffer. Falls back to
+ *   a full sync if there is no existing data.
+ */
+export async function syncWalletCustomerSnapshot(mode: "full" | "incremental" = "incremental"): Promise<WalletSnapshotSyncResult> {
+  if (!isSourceDbConfigured()) {
+    throw new WalletSnapshotSyncError("Source SQL connection is not configured.", 503);
+  }
+
+  const startMs = Date.now();
+  const refreshedAt = new Date();
+
+  let customerCount: number;
+  let effectiveMode: "full" | "incremental";
+
+  if (mode === "full") {
+    customerCount = await runFullSync(refreshedAt);
+    effectiveMode = "full";
+  } else {
+    const lastRefreshedAt = await getLastRefreshedAt();
+
+    if (!lastRefreshedAt) {
+      // No existing data — must do a full sync first.
+      console.log("[WalletSnapshot] No existing snapshot found — falling back to full sync.");
+      customerCount = await runFullSync(refreshedAt);
+      effectiveMode = "full";
+    } else {
+      // Subtract 1 day from the last sync time as a buffer so we don't miss transactions
+      // that landed close to the sync boundary.
+      const sinceDate = new Date(lastRefreshedAt.getTime() - 86_400_000);
+      customerCount = await runIncrementalSync(sinceDate, refreshedAt);
+      effectiveMode = "incremental";
+    }
+  }
+
+  console.log(`[WalletSnapshot] ${effectiveMode} sync complete — ${customerCount} customers in ${Date.now() - startMs}ms`);
+
   return {
-    customerCount: rows.length,
+    customerCount,
     durationMs: Date.now() - startMs,
     refreshedAt: refreshedAt.toISOString(),
+    mode: effectiveMode,
   };
 }
 
@@ -200,7 +346,8 @@ export async function getSnapshotStatus(): Promise<{
   ]);
 
   const refreshedAt = latest?.refreshedAt ?? null;
-  const staleCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000); // 3 days
+  // Stale if not refreshed within the last 25 hours (daily job + 1 hour slack).
+  const staleCutoff = new Date(Date.now() - 25 * 60 * 60 * 1000);
   const isStale = count === 0 || (refreshedAt !== null && refreshedAt < staleCutoff);
 
   return {

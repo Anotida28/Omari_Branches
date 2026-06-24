@@ -30,7 +30,11 @@ export async function fetchSnapshotStatus(): Promise<SnapshotStatus> {
 }
 
 export async function triggerSnapshotSync(): Promise<{ customerCount: number; durationMs: number; refreshedAt: string }> {
-  const { data } = await api.post<{ ok: boolean; data: { customerCount: number; durationMs: number; refreshedAt: string } }>("/api/admin/wallet-snapshot/sync");
+  const { data } = await api.post<{ ok: boolean; data: { customerCount: number; durationMs: number; refreshedAt: string } }>(
+    "/api/admin/wallet-snapshot/sync",
+    undefined,
+    { timeout: 10 * 60 * 1000 },
+  );
   return data.data;
 }
 

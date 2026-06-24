@@ -45,7 +45,8 @@ const scheduledJobs: ScheduledJob[] = [];
 const DAILY_ALERT_CRON = "0 6 * * *";                // 06:00 UTC = 08:00 Harare (UTC+2)
 const DAILY_BRANCH_REPORT_CRON = "0 6 * * *";        // 06:00 UTC = 08:00 Harare (UTC+2)
 const DAILY_WALLET_REPORT_CRON = "0 6 * * *";        // 06:00 UTC = 08:00 Harare (UTC+2)
-const WALLET_SNAPSHOT_CRON = "0 3 * * 0";            // 03:00 UTC Sunday = 05:00 Harare (weekly)
+const WALLET_SNAPSHOT_INCREMENTAL_CRON = "0 2 * * *"; // 02:00 UTC daily = 04:00 Harare — incremental (active customers only)
+const WALLET_SNAPSHOT_FULL_CRON = "0 3 * * 0";        // 03:00 UTC Sunday = 05:00 Harare — full reset weekly
 const SOURCE_METRICS_SYNC_CRON = env.SOURCE_SQL_SYNC_CRON;
 
 // ============================================================================
@@ -162,10 +163,10 @@ async function runDailyWalletReports(): Promise<void> {
   }
 }
 
-async function runWeeklyWalletSnapshot(): Promise<void> {
-  console.log(`[Scheduler] Running wallet customer snapshot sync at ${new Date().toISOString()}`);
+async function runDailyWalletSnapshotIncremental(): Promise<void> {
+  console.log(`[Scheduler] Running daily wallet snapshot (incremental) at ${new Date().toISOString()}`);
 
-  const { executed, result, error } = await runWalletSnapshotJobWithLock();
+  const { executed, result, error } = await runWalletSnapshotJobWithLock("incremental");
 
   if (!executed) {
     console.log(`[Scheduler] Wallet snapshot job skipped - another instance is running`);
@@ -173,12 +174,38 @@ async function runWeeklyWalletSnapshot(): Promise<void> {
   }
 
   if (error) {
-    console.error(`[Scheduler] Wallet snapshot job failed:`, error);
+    console.error(`[Scheduler] Wallet snapshot incremental job failed:`, error);
     return;
   }
 
   if (result) {
-    console.log(`[Scheduler] Wallet snapshot job completed:`, {
+    console.log(`[Scheduler] Wallet snapshot incremental job completed:`, {
+      mode: result.mode,
+      customers: result.customerCount,
+      durationMs: result.durationMs,
+      refreshedAt: result.refreshedAt,
+    });
+  }
+}
+
+async function runWeeklyWalletSnapshotFull(): Promise<void> {
+  console.log(`[Scheduler] Running weekly wallet snapshot (full reset) at ${new Date().toISOString()}`);
+
+  const { executed, result, error } = await runWalletSnapshotJobWithLock("full");
+
+  if (!executed) {
+    console.log(`[Scheduler] Wallet snapshot full job skipped - another instance is running`);
+    return;
+  }
+
+  if (error) {
+    console.error(`[Scheduler] Wallet snapshot full job failed:`, error);
+    return;
+  }
+
+  if (result) {
+    console.log(`[Scheduler] Wallet snapshot full job completed:`, {
+      mode: result.mode,
       customers: result.customerCount,
       durationMs: result.durationMs,
       refreshedAt: result.refreshedAt,
@@ -221,11 +248,18 @@ export function startScheduler(): void {
     task: walletReportTask,
   });
 
-  const walletSnapshotTask = cron.schedule(WALLET_SNAPSHOT_CRON, runWeeklyWalletSnapshot);
+  const walletSnapshotDailyTask = cron.schedule(WALLET_SNAPSHOT_INCREMENTAL_CRON, runDailyWalletSnapshotIncremental);
   scheduledJobs.push({
-    name: "wallet-customer-snapshot",
-    cronExpression: WALLET_SNAPSHOT_CRON,
-    task: walletSnapshotTask,
+    name: "wallet-customer-snapshot-incremental",
+    cronExpression: WALLET_SNAPSHOT_INCREMENTAL_CRON,
+    task: walletSnapshotDailyTask,
+  });
+
+  const walletSnapshotFullTask = cron.schedule(WALLET_SNAPSHOT_FULL_CRON, runWeeklyWalletSnapshotFull);
+  scheduledJobs.push({
+    name: "wallet-customer-snapshot-full",
+    cronExpression: WALLET_SNAPSHOT_FULL_CRON,
+    task: walletSnapshotFullTask,
   });
 
   if (shouldEnableSourceMetricsSync()) {
