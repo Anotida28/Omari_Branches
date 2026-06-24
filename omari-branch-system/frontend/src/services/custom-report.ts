@@ -5,7 +5,15 @@ export type SectionType =
   | "TOP_PERFORMERS"
   | "WALLET_SUMMARY"
   | "WALLET_RETENTION"
-  | "ALERTS_SUMMARY";
+  | "ALERTS_SUMMARY"
+  | "FLOAT_POSITION"
+  | "TRANSACTION_TRENDS"
+  | "NEW_CUSTOMERS"
+  | "TOP_WALLET_CUSTOMERS"
+  | "REVENUE_BREAKDOWN"
+  | "UPCOMING_PAYMENTS"
+  | "OVERDUE_SUMMARY"
+  | "WEEK_SNAPSHOT";
 
 export type ReportSection = {
   id: string;

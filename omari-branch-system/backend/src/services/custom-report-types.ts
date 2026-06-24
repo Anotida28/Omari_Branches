@@ -3,7 +3,17 @@ export type SectionType =
   | "TOP_PERFORMERS"
   | "WALLET_SUMMARY"
   | "WALLET_RETENTION"
-  | "ALERTS_SUMMARY";
+  | "ALERTS_SUMMARY"
+  | "FLOAT_POSITION"
+  | "TRANSACTION_TRENDS"
+  | "NEW_CUSTOMERS"
+  | "TOP_WALLET_CUSTOMERS"
+  | "REVENUE_BREAKDOWN"
+  | "UPCOMING_PAYMENTS"
+  | "OVERDUE_SUMMARY"
+  | "WEEK_SNAPSHOT";
+
+// ─── Param types ─────────────────────────────────────────────────────────────
 
 export type BranchPerformanceParams = {
   showCashIn?: boolean;
@@ -21,12 +31,41 @@ export type TopPerformersParams = {
 };
 
 export type WalletSummaryParams = Record<string, never>;
-
 export type WalletRetentionParams = Record<string, never>;
 
 export type AlertsSummaryParams = {
   limit?: number;
 };
+
+export type FloatPositionParams = {
+  threshold?: number;
+  order?: "asc" | "desc";
+};
+
+export type TransactionTrendsParams = {
+  metric?: "cashIn" | "cashOut" | "volume";
+};
+
+export type NewCustomersParams = Record<string, never>;
+
+export type TopWalletCustomersParams = {
+  metric?: "last30d" | "lifetime";
+  limit?: number;
+};
+
+export type RevenueBreakdownParams = Record<string, never>;
+
+export type UpcomingPaymentsParams = {
+  daysAhead?: number;
+};
+
+export type OverdueSummaryParams = Record<string, never>;
+
+export type WeekSnapshotParams = {
+  metric?: "cashIn" | "cashOut" | "volume" | "commission";
+};
+
+// ─── Shared row types ─────────────────────────────────────────────────────────
 
 export type ReportSection = {
   id: string;
@@ -41,8 +80,6 @@ export type UserReportConfigData = {
   branchIds: string[];
 };
 
-// ─── Section data shapes returned by the data service ───────────────────────
-
 export type BranchRow = {
   branchName: string;
   cashInValue: number;
@@ -54,6 +91,8 @@ export type BranchRow = {
   totalTransactionVolume: number;
 };
 
+// ─── Section data shapes ──────────────────────────────────────────────────────
+
 export type BranchPerformanceSectionData = {
   type: "BRANCH_PERFORMANCE";
   date: string;
@@ -61,12 +100,7 @@ export type BranchPerformanceSectionData = {
   rows: BranchRow[];
 };
 
-export type TopPerformerRow = {
-  rank: number;
-  branchName: string;
-  value: number;
-};
-
+export type TopPerformerRow = { rank: number; branchName: string; value: number };
 export type TopPerformersSectionData = {
   type: "TOP_PERFORMERS";
   date: string;
@@ -102,11 +136,117 @@ export type AlertRow = {
   dayOffset: number;
   sentAt: string;
 };
-
 export type AlertsSummarySectionData = {
   type: "ALERTS_SUMMARY";
   params: AlertsSummaryParams;
   alerts: AlertRow[];
+};
+
+export type FloatPositionRow = {
+  branchName: string;
+  eFloatBalance: number;
+  status: "low" | "ok" | "good";
+};
+export type FloatPositionSectionData = {
+  type: "FLOAT_POSITION";
+  date: string;
+  params: FloatPositionParams;
+  threshold: number;
+  rows: FloatPositionRow[];
+};
+
+export type TransactionTrendRow = {
+  branchName: string;
+  yesterday: number;
+  avg7d: number;
+  changePercent: number;
+};
+export type TransactionTrendsSectionData = {
+  type: "TRANSACTION_TRENDS";
+  date: string;
+  params: TransactionTrendsParams;
+  rows: TransactionTrendRow[];
+};
+
+export type NewCustomersSectionData = {
+  type: "NEW_CUSTOMERS";
+  date: string;
+  newYesterday: number;
+  avg7d: number;
+  totalThisMonth: number;
+};
+
+export type WalletCustomerRow = {
+  rank: number;
+  fullName: string;
+  mobileNumber: string;
+  value: number;
+  lifetimeVolume: number;
+};
+export type TopWalletCustomersSectionData = {
+  type: "TOP_WALLET_CUSTOMERS";
+  asOfDate: string;
+  params: TopWalletCustomersParams;
+  rows: WalletCustomerRow[];
+};
+
+export type RevenueBreakdownRow = {
+  branchName: string;
+  commissionOnDeposits: number;
+  commissionOnWithdrawals: number;
+  totalCommission: number;
+};
+export type RevenueBreakdownSectionData = {
+  type: "REVENUE_BREAKDOWN";
+  date: string;
+  totalDeposits: number;
+  totalWithdrawals: number;
+  grandTotal: number;
+  rows: RevenueBreakdownRow[];
+};
+
+export type UpcomingPaymentRow = {
+  branchName: string;
+  expenseType: string;
+  dueDate: string;
+  amount: number;
+  currency: string;
+  daysUntilDue: number;
+};
+export type UpcomingPaymentsSectionData = {
+  type: "UPCOMING_PAYMENTS";
+  asOfDate: string;
+  params: UpcomingPaymentsParams;
+  payments: UpcomingPaymentRow[];
+};
+
+export type OverduePaymentRow = {
+  branchName: string;
+  expenseType: string;
+  dueDate: string;
+  amount: number;
+  currency: string;
+  daysOverdue: number;
+};
+export type OverdueSummarySectionData = {
+  type: "OVERDUE_SUMMARY";
+  asOfDate: string;
+  payments: OverduePaymentRow[];
+  totalAmount: number;
+};
+
+export type WeekSnapshotDay = {
+  date: string;
+  dayLabel: string;
+  value: number;
+  volume: number;
+};
+export type WeekSnapshotSectionData = {
+  type: "WEEK_SNAPSHOT";
+  params: WeekSnapshotParams;
+  days: WeekSnapshotDay[];
+  grandValue: number;
+  grandVolume: number;
 };
 
 export type SectionData =
@@ -114,4 +254,12 @@ export type SectionData =
   | TopPerformersSectionData
   | WalletSummarySectionData
   | WalletRetentionSectionData
-  | AlertsSummarySectionData;
+  | AlertsSummarySectionData
+  | FloatPositionSectionData
+  | TransactionTrendsSectionData
+  | NewCustomersSectionData
+  | TopWalletCustomersSectionData
+  | RevenueBreakdownSectionData
+  | UpcomingPaymentsSectionData
+  | OverdueSummarySectionData
+  | WeekSnapshotSectionData;

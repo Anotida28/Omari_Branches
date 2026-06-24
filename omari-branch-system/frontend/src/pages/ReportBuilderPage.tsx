@@ -37,16 +37,24 @@ import {
   Typography,
 } from "@mui/material";
 import {
+  AlertTriangle,
+  BarChart2,
   Bell,
+  CalendarClock,
   ChartColumn,
   ChevronDown,
   ChevronUp,
+  Crown,
+  DollarSign,
+  Droplets,
   GripVertical,
   LayoutList,
   Mail,
   Send,
   Trash2,
+  TrendingUp,
   Trophy,
+  UserPlus,
   Users,
   Wallet,
 } from "lucide-react";
@@ -103,14 +111,70 @@ const BLOCK_DEFS: Record<SectionType, BlockDef> = {
     icon: Bell,
     defaultParams: { limit: 10 },
   },
+  FLOAT_POSITION: {
+    label: "Float Position",
+    description: "E-float balance per branch with low/ok/good health indicator",
+    icon: Droplets,
+    defaultParams: { threshold: 5000, order: "asc" },
+  },
+  TRANSACTION_TRENDS: {
+    label: "Transaction Trends",
+    description: "Yesterday vs 7-day average — spot branches trending up or down",
+    icon: TrendingUp,
+    defaultParams: { metric: "cashIn" },
+  },
+  NEW_CUSTOMERS: {
+    label: "New Customers",
+    description: "New wallet customer registrations yesterday, 7-day avg, and month total",
+    icon: UserPlus,
+    defaultParams: {},
+  },
+  TOP_WALLET_CUSTOMERS: {
+    label: "Top Wallet Customers",
+    description: "Highest-value wallet customers by 30-day or lifetime transaction value",
+    icon: Crown,
+    defaultParams: { metric: "last30d", limit: 10 },
+  },
+  REVENUE_BREAKDOWN: {
+    label: "Revenue Breakdown",
+    description: "Commission split by deposit vs withdrawal for each branch",
+    icon: DollarSign,
+    defaultParams: {},
+  },
+  UPCOMING_PAYMENTS: {
+    label: "Upcoming Payments",
+    description: "Expenses due in the next N days across your branches",
+    icon: CalendarClock,
+    defaultParams: { daysAhead: 14 },
+  },
+  OVERDUE_SUMMARY: {
+    label: "Overdue Payments",
+    description: "All overdue expenses grouped by branch with days overdue",
+    icon: AlertTriangle,
+    defaultParams: {},
+  },
+  WEEK_SNAPSHOT: {
+    label: "Week Snapshot",
+    description: "7-day daily totals with a mini bar chart — spot weekly patterns",
+    icon: BarChart2,
+    defaultParams: { metric: "cashIn" },
+  },
 };
 
 const SECTION_ORDER: SectionType[] = [
   "BRANCH_PERFORMANCE",
   "TOP_PERFORMERS",
+  "FLOAT_POSITION",
+  "TRANSACTION_TRENDS",
+  "REVENUE_BREAKDOWN",
+  "WEEK_SNAPSHOT",
+  "UPCOMING_PAYMENTS",
+  "OVERDUE_SUMMARY",
+  "ALERTS_SUMMARY",
   "WALLET_SUMMARY",
   "WALLET_RETENTION",
-  "ALERTS_SUMMARY",
+  "NEW_CUSTOMERS",
+  "TOP_WALLET_CUSTOMERS",
 ];
 
 // ─── Sortable Block Card ──────────────────────────────────────────────────────
@@ -262,6 +326,97 @@ function BlockParams({ section, onChange }: { section: ReportSection; onChange: 
             <MenuItem value={5}>5</MenuItem>
             <MenuItem value={10}>10</MenuItem>
             <MenuItem value={20}>20</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>
+    );
+  }
+
+  if (section.type === "FLOAT_POSITION") {
+    return (
+      <Stack direction="row" flexWrap="wrap" gap={2} mt={1}>
+        <TextField
+          label="Low threshold ($)"
+          type="number"
+          size="small"
+          sx={{ minWidth: 160 }}
+          value={(p.threshold as number) ?? 5000}
+          onChange={(e) => onChange("threshold", Number(e.target.value))}
+          inputProps={{ min: 0, step: 500 }}
+        />
+        <FormControl size="small" sx={{ minWidth: 130 }}>
+          <InputLabel>Order</InputLabel>
+          <Select label="Order" value={(p.order as string) ?? "asc"} onChange={(e) => onChange("order", e.target.value)}>
+            <MenuItem value="asc">Lowest first</MenuItem>
+            <MenuItem value="desc">Highest first</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>
+    );
+  }
+
+  if (section.type === "TRANSACTION_TRENDS") {
+    return (
+      <Stack mt={1}>
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel>Metric</InputLabel>
+          <Select label="Metric" value={(p.metric as string) ?? "cashIn"} onChange={(e) => onChange("metric", e.target.value)}>
+            <MenuItem value="cashIn">Cash In</MenuItem>
+            <MenuItem value="cashOut">Cash Out</MenuItem>
+            <MenuItem value="volume">Transaction Volume</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>
+    );
+  }
+
+  if (section.type === "TOP_WALLET_CUSTOMERS") {
+    return (
+      <Stack direction="row" flexWrap="wrap" gap={2} mt={1}>
+        <FormControl size="small" sx={{ minWidth: 170 }}>
+          <InputLabel>Rank by</InputLabel>
+          <Select label="Rank by" value={(p.metric as string) ?? "last30d"} onChange={(e) => onChange("metric", e.target.value)}>
+            <MenuItem value="last30d">30-Day Value</MenuItem>
+            <MenuItem value="lifetime">Lifetime Value</MenuItem>
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 100 }}>
+          <InputLabel>Show</InputLabel>
+          <Select label="Show" value={(p.limit as number) ?? 10} onChange={(e) => onChange("limit", Number(e.target.value))}>
+            <MenuItem value={5}>Top 5</MenuItem>
+            <MenuItem value={10}>Top 10</MenuItem>
+            <MenuItem value={20}>Top 20</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>
+    );
+  }
+
+  if (section.type === "UPCOMING_PAYMENTS") {
+    return (
+      <Stack mt={1}>
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel>Days ahead</InputLabel>
+          <Select label="Days ahead" value={(p.daysAhead as number) ?? 14} onChange={(e) => onChange("daysAhead", Number(e.target.value))}>
+            <MenuItem value={7}>Next 7 days</MenuItem>
+            <MenuItem value={14}>Next 14 days</MenuItem>
+            <MenuItem value={30}>Next 30 days</MenuItem>
+          </Select>
+        </FormControl>
+      </Stack>
+    );
+  }
+
+  if (section.type === "WEEK_SNAPSHOT") {
+    return (
+      <Stack mt={1}>
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel>Metric</InputLabel>
+          <Select label="Metric" value={(p.metric as string) ?? "cashIn"} onChange={(e) => onChange("metric", e.target.value)}>
+            <MenuItem value="cashIn">Cash In</MenuItem>
+            <MenuItem value="cashOut">Cash Out</MenuItem>
+            <MenuItem value="volume">Transaction Volume</MenuItem>
+            <MenuItem value="commission">Commission</MenuItem>
           </Select>
         </FormControl>
       </Stack>
