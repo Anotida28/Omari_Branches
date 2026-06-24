@@ -16,6 +16,7 @@ import {
   runSourceMetricsSyncJobWithLock,
   shouldEnableSourceMetricsSync,
 } from "./source-metrics-sync.job";
+import { runCustomReportJobWithLock } from "./custom-report.job";
 import { runWalletSnapshotJobWithLock } from "./wallet-snapshot.job";
 
 // ============================================================================
@@ -45,6 +46,7 @@ const scheduledJobs: ScheduledJob[] = [];
 const DAILY_ALERT_CRON = "0 6 * * *";                // 06:00 UTC = 08:00 Harare (UTC+2)
 const DAILY_BRANCH_REPORT_CRON = "0 6 * * *";        // 06:00 UTC = 08:00 Harare (UTC+2)
 const DAILY_WALLET_REPORT_CRON = "0 6 * * *";        // 06:00 UTC = 08:00 Harare (UTC+2)
+const CUSTOM_REPORT_CRON = "30 6 * * *";              // 06:30 UTC = 08:30 Harare (UTC+2) — after branch/wallet reports
 const WALLET_SNAPSHOT_INCREMENTAL_CRON = "0 2 * * *"; // 02:00 UTC daily = 04:00 Harare — incremental (active customers only)
 const WALLET_SNAPSHOT_FULL_CRON = "0 3 * * 0";        // 03:00 UTC Sunday = 05:00 Harare — full reset weekly
 const SOURCE_METRICS_SYNC_CRON = env.SOURCE_SQL_SYNC_CRON;
@@ -188,6 +190,32 @@ async function runDailyWalletSnapshotIncremental(): Promise<void> {
   }
 }
 
+async function runDailyCustomReports(): Promise<void> {
+  console.log(`[Scheduler] Running daily custom report emailer at ${new Date().toISOString()}`);
+
+  const { executed, result, error } = await runCustomReportJobWithLock();
+
+  if (!executed) {
+    console.log(`[Scheduler] Custom report job skipped - another instance is running`);
+    return;
+  }
+
+  if (error) {
+    console.error(`[Scheduler] Custom report job failed with error:`, error);
+    return;
+  }
+
+  if (result) {
+    console.log(`[Scheduler] Custom report job completed:`, {
+      reportDate: result.reportDate,
+      users: result.usersProcessed,
+      sent: result.sentCount,
+      failed: result.failedCount,
+      skipped: result.skippedCount,
+    });
+  }
+}
+
 async function runWeeklyWalletSnapshotFull(): Promise<void> {
   console.log(`[Scheduler] Running weekly wallet snapshot (full reset) at ${new Date().toISOString()}`);
 
@@ -246,6 +274,13 @@ export function startScheduler(): void {
     name: "daily-wallet-report-emailer",
     cronExpression: DAILY_WALLET_REPORT_CRON,
     task: walletReportTask,
+  });
+
+  const customReportTask = cron.schedule(CUSTOM_REPORT_CRON, runDailyCustomReports);
+  scheduledJobs.push({
+    name: "custom-report-emailer",
+    cronExpression: CUSTOM_REPORT_CRON,
+    task: customReportTask,
   });
 
   const walletSnapshotDailyTask = cron.schedule(WALLET_SNAPSHOT_INCREMENTAL_CRON, runDailyWalletSnapshotIncremental);

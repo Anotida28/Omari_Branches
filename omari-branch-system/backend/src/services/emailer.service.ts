@@ -6,6 +6,7 @@ export const EmailType = {
   REMINDER: "REMINDER",
   DAILY_BRANCH_REPORT: "DAILY_BRANCH_REPORT",
   DAILY_WALLET_REPORT: "DAILY_WALLET_REPORT",
+  CUSTOM_REPORT: "CUSTOM_REPORT",
 } as const;
 
 export type EmailTypeValue = (typeof EmailType)[keyof typeof EmailType];

@@ -28,6 +28,7 @@ import {
   CreditCard,
   DollarSign,
   Droplets,
+  FileText,
   LayoutDashboard,
   LineChart,
   LogOut,
@@ -96,6 +97,12 @@ const remittanceCenterItems: NavItem[] = [
     label: "Reports",
     subtitle: "Export branch performance and reminder summaries",
     icon: BarChart3,
+  },
+  {
+    to: "/my-report",
+    label: "My Daily Report",
+    subtitle: "Build and customise your personal daily email report",
+    icon: FileText,
   },
 ];
 
