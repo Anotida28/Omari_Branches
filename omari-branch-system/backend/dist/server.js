@@ -6,11 +6,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 require("./config/env");
 const app_1 = __importDefault(require("./app"));
 const scheduler_1 = require("./jobs/scheduler");
+const job_lock_service_1 = require("./services/job-lock.service");
 const port = Number(process.env.PORT || 4000);
-const server = app_1.default.listen(port, () => {
+const server = app_1.default.listen(port, async () => {
     console.log(`API listening on http://localhost:${port}`);
     console.log(`Health: http://localhost:${port}/health`);
-    // Start the job scheduler
+    await (0, job_lock_service_1.releaseAllLocks)();
     (0, scheduler_1.startScheduler)();
 });
 // Graceful shutdown
