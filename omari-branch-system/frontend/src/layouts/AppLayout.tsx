@@ -98,26 +98,20 @@ const remittanceCenterItems: NavItem[] = [
     subtitle: "Export branch performance and reminder summaries",
     icon: BarChart3,
   },
+];
+
+const notificationsItems: NavItem[] = [
+  {
+    to: "/reminders",
+    label: "Reminders",
+    subtitle: "Monthly schedule and delivery history for branch expense reminders",
+    icon: Bell,
+  },
   {
     to: "/my-report",
     label: "My Daily Report",
     subtitle: "Build and customise your personal daily email report",
     icon: FileText,
-  },
-];
-
-const notificationsItems: NavItem[] = [
-  {
-    to: "/expenses",
-    label: "Reminders",
-    subtitle: "Manage reminder records and due dates",
-    icon: DollarSign,
-  },
-  {
-    to: "/alerts",
-    label: "Reminder Logs",
-    subtitle: "Review reminder delivery history and failures",
-    icon: Bell,
   },
   {
     to: "/settings",

@@ -9,9 +9,14 @@ import type {
   AlertsSummaryParams,
   FloatPositionParams,
   TransactionTrendsParams,
+  TransactionTrendMetric,
+  TransactionTrendMetricData,
   TopWalletCustomersParams,
+  WalletCustomerMetric,
   UpcomingPaymentsParams,
   WeekSnapshotParams,
+  WeekSnapshotMetric,
+  WeekSnapshotDay,
   BranchRow,
   BranchPerformanceSectionData,
   TopPerformersSectionData,
@@ -102,32 +107,36 @@ async function buildTopPerformers(
   branchIds: string[],
 ): Promise<TopPerformersSectionData> {
   const params = section.params as TopPerformersParams;
-  const metric = params.metric ?? "cashIn";
-  const limit  = params.limit  ?? 10;
-  const order  = params.order  ?? "desc";
+  const metrics = params.metrics?.length ? params.metrics : ["cashIn" as const];
+  const sortBy  = params.sortBy ?? metrics[0] ?? "cashIn";
+  const limit   = params.limit  ?? 10;
+  const order   = params.order  ?? "desc";
 
   const yesterday = getYesterday();
   const rows = await fetchBranchRows(branchIds, yesterday);
 
-  const getValue = (row: BranchRow) => {
-    if (metric === "cashIn")      return row.cashInValue;
-    if (metric === "cashOut")     return row.cashOutValue;
-    if (metric === "eFloat")      return row.eFloatBalance;
+  const getSortValue = (row: BranchRow) => {
+    if (sortBy === "cashIn")      return row.cashInValue;
+    if (sortBy === "cashOut")     return row.cashOutValue;
+    if (sortBy === "eFloat")      return row.eFloatBalance;
     return row.totalCommission;
   };
 
   const sorted = [...rows].sort((a, b) =>
-    order === "asc" ? getValue(a) - getValue(b) : getValue(b) - getValue(a),
+    order === "asc" ? getSortValue(a) - getSortValue(b) : getSortValue(b) - getSortValue(a),
   );
 
   return {
     type: "TOP_PERFORMERS",
     date: formatDateString(yesterday),
-    params,
+    params: { ...params, metrics, sortBy },
     rows: sorted.slice(0, limit).map((row, i) => ({
       rank: i + 1,
       branchName: row.branchName,
-      value: getValue(row),
+      ...(metrics.includes("cashIn")      ? { cashIn:      row.cashInValue }     : {}),
+      ...(metrics.includes("cashOut")     ? { cashOut:     row.cashOutValue }    : {}),
+      ...(metrics.includes("eFloat")      ? { eFloat:      row.eFloatBalance }   : {}),
+      ...(metrics.includes("commission")  ? { commission:  row.totalCommission } : {}),
     })),
   };
 }
@@ -251,7 +260,13 @@ async function buildTransactionTrends(
   branchIds: string[],
 ): Promise<TransactionTrendsSectionData> {
   const params = section.params as TransactionTrendsParams;
-  const metric = params.metric ?? "cashIn";
+  const legacyMetric = (section.params as Record<string, unknown>).metric as string | undefined;
+  const metrics: TransactionTrendMetric[] = params.metrics?.length
+    ? params.metrics
+    : legacyMetric
+      ? [legacyMetric as TransactionTrendMetric]
+      : ["cashIn"];
+  const sortBy: TransactionTrendMetric = params.sortBy ?? metrics[0] ?? "cashIn";
 
   const yesterday = getYesterday();
   const sevenDaysAgo = new Date(yesterday.getTime() - 6 * 86_400_000);
@@ -268,34 +283,53 @@ async function buildTransactionTrends(
     include: { branch: { select: { city: true, label: true } } },
   });
 
-  const byBranch = new Map<string, { name: string; days: Map<string, number> }>();
+  const byBranch = new Map<string, {
+    name: string;
+    cashInDays: Map<string, number>;
+    cashOutDays: Map<string, number>;
+    volumeDays: Map<string, number>;
+  }>();
 
   for (const m of all) {
     const name = `${m.branch.city} - ${m.branch.label}`;
-    if (!byBranch.has(name)) byBranch.set(name, { name, days: new Map() });
+    if (!byBranch.has(name)) byBranch.set(name, {
+      name,
+      cashInDays:  new Map(),
+      cashOutDays: new Map(),
+      volumeDays:  new Map(),
+    });
     const dateKey = m.metricDate.toISOString().slice(0, 10);
-    const value =
-      metric === "cashIn"  ? toNum(m.cashInValue)
-      : metric === "cashOut" ? toNum(m.cashOutValue)
-      : m.totalTransactionVolume;
-    byBranch.get(name)!.days.set(dateKey, value);
+    const entry = byBranch.get(name)!;
+    entry.cashInDays.set(dateKey,  toNum(m.cashInValue));
+    entry.cashOutDays.set(dateKey, toNum(m.cashOutValue));
+    entry.volumeDays.set(dateKey,  m.totalTransactionVolume);
   }
 
   const yesterdayKey = yesterday.toISOString().slice(0, 10);
 
-  const rows = [...byBranch.values()].map(({ name, days }) => {
+  const computeMetric = (days: Map<string, number>): TransactionTrendMetricData => {
     const yesterdayVal = days.get(yesterdayKey) ?? 0;
-    const prior = [...days.entries()]
-      .filter(([k]) => k !== yesterdayKey)
-      .map(([, v]) => v);
+    const prior = [...days.entries()].filter(([k]) => k !== yesterdayKey).map(([, v]) => v);
     const avg7d = prior.length > 0 ? prior.reduce((s, v) => s + v, 0) / prior.length : 0;
-    const changePercent = avg7d > 0 ? ((yesterdayVal - avg7d) / avg7d) * 100 : 0;
-    return { branchName: name, yesterday: yesterdayVal, avg7d, changePercent };
+    return { yesterday: yesterdayVal, avg7d, changePercent: avg7d > 0 ? ((yesterdayVal - avg7d) / avg7d) * 100 : 0 };
+  };
+
+  const rows = [...byBranch.values()].map(({ name, cashInDays, cashOutDays, volumeDays }) => ({
+    branchName: name,
+    ...(metrics.includes("cashIn")  ? { cashIn:  computeMetric(cashInDays)  } : {}),
+    ...(metrics.includes("cashOut") ? { cashOut: computeMetric(cashOutDays) } : {}),
+    ...(metrics.includes("volume")  ? { volume:  computeMetric(volumeDays)  } : {}),
+  }));
+
+  rows.sort((a, b) => {
+    const getVal = (r: typeof a) =>
+      sortBy === "cashIn" ? (r.cashIn?.yesterday ?? 0)
+      : sortBy === "cashOut" ? (r.cashOut?.yesterday ?? 0)
+      : (r.volume?.yesterday ?? 0);
+    return getVal(b) - getVal(a);
   });
 
-  rows.sort((a, b) => b.yesterday - a.yesterday);
-
-  return { type: "TRANSACTION_TRENDS", date: formatDateString(yesterday), params, rows };
+  return { type: "TRANSACTION_TRENDS", date: formatDateString(yesterday), params: { ...params, metrics, sortBy }, rows };
 }
 
 async function buildNewCustomers(): Promise<NewCustomersSectionData> {
@@ -329,14 +363,19 @@ async function buildTopWalletCustomers(
   section: ReportSection,
 ): Promise<TopWalletCustomersSectionData> {
   const params = section.params as TopWalletCustomersParams;
-  const metric = params.metric ?? "last30d";
-  const limit  = params.limit  ?? 10;
+  const legacyMetric = (section.params as Record<string, unknown>).metric as string | undefined;
+  const metrics: WalletCustomerMetric[] = params.metrics?.length
+    ? params.metrics
+    : legacyMetric
+      ? [legacyMetric as WalletCustomerMetric]
+      : ["last30d"];
+  const sortBy: WalletCustomerMetric = params.sortBy ?? metrics[0] ?? "last30d";
+  const limit = params.limit ?? 10;
 
   const customers = await prisma.walletCustomerActivitySnapshot.findMany({
-    orderBy:
-      metric === "last30d"
-        ? { last30DayTransactionValue: "desc" }
-        : { lifetimeTransactionValue: "desc" },
+    orderBy: sortBy === "last30d"
+      ? { last30DayTransactionValue: "desc" }
+      : { lifetimeTransactionValue: "desc" },
     take: limit,
     select: {
       fullName:                  true,
@@ -348,15 +387,16 @@ async function buildTopWalletCustomers(
   });
 
   return {
-    type:      "TOP_WALLET_CUSTOMERS",
-    asOfDate:  formatDateString(new Date()),
-    params,
+    type:    "TOP_WALLET_CUSTOMERS",
+    asOfDate: formatDateString(new Date()),
+    params:  { ...params, metrics, sortBy },
     rows: customers.map((c, i) => ({
-      rank:            i + 1,
-      fullName:        c.fullName ?? "—",
-      mobileNumber:    c.mobileNumber ?? "—",
-      value:           toNum(metric === "last30d" ? c.last30DayTransactionValue : c.lifetimeTransactionValue),
-      lifetimeVolume:  c.lifetimeTransactionVolume,
+      rank:          i + 1,
+      fullName:      c.fullName ?? "—",
+      mobileNumber:  c.mobileNumber ?? "—",
+      ...(metrics.includes("last30d")  ? { last30d:  toNum(c.last30DayTransactionValue) } : {}),
+      ...(metrics.includes("lifetime") ? { lifetime: toNum(c.lifetimeTransactionValue)  } : {}),
+      lifetimeVolume: c.lifetimeTransactionVolume,
     })),
   };
 }
@@ -476,9 +516,14 @@ async function buildWeekSnapshot(
   branchIds: string[],
 ): Promise<WeekSnapshotSectionData> {
   const params = section.params as WeekSnapshotParams;
-  const metric = params.metric ?? "cashIn";
+  const legacyMetric = (section.params as Record<string, unknown>).metric as string | undefined;
+  const selectedMetrics: WeekSnapshotMetric[] = params.metrics?.length
+    ? params.metrics
+    : legacyMetric
+      ? [legacyMetric as WeekSnapshotMetric]
+      : ["cashIn"];
 
-  const yesterday   = getYesterday();
+  const yesterday    = getYesterday();
   const sevenDaysAgo = new Date(yesterday.getTime() - 6 * 86_400_000);
 
   const where: Prisma.BranchMetricWhereInput = {
@@ -488,41 +533,47 @@ async function buildWeekSnapshot(
     where.branchId = { in: branchIds.map(BigInt) };
   }
 
-  const metrics = await prisma.branchMetric.findMany({ where });
+  const dbRows = await prisma.branchMetric.findMany({ where });
 
-  const byDay = new Map<string, { value: number; volume: number }>();
-  for (const m of metrics) {
+  const byDay = new Map<string, { cashIn: number; cashOut: number; commission: number; volume: number }>();
+  for (const m of dbRows) {
     const key = m.metricDate.toISOString().slice(0, 10);
-    const existing = byDay.get(key) ?? { value: 0, volume: 0 };
-    const val =
-      metric === "cashIn"      ? toNum(m.cashInValue)
-      : metric === "cashOut"   ? toNum(m.cashOutValue)
-      : metric === "commission" ? toNum(m.totalCommission)
-      : m.totalTransactionVolume;
+    const e = byDay.get(key) ?? { cashIn: 0, cashOut: 0, commission: 0, volume: 0 };
     byDay.set(key, {
-      value:  existing.value  + (metric === "volume" ? 0 : val),
-      volume: existing.volume + m.totalTransactionVolume,
+      cashIn:     e.cashIn     + toNum(m.cashInValue),
+      cashOut:    e.cashOut    + toNum(m.cashOutValue),
+      commission: e.commission + toNum(m.totalCommission),
+      volume:     e.volume     + m.totalTransactionVolume,
     });
   }
 
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const days: WeekSnapshotSectionData["days"] = [];
+  const days: WeekSnapshotDay[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(yesterday.getTime() - i * 86_400_000);
     const key = d.toISOString().slice(0, 10);
-    const entry = byDay.get(key) ?? { value: 0, volume: 0 };
+    const e = byDay.get(key) ?? { cashIn: 0, cashOut: 0, commission: 0, volume: 0 };
     days.push({
       date:     formatDateString(d),
       dayLabel: DAY_NAMES[d.getDay()],
-      value:    metric === "volume" ? entry.volume : entry.value,
-      volume:   entry.volume,
+      ...(selectedMetrics.includes("cashIn")     ? { cashIn:     e.cashIn }     : {}),
+      ...(selectedMetrics.includes("cashOut")    ? { cashOut:    e.cashOut }    : {}),
+      ...(selectedMetrics.includes("commission") ? { commission: e.commission } : {}),
+      ...(selectedMetrics.includes("volume")     ? { volume:     e.volume }     : {}),
     });
   }
 
-  const grandValue  = days.reduce((s, d) => s + d.value,  0);
-  const grandVolume = days.reduce((s, d) => s + d.volume, 0);
+  const grandVolume = [...byDay.values()].reduce((s, e) => s + e.volume, 0);
 
-  return { type: "WEEK_SNAPSHOT", params, days, grandValue, grandVolume };
+  return {
+    type:   "WEEK_SNAPSHOT",
+    params: { ...params, metrics: selectedMetrics },
+    days,
+    grandVolume,
+    ...(selectedMetrics.includes("cashIn")     ? { grandCashIn:     days.reduce((s, d) => s + (d.cashIn     ?? 0), 0) } : {}),
+    ...(selectedMetrics.includes("cashOut")    ? { grandCashOut:    days.reduce((s, d) => s + (d.cashOut    ?? 0), 0) } : {}),
+    ...(selectedMetrics.includes("commission") ? { grandCommission: days.reduce((s, d) => s + (d.commission ?? 0), 0) } : {}),
+  };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────

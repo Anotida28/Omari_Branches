@@ -97,26 +97,34 @@ function renderTopPerformers(data: TopPerformersSectionData): string {
   const metricLabel: Record<string, string> = {
     cashIn: "Cash In", cashOut: "Cash Out", eFloat: "E-Float Balance", commission: "Commission",
   };
-  const metric     = data.params.metric ?? "cashIn";
-  const label      = metricLabel[metric] ?? metric;
-  const orderLabel = (data.params.order ?? "desc") === "desc" ? "Top" : "Bottom";
+  const metrics     = data.params.metrics?.length ? data.params.metrics : ["cashIn"];
+  const sortBy      = data.params.sortBy ?? metrics[0] ?? "cashIn";
+  const orderLabel  = (data.params.order ?? "desc") === "desc" ? "Top" : "Bottom";
+  const sortLabel   = metricLabel[sortBy] ?? sortBy;
+  const colCount    = 2 + metrics.length;
+
+  const headerCells = [th("Rank"), th("Branch"), ...metrics.map((m) => th(metricLabel[m] ?? m, true))].join("");
 
   const rows = data.rows.map((row, i) => {
     const bg = i % 2 === 0 ? "#fff" : "#f8fafc";
+    const metricCells = metrics.map((m) => {
+      const val = row[m as keyof typeof row] as number | undefined;
+      return td(val !== undefined ? money(val) : "—", true, m === sortBy);
+    }).join("");
     return `<tr style="background:${bg}">
       ${td(`<strong>#${row.rank}</strong>`, false, true)}
       ${td(row.branchName)}
-      ${td(money(row.value), true, true)}
+      ${metricCells}
     </tr>`;
   }).join("");
 
-  const table = `<table style="width:100%;border-collapse:collapse">
-    <thead><tr>${th("Rank")}${th("Branch")}${th(label, true)}</tr></thead>
-    <tbody>${rows || noDataRow(3, "No branch metrics for this date.")}</tbody>
-  </table>`;
+  const table = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+    <thead><tr>${headerCells}</tr></thead>
+    <tbody>${rows || noDataRow(colCount, "No branch metrics for this date.")}</tbody>
+  </table></div>`;
 
   return sectionWrapper(
-    `${orderLabel} ${data.rows.length} Branches — ${label}`,
+    `${orderLabel} ${data.rows.length} Branches — ${sortLabel}`,
     `Date: ${data.date}`,
     table,
   );
@@ -231,32 +239,44 @@ function renderFloatPosition(data: FloatPositionSectionData): string {
 
 function renderTransactionTrends(data: TransactionTrendsSectionData): string {
   const metricLabel: Record<string, string> = {
-    cashIn: "Cash In ($)", cashOut: "Cash Out ($)", volume: "Txn Volume",
+    cashIn: "Cash In", cashOut: "Cash Out", volume: "Txn Volume",
   };
-  const label = metricLabel[data.params.metric ?? "cashIn"] ?? "Cash In";
-  const isMoney = (data.params.metric ?? "cashIn") !== "volume";
+  const metrics = data.params.metrics?.length ? data.params.metrics : ["cashIn"];
+  const sortBy  = data.params.sortBy ?? metrics[0] ?? "cashIn";
+
+  const headerCells = [
+    th("Branch"),
+    ...metrics.flatMap((m) => [th(metricLabel[m] ?? m, true), th("vs 7d Avg", true)]),
+  ].join("");
 
   const rows = data.rows.map((row, i) => {
-    const bg    = i % 2 === 0 ? "#fff" : "#f8fafc";
-    const up    = row.changePercent >= 0;
-    const arrow = up ? "▲" : "▼";
-    const color = up ? "#16a34a" : "#dc2626";
-    const fmt   = (v: number) => isMoney ? money(v) : v.toLocaleString();
-    return `<tr style="background:${bg}">
-      ${td(`<strong>${row.branchName}</strong>`)}
-      ${td(fmt(row.yesterday), true, true)}
-      ${td(fmt(row.avg7d), true)}
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:right;font-weight:600;color:${color}">
-        ${arrow} ${Math.abs(row.changePercent).toFixed(1)}%
-      </td>
-    </tr>`;
+    const bg = i % 2 === 0 ? "#fff" : "#f8fafc";
+    const metricCells = metrics.flatMap((m) => {
+      const md = row[m as "cashIn" | "cashOut" | "volume"] as
+        | { yesterday: number; avg7d: number; changePercent: number }
+        | undefined;
+      const isMoney = m !== "volume";
+      const fmt = (v: number) => isMoney ? money(v) : v.toLocaleString();
+      const up = (md?.changePercent ?? 0) >= 0;
+      const color = up ? "#16a34a" : "#dc2626";
+      const isSortCol = m === sortBy;
+      return [
+        td(md ? fmt(md.yesterday) : "—", true, isSortCol),
+        `<td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;text-align:right;font-size:13px;font-weight:${isSortCol ? 600 : 400};color:${color}">${md ? `${up ? "▲" : "▼"} ${Math.abs(md.changePercent).toFixed(1)}%` : "—"}</td>`,
+      ];
+    }).join("");
+    return `<tr style="background:${bg}">${td(`<strong>${row.branchName}</strong>`)}${metricCells}</tr>`;
   }).join("");
 
-  return sectionWrapper("Transaction Trends", `Yesterday vs 7-day average · ${label}`,
-    `<table style="width:100%;border-collapse:collapse">
-      <thead><tr>${th("Branch")}${th("Yesterday", true)}${th("7-Day Avg", true)}${th("Change", true)}</tr></thead>
-      <tbody>${rows || noDataRow(4, "No trend data available.")}</tbody>
-    </table>`);
+  const colCount = 1 + metrics.length * 2;
+  return sectionWrapper(
+    "Transaction Trends",
+    `Yesterday vs 7-day average · sorted by ${metricLabel[sortBy] ?? sortBy}`,
+    `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr>${headerCells}</tr></thead>
+      <tbody>${rows || noDataRow(colCount, "No trend data available.")}</tbody>
+    </table></div>`,
+  );
 }
 
 function renderNewCustomers(data: NewCustomersSectionData): string {
@@ -279,24 +299,37 @@ function renderNewCustomers(data: NewCustomersSectionData): string {
 }
 
 function renderTopWalletCustomers(data: TopWalletCustomersSectionData): string {
-  const metricLabel = data.params.metric === "lifetime" ? "Lifetime Value" : "30-Day Value";
+  const metricLabel: Record<string, string> = { last30d: "30-Day Value", lifetime: "Lifetime Value" };
+  const metrics = data.params.metrics?.length ? data.params.metrics : ["last30d"];
+  const sortBy  = data.params.sortBy ?? metrics[0] ?? "last30d";
+  const sortLabel = metricLabel[sortBy] ?? sortBy;
+
+  const metricHeaders = metrics.map((m) => th(metricLabel[m] ?? m, true)).join("");
+  const colCount = 3 + metrics.length + 1;
 
   const rows = data.rows.map((row, i) => {
     const bg = i % 2 === 0 ? "#fff" : "#f8fafc";
+    const metricCells = metrics.map((m) => {
+      const val = row[m as "last30d" | "lifetime"] as number | undefined;
+      return td(val !== undefined ? money(val) : "—", true, m === sortBy);
+    }).join("");
     return `<tr style="background:${bg}">
       ${td(`<strong>#${row.rank}</strong>`, false, true)}
       ${td(row.fullName)}
       ${td(row.mobileNumber)}
-      ${td(money(row.value), true, true)}
+      ${metricCells}
       ${td(row.lifetimeVolume.toLocaleString(), true)}
     </tr>`;
   }).join("");
 
-  return sectionWrapper(`Top ${data.rows.length} Wallet Customers`, `As of ${data.asOfDate} · by ${metricLabel}`,
+  return sectionWrapper(
+    `Top ${data.rows.length} Wallet Customers`,
+    `As of ${data.asOfDate} · sorted by ${sortLabel}`,
     `<table style="width:100%;border-collapse:collapse">
-      <thead><tr>${th("Rank")}${th("Name")}${th("Mobile")}${th(metricLabel, true)}${th("Total Txns", true)}</tr></thead>
-      <tbody>${rows || noDataRow(5, "No customer data available.")}</tbody>
-    </table>`);
+      <thead><tr>${th("Rank")}${th("Name")}${th("Mobile")}${metricHeaders}${th("Total Txns", true)}</tr></thead>
+      <tbody>${rows || noDataRow(colCount, "No customer data available.")}</tbody>
+    </table>`,
+  );
 }
 
 function renderRevenueBreakdown(data: RevenueBreakdownSectionData): string {
@@ -380,21 +413,30 @@ function renderWeekSnapshot(data: WeekSnapshotSectionData): string {
   const metricLabel: Record<string, string> = {
     cashIn: "Cash In", cashOut: "Cash Out", volume: "Txn Volume", commission: "Commission",
   };
-  const metric  = data.params.metric ?? "cashIn";
-  const label   = metricLabel[metric] ?? "Cash In";
-  const isMoney = metric !== "volume";
-  const fmt     = (v: number) => isMoney ? money(v) : v.toLocaleString();
+  const metrics      = data.params.metrics?.length ? data.params.metrics : ["cashIn"];
+  const primaryMetric = metrics[0] ?? "cashIn";
+  const fmt = (m: string, v: number) => m !== "volume" ? money(v) : v.toLocaleString();
 
-  const maxVal = Math.max(...data.days.map((d) => d.value), 1);
+  const maxVal = Math.max(
+    ...data.days.map((d) => (d[primaryMetric as keyof typeof d] as number | undefined) ?? 0),
+    1,
+  );
+
+  const metricHeaders = metrics.map((m) => th(metricLabel[m] ?? m, true)).join("");
 
   const rows = data.days.map((day, i) => {
     const bg      = i % 2 === 0 ? "#fff" : "#f8fafc";
-    const barPct  = Math.round((day.value / maxVal) * 100);
+    const primary = (day[primaryMetric as keyof typeof day] as number | undefined) ?? 0;
+    const barPct  = Math.round((primary / maxVal) * 100);
     const isToday = i === data.days.length - 1;
+    const metricCells = metrics.map((m) => {
+      const val = (day[m as keyof typeof day] as number | undefined) ?? 0;
+      return `<td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;font-size:13px;font-weight:600;text-align:right">${fmt(m, val)}</td>`;
+    }).join("");
     return `<tr style="background:${bg}">
       <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;font-size:13px;font-weight:${isToday ? 700 : 400}">${day.dayLabel}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;font-size:12px;color:#6b7280">${day.date}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e9f0;font-size:13px;font-weight:600;text-align:right">${fmt(day.value)}</td>
+      ${metricCells}
       <td style="padding:8px 16px;border-bottom:1px solid #e5e9f0;min-width:120px">
         <div style="background:#e5e9f0;border-radius:4px;height:10px;overflow:hidden">
           <div style="background:${BRAND};width:${barPct}%;height:100%;border-radius:4px"></div>
@@ -403,15 +445,30 @@ function renderWeekSnapshot(data: WeekSnapshotSectionData): string {
     </tr>`;
   }).join("");
 
+  const grandMap: Record<string, number | undefined> = {
+    cashIn:     data.grandCashIn,
+    cashOut:    data.grandCashOut,
+    commission: data.grandCommission,
+    volume:     data.grandVolume,
+  };
+  const grandCells = metrics.map((m) => {
+    const val = grandMap[m] ?? 0;
+    return `<td style="padding:10px 12px;font-size:13px;font-weight:700;text-align:right">${fmt(m, val)}</td>`;
+  }).join("");
+  const showTxnsFooter = !metrics.includes("volume");
   const footer = `<tr style="background:#eef2f8">
     <td colspan="2" style="padding:10px 12px;font-size:13px;font-weight:700">7-DAY TOTAL</td>
-    <td style="padding:10px 12px;font-size:13px;font-weight:700;text-align:right">${fmt(data.grandValue)}</td>
-    <td style="padding:10px 12px;font-size:12px;color:#6b7280">${data.grandVolume.toLocaleString()} txns</td>
+    ${grandCells}
+    ${showTxnsFooter ? `<td style="padding:10px 12px;font-size:12px;color:#6b7280">${data.grandVolume.toLocaleString()} txns</td>` : `<td></td>`}
   </tr>`;
 
-  return sectionWrapper(`7-Day Snapshot — ${label}`, "Last 7 days including yesterday",
+  const title = metrics.length === 1
+    ? `7-Day Snapshot — ${metricLabel[metrics[0]] ?? metrics[0]}`
+    : "7-Day Snapshot";
+
+  return sectionWrapper(title, "Last 7 days including yesterday",
     `<table style="width:100%;border-collapse:collapse">
-      <thead><tr>${th("Day")}${th("Date")}${th(label, true)}${th("")}</tr></thead>
+      <thead><tr>${th("Day")}${th("Date")}${metricHeaders}${th("")}</tr></thead>
       <tbody>${rows}</tbody>
       <tfoot>${footer}</tfoot>
     </table>`);
@@ -479,8 +536,14 @@ export function buildCustomReportText(sections: SectionData[], reportDate: strin
       }
       case "TOP_PERFORMERS": {
         const d = data as TopPerformersSectionData;
-        lines.push(`=== Top Performers — ${d.params.metric ?? "cashIn"} (${d.date}) ===`);
-        for (const r of d.rows) lines.push(`#${r.rank} ${r.branchName}: $${r.value}`);
+        const sortBy = d.params.sortBy ?? d.params.metrics?.[0] ?? "cashIn";
+        lines.push(`=== Top Performers — ${sortBy} (${d.date}) ===`);
+        for (const r of d.rows) {
+          const vals = (d.params.metrics ?? ["cashIn"])
+            .map((m) => `${m}: $${((r[m as keyof typeof r] as number) ?? 0).toFixed(2)}`)
+            .join(" | ");
+          lines.push(`#${r.rank} ${r.branchName}: ${vals}`);
+        }
         lines.push("");
         break;
       }
@@ -514,8 +577,20 @@ export function buildCustomReportText(sections: SectionData[], reportDate: strin
       }
       case "TRANSACTION_TRENDS": {
         const d = data as TransactionTrendsSectionData;
-        lines.push(`=== Transaction Trends (${d.date}) ===`);
-        for (const r of d.rows) lines.push(`${r.branchName}: Yesterday ${r.yesterday} | Avg7d ${r.avg7d.toFixed(0)} | ${r.changePercent >= 0 ? "+" : ""}${r.changePercent.toFixed(1)}%`);
+        const tMetrics = d.params.metrics?.length ? d.params.metrics : ["cashIn"];
+        const tSortBy  = d.params.sortBy ?? tMetrics[0] ?? "cashIn";
+        lines.push(`=== Transaction Trends (${d.date}) — sorted by ${tSortBy} ===`);
+        for (const r of d.rows) {
+          const vals = tMetrics.map((m) => {
+            const md = r[m as "cashIn" | "cashOut" | "volume"] as
+              | { yesterday: number; changePercent: number }
+              | undefined;
+            if (!md) return `${m}: —`;
+            const v = m !== "volume" ? `$${md.yesterday.toFixed(2)}` : md.yesterday.toLocaleString();
+            return `${m}: ${v} (${md.changePercent >= 0 ? "+" : ""}${md.changePercent.toFixed(1)}%)`;
+          }).join(" | ");
+          lines.push(`${r.branchName}: ${vals}`);
+        }
         lines.push("");
         break;
       }
@@ -528,8 +603,15 @@ export function buildCustomReportText(sections: SectionData[], reportDate: strin
       }
       case "TOP_WALLET_CUSTOMERS": {
         const d = data as TopWalletCustomersSectionData;
+        const wMetrics = d.params.metrics?.length ? d.params.metrics : ["last30d"];
         lines.push(`=== Top Wallet Customers ===`);
-        for (const r of d.rows) lines.push(`#${r.rank} ${r.fullName} (${r.mobileNumber}): $${r.value}`);
+        for (const r of d.rows) {
+          const vals = wMetrics.map((m) => {
+            const val = r[m as "last30d" | "lifetime"] as number | undefined;
+            return `${m}: ${val !== undefined ? `$${val.toFixed(2)}` : "—"}`;
+          }).join(" | ");
+          lines.push(`#${r.rank} ${r.fullName} (${r.mobileNumber}): ${vals}`);
+        }
         lines.push("");
         break;
       }
@@ -557,8 +639,15 @@ export function buildCustomReportText(sections: SectionData[], reportDate: strin
       }
       case "WEEK_SNAPSHOT": {
         const d = data as WeekSnapshotSectionData;
+        const sMetrics = d.params.metrics?.length ? d.params.metrics : ["cashIn"];
         lines.push(`=== 7-Day Snapshot ===`);
-        for (const day of d.days) lines.push(`${day.dayLabel} ${day.date}: ${day.value} (${day.volume} txns)`);
+        for (const day of d.days) {
+          const vals = sMetrics.map((m) => {
+            const val = (day[m as keyof typeof day] as number | undefined) ?? 0;
+            return `${m}: ${m !== "volume" ? `$${val.toFixed(2)}` : val.toLocaleString()}`;
+          }).join(" | ");
+          lines.push(`${day.dayLabel} ${day.date}: ${vals}`);
+        }
         lines.push("");
         break;
       }

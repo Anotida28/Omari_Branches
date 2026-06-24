@@ -57,10 +57,16 @@ function normalizeEmailError(error: unknown): Error {
   return new Error(String(error));
 }
 
+function gmailCredentialsAvailable(): boolean {
+  return !!(env.EMAIL_FROM && env.EMAIL_USER && env.EMAIL_APP_PASSWORD);
+}
+
 function getTransporter(): Transporter {
   if (!transporter) {
-    if (env.EMAIL_PROVIDER !== "gmail") {
-      throw new Error(`Unsupported SMTP email provider: ${env.EMAIL_PROVIDER}`);
+    if (!gmailCredentialsAvailable()) {
+      throw new Error(
+        "Gmail credentials not configured. Set EMAIL_FROM, EMAIL_USER, and EMAIL_APP_PASSWORD in .env",
+      );
     }
 
     transporter = nodemailer.createTransport({
@@ -264,11 +270,25 @@ export async function sendEmail(opts: SendEmailOptions): Promise<string> {
     throw new Error("sendEmail requires at least one recipient");
   }
 
-  try {
-    if (env.EMAIL_PROVIDER === "bulkmailer") {
+  if (env.EMAIL_PROVIDER === "bulkmailer") {
+    try {
       return await sendViaBulkMailer(opts);
+    } catch (bulkError) {
+      if (!gmailCredentialsAvailable()) {
+        throw normalizeEmailError(bulkError);
+      }
+      console.warn(
+        `[email] Bulk mailer failed (${(bulkError as Error).message}). Falling back to Gmail.`,
+      );
+      try {
+        return await sendViaGmail(opts);
+      } catch (gmailError) {
+        throw normalizeEmailError(gmailError);
+      }
     }
+  }
 
+  try {
     return await sendViaGmail(opts);
   } catch (error) {
     throw normalizeEmailError(error);

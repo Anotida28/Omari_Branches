@@ -61,7 +61,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, getErrorMessage } from "../services/api";
+import { getErrorMessage } from "../services/api";
+import { listBranches } from "../services/branches";
 import {
   fetchMyReportConfig,
   saveMyReportConfig,
@@ -89,9 +90,9 @@ const BLOCK_DEFS: Record<SectionType, BlockDef> = {
   },
   TOP_PERFORMERS: {
     label: "Top Performers",
-    description: "Rank branches by a selected metric — top or bottom N",
+    description: "Rank branches by one or more metrics — top or bottom N",
     icon: Trophy,
-    defaultParams: { metric: "cashIn", limit: 10, order: "desc" },
+    defaultParams: { metrics: ["cashIn"], sortBy: "cashIn", limit: 10, order: "desc" },
   },
   WALLET_SUMMARY: {
     label: "Wallet Summary",
@@ -121,7 +122,7 @@ const BLOCK_DEFS: Record<SectionType, BlockDef> = {
     label: "Transaction Trends",
     description: "Yesterday vs 7-day average — spot branches trending up or down",
     icon: TrendingUp,
-    defaultParams: { metric: "cashIn" },
+    defaultParams: { metrics: ["cashIn"], sortBy: "cashIn" },
   },
   NEW_CUSTOMERS: {
     label: "New Customers",
@@ -133,7 +134,7 @@ const BLOCK_DEFS: Record<SectionType, BlockDef> = {
     label: "Top Wallet Customers",
     description: "Highest-value wallet customers by 30-day or lifetime transaction value",
     icon: Crown,
-    defaultParams: { metric: "last30d", limit: 10 },
+    defaultParams: { metrics: ["last30d"], sortBy: "last30d", limit: 10 },
   },
   REVENUE_BREAKDOWN: {
     label: "Revenue Breakdown",
@@ -157,7 +158,7 @@ const BLOCK_DEFS: Record<SectionType, BlockDef> = {
     label: "Week Snapshot",
     description: "7-day daily totals with a mini bar chart — spot weekly patterns",
     icon: BarChart2,
-    defaultParams: { metric: "cashIn" },
+    defaultParams: { metrics: ["cashIn"] },
   },
 };
 
@@ -287,32 +288,66 @@ function BlockParams({ section, onChange }: { section: ReportSection; onChange: 
   }
 
   if (section.type === "TOP_PERFORMERS") {
+    const METRICS = [
+      { key: "cashIn",     label: "Cash In" },
+      { key: "cashOut",    label: "Cash Out" },
+      { key: "eFloat",     label: "E-Float Balance" },
+      { key: "commission", label: "Commission" },
+    ];
+    const selectedMetrics: string[] = Array.isArray(p.metrics) ? (p.metrics as string[]) : ["cashIn"];
+    const sortBy = (p.sortBy as string) ?? selectedMetrics[0] ?? "cashIn";
+
+    const toggleMetric = (key: string) => {
+      const next = selectedMetrics.includes(key)
+        ? selectedMetrics.filter((m) => m !== key)
+        : [...selectedMetrics, key];
+      const safeNext = next.length === 0 ? [key] : next;
+      onChange("metrics", safeNext);
+      if (!safeNext.includes(sortBy)) onChange("sortBy", safeNext[0]);
+    };
+
     return (
-      <Stack direction="row" flexWrap="wrap" gap={2} mt={1}>
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Metric</InputLabel>
-          <Select label="Metric" value={(p.metric as string) ?? "cashIn"} onChange={(e) => onChange("metric", e.target.value)}>
-            <MenuItem value="cashIn">Cash In</MenuItem>
-            <MenuItem value="cashOut">Cash Out</MenuItem>
-            <MenuItem value="eFloat">E-Float Balance</MenuItem>
-            <MenuItem value="commission">Commission</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 100 }}>
-          <InputLabel>Show</InputLabel>
-          <Select label="Show" value={(p.limit as number) ?? 10} onChange={(e) => onChange("limit", Number(e.target.value))}>
-            <MenuItem value={5}>Top 5</MenuItem>
-            <MenuItem value={10}>Top 10</MenuItem>
-            <MenuItem value={20}>Top 20</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 130 }}>
-          <InputLabel>Ranking</InputLabel>
-          <Select label="Ranking" value={(p.order as string) ?? "desc"} onChange={(e) => onChange("order", e.target.value)}>
-            <MenuItem value="desc">Top performers</MenuItem>
-            <MenuItem value="asc">Bottom performers</MenuItem>
-          </Select>
-        </FormControl>
+      <Stack spacing={1.5} mt={1}>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>METRICS TO SHOW</Typography>
+        <Stack direction="row" flexWrap="wrap" gap={1}>
+          {METRICS.map(({ key, label }) => (
+            <BoolField
+              key={key}
+              label={label}
+              value={selectedMetrics.includes(key)}
+              onChange={() => toggleMetric(key)}
+            />
+          ))}
+        </Stack>
+        <Stack direction="row" flexWrap="wrap" gap={2}>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Sort by</InputLabel>
+            <Select
+              label="Sort by"
+              value={selectedMetrics.includes(sortBy) ? sortBy : selectedMetrics[0] ?? "cashIn"}
+              onChange={(e) => onChange("sortBy", e.target.value)}
+            >
+              {METRICS.filter(({ key }) => selectedMetrics.includes(key)).map(({ key, label }) => (
+                <MenuItem key={key} value={key}>{label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 100 }}>
+            <InputLabel>Show</InputLabel>
+            <Select label="Show" value={(p.limit as number) ?? 10} onChange={(e) => onChange("limit", Number(e.target.value))}>
+              <MenuItem value={5}>Top 5</MenuItem>
+              <MenuItem value={10}>Top 10</MenuItem>
+              <MenuItem value={20}>Top 20</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <InputLabel>Ranking</InputLabel>
+            <Select label="Ranking" value={(p.order as string) ?? "desc"} onChange={(e) => onChange("order", e.target.value)}>
+              <MenuItem value="desc">Top performers</MenuItem>
+              <MenuItem value="asc">Bottom performers</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
       </Stack>
     );
   }
@@ -356,14 +391,38 @@ function BlockParams({ section, onChange }: { section: ReportSection; onChange: 
   }
 
   if (section.type === "TRANSACTION_TRENDS") {
+    const TT_METRICS = [
+      { key: "cashIn",  label: "Cash In" },
+      { key: "cashOut", label: "Cash Out" },
+      { key: "volume",  label: "Txn Volume" },
+    ];
+    const legacyTT = p.metric as string | undefined;
+    const selectedTT: string[] = Array.isArray(p.metrics) ? (p.metrics as string[]) : legacyTT ? [legacyTT] : ["cashIn"];
+    const sortByTT = (p.sortBy as string) ?? selectedTT[0] ?? "cashIn";
+    const toggleTT = (key: string) => {
+      const next = selectedTT.includes(key) ? selectedTT.filter((m) => m !== key) : [...selectedTT, key];
+      const safe = next.length === 0 ? [key] : next;
+      onChange("metrics", safe);
+      if (!safe.includes(sortByTT)) onChange("sortBy", safe[0]);
+    };
     return (
-      <Stack mt={1}>
+      <Stack spacing={1.5} mt={1}>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>METRICS TO SHOW</Typography>
+        <Stack direction="row" flexWrap="wrap" gap={1}>
+          {TT_METRICS.map(({ key, label }) => (
+            <BoolField key={key} label={label} value={selectedTT.includes(key)} onChange={() => toggleTT(key)} />
+          ))}
+        </Stack>
         <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Metric</InputLabel>
-          <Select label="Metric" value={(p.metric as string) ?? "cashIn"} onChange={(e) => onChange("metric", e.target.value)}>
-            <MenuItem value="cashIn">Cash In</MenuItem>
-            <MenuItem value="cashOut">Cash Out</MenuItem>
-            <MenuItem value="volume">Transaction Volume</MenuItem>
+          <InputLabel>Sort by</InputLabel>
+          <Select
+            label="Sort by"
+            value={selectedTT.includes(sortByTT) ? sortByTT : selectedTT[0] ?? "cashIn"}
+            onChange={(e) => onChange("sortBy", e.target.value)}
+          >
+            {TT_METRICS.filter(({ key }) => selectedTT.includes(key)).map(({ key, label }) => (
+              <MenuItem key={key} value={key}>{label}</MenuItem>
+            ))}
           </Select>
         </FormControl>
       </Stack>
@@ -371,23 +430,49 @@ function BlockParams({ section, onChange }: { section: ReportSection; onChange: 
   }
 
   if (section.type === "TOP_WALLET_CUSTOMERS") {
+    const TWC_METRICS = [
+      { key: "last30d",  label: "30-Day Value" },
+      { key: "lifetime", label: "Lifetime Value" },
+    ];
+    const legacyTWC = p.metric as string | undefined;
+    const selectedTWC: string[] = Array.isArray(p.metrics) ? (p.metrics as string[]) : legacyTWC ? [legacyTWC] : ["last30d"];
+    const sortByTWC = (p.sortBy as string) ?? selectedTWC[0] ?? "last30d";
+    const toggleTWC = (key: string) => {
+      const next = selectedTWC.includes(key) ? selectedTWC.filter((m) => m !== key) : [...selectedTWC, key];
+      const safe = next.length === 0 ? [key] : next;
+      onChange("metrics", safe);
+      if (!safe.includes(sortByTWC)) onChange("sortBy", safe[0]);
+    };
     return (
-      <Stack direction="row" flexWrap="wrap" gap={2} mt={1}>
-        <FormControl size="small" sx={{ minWidth: 170 }}>
-          <InputLabel>Rank by</InputLabel>
-          <Select label="Rank by" value={(p.metric as string) ?? "last30d"} onChange={(e) => onChange("metric", e.target.value)}>
-            <MenuItem value="last30d">30-Day Value</MenuItem>
-            <MenuItem value="lifetime">Lifetime Value</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 100 }}>
-          <InputLabel>Show</InputLabel>
-          <Select label="Show" value={(p.limit as number) ?? 10} onChange={(e) => onChange("limit", Number(e.target.value))}>
-            <MenuItem value={5}>Top 5</MenuItem>
-            <MenuItem value={10}>Top 10</MenuItem>
-            <MenuItem value={20}>Top 20</MenuItem>
-          </Select>
-        </FormControl>
+      <Stack spacing={1.5} mt={1}>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>VALUE COLUMNS</Typography>
+        <Stack direction="row" flexWrap="wrap" gap={1}>
+          {TWC_METRICS.map(({ key, label }) => (
+            <BoolField key={key} label={label} value={selectedTWC.includes(key)} onChange={() => toggleTWC(key)} />
+          ))}
+        </Stack>
+        <Stack direction="row" gap={2}>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Sort by</InputLabel>
+            <Select
+              label="Sort by"
+              value={selectedTWC.includes(sortByTWC) ? sortByTWC : selectedTWC[0] ?? "last30d"}
+              onChange={(e) => onChange("sortBy", e.target.value)}
+            >
+              {TWC_METRICS.filter(({ key }) => selectedTWC.includes(key)).map(({ key, label }) => (
+                <MenuItem key={key} value={key}>{label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 100 }}>
+            <InputLabel>Show</InputLabel>
+            <Select label="Show" value={(p.limit as number) ?? 10} onChange={(e) => onChange("limit", Number(e.target.value))}>
+              <MenuItem value={5}>Top 5</MenuItem>
+              <MenuItem value={10}>Top 10</MenuItem>
+              <MenuItem value={20}>Top 20</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
       </Stack>
     );
   }
@@ -408,17 +493,26 @@ function BlockParams({ section, onChange }: { section: ReportSection; onChange: 
   }
 
   if (section.type === "WEEK_SNAPSHOT") {
+    const WS_METRICS = [
+      { key: "cashIn",     label: "Cash In" },
+      { key: "cashOut",    label: "Cash Out" },
+      { key: "volume",     label: "Txn Volume" },
+      { key: "commission", label: "Commission" },
+    ];
+    const legacyWS = p.metric as string | undefined;
+    const selectedWS: string[] = Array.isArray(p.metrics) ? (p.metrics as string[]) : legacyWS ? [legacyWS] : ["cashIn"];
+    const toggleWS = (key: string) => {
+      const next = selectedWS.includes(key) ? selectedWS.filter((m) => m !== key) : [...selectedWS, key];
+      onChange("metrics", next.length === 0 ? [key] : next);
+    };
     return (
-      <Stack mt={1}>
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Metric</InputLabel>
-          <Select label="Metric" value={(p.metric as string) ?? "cashIn"} onChange={(e) => onChange("metric", e.target.value)}>
-            <MenuItem value="cashIn">Cash In</MenuItem>
-            <MenuItem value="cashOut">Cash Out</MenuItem>
-            <MenuItem value="volume">Transaction Volume</MenuItem>
-            <MenuItem value="commission">Commission</MenuItem>
-          </Select>
-        </FormControl>
+      <Stack spacing={1.5} mt={1}>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>METRICS TO SHOW</Typography>
+        <Stack direction="row" flexWrap="wrap" gap={1}>
+          {WS_METRICS.map(({ key, label }) => (
+            <BoolField key={key} label={label} value={selectedWS.includes(key)} onChange={() => toggleWS(key)} />
+          ))}
+        </Stack>
       </Stack>
     );
   }
@@ -430,9 +524,6 @@ function BlockParams({ section, onChange }: { section: ReportSection; onChange: 
   );
 }
 
-// ─── Branch type (minimal) ───────────────────────────────────────────────────
-
-type Branch = { id: string; city: string; label: string; isActive?: boolean };
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
@@ -476,13 +567,11 @@ export default function ReportBuilderPage() {
   }, [savedConfig, initialized]);
 
   // Load branches for filter
-  const { data: branches = [] } = useQuery<Branch[]>({
-    queryKey: ["branches-list"],
-    queryFn: async () => {
-      const res = await api.get<{ data: Branch[] }>("/api/branches");
-      return res.data.data.filter((b: Branch) => b.isActive !== false);
-    },
+  const { data: branchData } = useQuery({
+    queryKey: ["branches", "all", "for-report-builder"],
+    queryFn: () => listBranches({ page: 1, pageSize: 100 }),
   });
+  const branches = (branchData?.items ?? []).filter((b) => b.isActive);
 
   const saveMutation = useMutation({
     mutationFn: saveMyReportConfig,
@@ -500,7 +589,7 @@ export default function ReportBuilderPage() {
   });
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -675,7 +764,7 @@ export default function ReportBuilderPage() {
                       return (
                         <Chip
                           key={id}
-                          label={branch ? `${branch.city} - ${branch.label}` : id}
+                          label={branch ? branch.displayName : id}
                           size="small"
                         />
                       );
@@ -685,7 +774,7 @@ export default function ReportBuilderPage() {
               >
                 {branches.map((branch) => (
                   <MenuItem key={branch.id} value={branch.id}>
-                    {branch.city} - {branch.label}
+                    {branch.displayName}
                   </MenuItem>
                 ))}
               </Select>

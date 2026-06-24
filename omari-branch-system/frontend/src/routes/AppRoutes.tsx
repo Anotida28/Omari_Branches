@@ -12,8 +12,7 @@ const BranchesPage = lazy(() => import("../pages/BranchesPage"));
 const MetricsPage = lazy(() => import("../pages/MetricsPage"));
 const TrendsPage = lazy(() => import("../pages/TrendsPage"));
 const ReportsPage = lazy(() => import("../pages/ReportsPage"));
-const ExpensesPage = lazy(() => import("../pages/ExpensesPage"));
-const AlertsPage = lazy(() => import("../pages/AlertsPage"));
+const RemindersPage = lazy(() => import("../pages/RemindersPage"));
 const SettingsPage = lazy(() => import("../pages/SettingsPage"));
 const WalletOverviewPage = lazy(() => import("../pages/WalletOverviewPage"));
 const WalletCustomerActivityPage = lazy(() => import("../pages/WalletCustomerActivityPage"));
@@ -66,8 +65,9 @@ export function AppRoutes() {
           <Route path="/metrics" element={<MetricsPage />} />
           <Route path="/trends" element={<TrendsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/expenses" element={<ExpensesPage />} />
-          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/reminders" element={<RemindersPage />} />
+          <Route path="/expenses" element={<Navigate to="/reminders?tab=schedule" replace />} />
+          <Route path="/alerts" element={<Navigate to="/reminders?tab=log" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/wallet/overview" element={<WalletOverviewPage />} />
           <Route path="/wallet/customer-activity" element={<WalletCustomerActivityPage />} />
