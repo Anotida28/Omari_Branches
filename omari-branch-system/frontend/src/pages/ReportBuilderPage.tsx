@@ -42,6 +42,7 @@ import {
   Bell,
   CalendarClock,
   ChartColumn,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Crown,
@@ -50,6 +51,7 @@ import {
   GripVertical,
   LayoutList,
   Mail,
+  MinusCircle,
   Send,
   Trash2,
   TrendingUp,
@@ -63,6 +65,8 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getErrorMessage } from "../services/api";
 import { listBranches } from "../services/branches";
+import { listEmailLogs } from "../services/email-logs";
+import { formatDateTime } from "../services/format";
 import {
   fetchMyReportConfig,
   saveMyReportConfig,
@@ -573,6 +577,13 @@ export default function ReportBuilderPage() {
   });
   const branches = (branchData?.items ?? []).filter((b) => b.isActive);
 
+  const lastSentQuery = useQuery({
+    queryKey: ["email-logs-my-report", config.deliveryEmail],
+    queryFn: () =>
+      listEmailLogs({ emailType: "CUSTOM_REPORT", sentTo: config.deliveryEmail, pageSize: 5 }),
+    enabled: !!config.deliveryEmail,
+  });
+
   const saveMutation = useMutation({
     mutationFn: saveMyReportConfig,
     onSuccess: () => {
@@ -703,6 +714,63 @@ export default function ReportBuilderPage() {
           sx={{ maxWidth: 400 }}
         />
       </Paper>
+
+      {/* Last sent history */}
+      {config.deliveryEmail && (
+        <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+          <Stack direction="row" alignItems="center" gap={1} mb={1.5}>
+            <Send size={16} />
+            <Typography fontWeight={600} fontSize={14}>Delivery History</Typography>
+          </Stack>
+          {lastSentQuery.isLoading ? (
+            <Typography fontSize={13} color="text.secondary">Loading…</Typography>
+          ) : !lastSentQuery.data?.items.length ? (
+            <Typography fontSize={13} color="text.secondary">
+              No sends recorded yet for <strong>{config.deliveryEmail}</strong>.
+            </Typography>
+          ) : (
+            <Stack spacing={0.8}>
+              {lastSentQuery.data.items.map((log) => (
+                <Stack key={log.id} direction="row" alignItems="center" gap={1.5} sx={{ fontSize: 13 }}>
+                  {log.status === "SENT" ? (
+                    <Box sx={{ color: "success.main", display: "flex" }}>
+                      <CheckCircle2 size={14} />
+                    </Box>
+                  ) : log.status === "FAILED" ? (
+                    <Box sx={{ color: "error.main", display: "flex" }}>
+                      <AlertTriangle size={14} />
+                    </Box>
+                  ) : (
+                    <Box sx={{ color: "text.disabled", display: "flex" }}>
+                      <MinusCircle size={14} />
+                    </Box>
+                  )}
+                  <Typography fontSize={13} color="text.primary" sx={{ flex: 1 }}>
+                    {formatDateTime(log.sentAt)}
+                    {log.status === "FAILED" && log.errorMessage && (
+                      <Typography component="span" fontSize={12} color="error.main" ml={1}>
+                        — {log.errorMessage}
+                      </Typography>
+                    )}
+                    {log.status === "SKIPPED" && (
+                      <Typography component="span" fontSize={12} color="text.disabled" ml={1}>
+                        — already sent or no data
+                      </Typography>
+                    )}
+                  </Typography>
+                  <Chip
+                    label={log.status}
+                    size="small"
+                    color={log.status === "SENT" ? "success" : log.status === "FAILED" ? "error" : "default"}
+                    variant="outlined"
+                    sx={{ fontSize: 11 }}
+                  />
+                </Stack>
+              ))}
+            </Stack>
+          )}
+        </Paper>
+      )}
 
       {/* Main builder layout */}
       <Stack direction={{ xs: "column", md: "row" }} gap={3} alignItems="flex-start">

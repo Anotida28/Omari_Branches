@@ -354,6 +354,45 @@ export type AlertStats = {
   sentThisWeek: number;
 };
 
+// ============================================================================
+// Email Delivery Logs
+// ============================================================================
+
+export type EmailLogType =
+  | "REMINDER"
+  | "DAILY_BRANCH_REPORT"
+  | "DAILY_WALLET_REPORT"
+  | "CUSTOM_REPORT";
+
+export type EmailLogStatus = "SENT" | "FAILED" | "SKIPPED";
+
+export type EmailLog = {
+  id: string;
+  emailType: EmailLogType;
+  sentTo: string;
+  subject: string;
+  status: EmailLogStatus;
+  errorMessage: string | null;
+  sentAt: string;
+  branchId: string | null;
+  branchName: string | null;
+  expenseId: string | null;
+  recurringReminderId: string | null;
+  reportDate: string | null;
+  metadata: string | null;
+};
+
+export type EmailLogListParams = {
+  emailType?: EmailLogType | "";
+  status?: EmailLogStatus | "";
+  sentTo?: string;
+  branchId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+};
+
 export type WalletOverviewKpis = {
   totalTransactionValue: number;
   totalTransactionVolume: number;

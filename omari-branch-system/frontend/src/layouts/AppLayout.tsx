@@ -114,6 +114,12 @@ const notificationsItems: NavItem[] = [
     icon: FileText,
   },
   {
+    to: "/email-logs",
+    label: "Email Delivery Log",
+    subtitle: "History of all emails sent, failed, or skipped by the system",
+    icon: FileText,
+  },
+  {
     to: "/settings",
     label: "Notification Settings",
     subtitle: "Email recipients, subscriptions, and system checks",

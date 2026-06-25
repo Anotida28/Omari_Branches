@@ -37,6 +37,7 @@ export async function getEmailLogs(
     const result = await listEmailLogs({
       emailType: parseStringOrUndefined(req.query.emailType),
       status: parseStringOrUndefined(req.query.status),
+      sentTo: parseStringOrUndefined(req.query.sentTo),
       branchId: parseBigIntOrUndefined(req.query.branchId),
       dateFrom: parseDateOrUndefined(req.query.dateFrom),
       dateTo: parseDateOrUndefined(req.query.dateTo),

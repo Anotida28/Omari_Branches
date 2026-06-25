@@ -6,6 +6,7 @@ import { getPagination } from "../utils/pagination";
 export type EmailLogListParams = {
   emailType?: string;
   status?: string;
+  sentTo?: string;
   branchId?: bigint;
   dateFrom?: Date;
   dateTo?: Date;
@@ -49,6 +50,9 @@ export async function listEmailLogs(params: EmailLogListParams): Promise<EmailLo
   }
   if (params.status) {
     where.status = params.status;
+  }
+  if (params.sentTo) {
+    where.sentTo = { contains: params.sentTo };
   }
   if (params.branchId !== undefined) {
     where.branchId = params.branchId;
