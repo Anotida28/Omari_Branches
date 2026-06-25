@@ -31,6 +31,7 @@ import { RefreshCw, Search, UserRound, X } from "lucide-react";
 import { chartPalette, glassPanelSx } from "../app/theme";
 import { fetchAgentTrends, fetchAllAgents } from "../services/agents";
 import { formatCurrency } from "../services/format";
+import { FocusDialog } from "../shared/components/FocusDialog";
 import { StatCard } from "../shared/components/StatCard";
 import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
 import { ChartSkeleton } from "../shared/components/ChartSkeleton";
@@ -60,13 +61,20 @@ function ChartModeToggle({ mode, onChange }: { mode: ChartMode; onChange: (m: Ch
   );
 }
 
-function ChartCard({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+function ChartCard({ title, subtitle, children, onExpand }: { title: string; subtitle: string; children: React.ReactNode; onExpand?: () => void }) {
   return (
     <Paper sx={{ p: 2.2, ...glassPanelSx }}>
-      <Box sx={{ mb: 1.3 }}>
-        <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
-        <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
-      </Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.3 }}>
+        <Box>
+          <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+          <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
+        </Box>
+        {onExpand && (
+          <Button size="small" variant="outlined" onClick={onExpand} sx={{ flexShrink: 0 }}>
+            Expand
+          </Button>
+        )}
+      </Stack>
       {children}
     </Paper>
   );
@@ -93,6 +101,7 @@ export default function AgentTrendsPage() {
   const [cashMode, setCashMode] = useState<ChartMode>("line");
   const [commissionMode, setCommissionMode] = useState<ChartMode>("line");
   const [volumeMode, setVolumeMode] = useState<ChartMode>("bar");
+  const [focusedChart, setFocusedChart] = useState<"cash" | "commission" | "volume" | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -404,6 +413,7 @@ export default function AgentTrendsPage() {
               <ChartCard
                 title="Cash In / Cash Out Value"
                 subtitle="Daily deposit and withdrawal values over the selected period"
+                onExpand={() => setFocusedChart("cash")}
               >
                 <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
                   <ChartModeToggle mode={cashMode} onChange={setCashMode} />
@@ -448,6 +458,7 @@ export default function AgentTrendsPage() {
               <ChartCard
                 title="Commission Trend"
                 subtitle="Daily total commission earned over the selected period"
+                onExpand={() => setFocusedChart("commission")}
               >
                 <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
                   <ChartModeToggle mode={commissionMode} onChange={setCommissionMode} />
@@ -487,6 +498,7 @@ export default function AgentTrendsPage() {
               <ChartCard
                 title="Transaction Volume"
                 subtitle="Daily number of deposits and withdrawals"
+                onExpand={() => setFocusedChart("volume")}
               >
                 <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
                   <ChartModeToggle mode={volumeMode} onChange={setVolumeMode} />
@@ -556,6 +568,152 @@ export default function AgentTrendsPage() {
             </Box>
           )}
         </>
+      )}
+
+      {/* Expanded chart dialog */}
+      {trend.length > 0 && (
+        <FocusDialog
+          open={focusedChart !== null}
+          onClose={() => setFocusedChart(null)}
+          title={
+            focusedChart === "cash"
+              ? "Cash In / Cash Out Value"
+              : focusedChart === "commission"
+                ? "Commission Trend"
+                : "Transaction Volume"
+          }
+          subtitle="Expanded view — same date range and agent selection."
+        >
+          <Stack spacing={2}>
+            {/* KPI mini-row */}
+            <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "repeat(2,1fr)", md: "repeat(4,1fr)" } }}>
+              <StatCard label="Transaction Value" value={kpis ? formatCurrency(kpis.totalTransactionValue) : "—"} hint="Cash in + cash out" />
+              <StatCard label="Total Commission" value={kpis ? formatCurrency(kpis.totalCommission) : "—"} hint="Deposits + withdrawals" />
+              <StatCard label="Transaction Volume" value={kpis ? kpis.totalTransactionVolume.toLocaleString() : "—"} hint="Total transactions" />
+              <StatCard
+                label={selectedAgents.length === 1 ? "Agent" : "Group Size"}
+                value={selectedAgents.length === 1 ? (selectedAgents[0].fullName ?? selectedAgents[0].agentAccount) : `${selectedAgents.length} agents`}
+                hint={`${dateFrom} – ${dateTo}`}
+              />
+            </Box>
+
+            <Paper sx={{ p: 2, ...glassPanelSx }}>
+              {/* Line / Bar toggle inside dialog */}
+              <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1.5 }}>
+                {focusedChart === "cash" && <ChartModeToggle mode={cashMode} onChange={setCashMode} />}
+                {focusedChart === "commission" && <ChartModeToggle mode={commissionMode} onChange={setCommissionMode} />}
+                {focusedChart === "volume" && <ChartModeToggle mode={volumeMode} onChange={setVolumeMode} />}
+              </Stack>
+
+              {focusedChart === "cash" ? (
+                <Box sx={{ height: "68vh" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    {cashMode === "line" ? (
+                      <ComposedChart data={trend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={(v: number | string | undefined) => formatCurrency(Number(v ?? 0))} labelFormatter={(l) => formatDateLabel(String(l))} />
+                        <Legend />
+                        <Bar dataKey="cashInValue" fill={chartPalette.secondary} name="Cash In" />
+                        <Bar dataKey="cashOutValue" fill={chartPalette.warning} name="Cash Out" />
+                        <Line type="monotone" dataKey="totalTransactionValue" stroke={chartPalette.primary} strokeWidth={2} dot={false} name="Total Value" />
+                      </ComposedChart>
+                    ) : (
+                      <BarChart data={trend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={(v: number | string | undefined) => formatCurrency(Number(v ?? 0))} labelFormatter={(l) => formatDateLabel(String(l))} />
+                        <Legend />
+                        <Bar dataKey="cashInValue" fill={chartPalette.secondary} name="Cash In" />
+                        <Bar dataKey="cashOutValue" fill={chartPalette.warning} name="Cash Out" />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </Box>
+              ) : focusedChart === "commission" ? (
+                <Box sx={{ height: "68vh" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    {commissionMode === "line" ? (
+                      <LineChart data={trend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={(v: number | string | undefined) => formatCurrency(Number(v ?? 0))} labelFormatter={(l) => formatDateLabel(String(l))} />
+                        <Line type="monotone" dataKey="totalCommission" stroke={chartPalette.tertiary} strokeWidth={2} dot={false} name="Commission" />
+                      </LineChart>
+                    ) : (
+                      <BarChart data={trend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis tickFormatter={formatCompactCurrency} />
+                        <Tooltip formatter={(v: number | string | undefined) => formatCurrency(Number(v ?? 0))} labelFormatter={(l) => formatDateLabel(String(l))} />
+                        <Bar dataKey="totalCommission" fill={chartPalette.tertiary} name="Commission" />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </Box>
+              ) : (
+                <Box sx={{ height: "68vh" }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    {volumeMode === "bar" ? (
+                      <BarChart data={trend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis />
+                        <Tooltip labelFormatter={(l) => formatDateLabel(String(l))} />
+                        <Legend />
+                        <Bar dataKey="cashInVolume" fill={chartPalette.secondary} name="Deposits" />
+                        <Bar dataKey="cashOutVolume" fill={chartPalette.warning} name="Withdrawals" />
+                      </BarChart>
+                    ) : (
+                      <LineChart data={trend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} />
+                        <XAxis dataKey="date" tickFormatter={formatDateLabel} />
+                        <YAxis />
+                        <Tooltip labelFormatter={(l) => formatDateLabel(String(l))} />
+                        <Legend />
+                        <Line type="monotone" dataKey="cashInVolume" stroke={chartPalette.secondary} strokeWidth={2} dot={false} name="Deposits" />
+                        <Line type="monotone" dataKey="cashOutVolume" stroke={chartPalette.warning} strokeWidth={2} dot={false} name="Withdrawals" />
+                      </LineChart>
+                    )}
+                  </ResponsiveContainer>
+                </Box>
+              )}
+            </Paper>
+
+            <Divider />
+
+            {/* Daily snapshots */}
+            <Stack spacing={0.8}>
+              <Typography variant="subtitle2" fontWeight={700}>Recent Daily Detail</Typography>
+              {trend.slice(-10).reverse().map((point) => (
+                <Paper key={point.date} variant="outlined" sx={{ p: 1.5 }}>
+                  <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={1}>
+                    <Typography variant="body2" fontWeight={700} sx={{ minWidth: 80 }}>
+                      {formatDateLabel(point.date)}
+                    </Typography>
+                    <Stack direction="row" gap={2} flexWrap="wrap">
+                      <Typography variant="body2" color="text.secondary">
+                        In: <strong style={{ color: "#1e7d4c" }}>{formatCurrency(point.cashInValue)}</strong>
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Out: <strong style={{ color: "#b45309" }}>{formatCurrency(point.cashOutValue)}</strong>
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Commission: <strong>{formatCurrency(point.totalCommission)}</strong>
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Vol: <strong>{point.totalTransactionVolume.toLocaleString()}</strong>
+                      </Typography>
+                    </Stack>
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
+          </Stack>
+        </FocusDialog>
       )}
     </Box>
   );
