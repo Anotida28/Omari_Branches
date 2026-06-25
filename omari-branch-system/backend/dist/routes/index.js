@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const admin_routes_1 = __importDefault(require("./admin.routes"));
+const agents_routes_1 = __importDefault(require("./agents.routes"));
 const alert_logs_routes_1 = __importDefault(require("./alert-logs.routes"));
 const branches_routes_1 = __importDefault(require("./branches.routes"));
 const custom_report_routes_1 = __importDefault(require("./custom-report.routes"));
@@ -20,6 +21,7 @@ const users_routes_1 = __importDefault(require("./users.routes"));
 const wallet_routes_1 = __importDefault(require("./wallet.routes"));
 const router = (0, express_1.Router)();
 router.use("/admin", admin_routes_1.default);
+router.use("/agents", agents_routes_1.default);
 router.use("/dashboard", dashboard_routes_1.default);
 router.use("/alerts", alert_logs_routes_1.default);
 router.use("/branches", branches_routes_1.default);

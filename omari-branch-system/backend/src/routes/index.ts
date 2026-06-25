@@ -1,5 +1,6 @@
 import { Router } from "express";
 import adminRoutes from "./admin.routes";
+import agentsRoutes from "./agents.routes";
 import alertLogsRoutes from "./alert-logs.routes";
 import branchesRoutes from "./branches.routes";
 import customReportRoutes from "./custom-report.routes";
@@ -17,6 +18,7 @@ import walletRoutes from "./wallet.routes";
 const router = Router();
 
 router.use("/admin", adminRoutes);
+router.use("/agents", agentsRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/alerts", alertLogsRoutes);
 router.use("/branches", branchesRoutes);

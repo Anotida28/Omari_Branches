@@ -25,6 +25,7 @@ const WalletInsightsAlertsPage = lazy(() => import("../pages/WalletInsightsAlert
 const WalletVisaAnalyticsPage = lazy(() => import("../pages/WalletVisaAnalyticsPage"));
 const ReportBuilderPage = lazy(() => import("../pages/ReportBuilderPage"));
 const EmailDeliveryLogPage = lazy(() => import("../pages/EmailDeliveryLogPage"));
+const AgentTrendsPage = lazy(() => import("../pages/AgentTrendsPage"));
 const UsersPage = lazy(() => import("../pages/UsersPage"));
 
 function RouteLoadingFallback() {
@@ -82,6 +83,7 @@ export function AppRoutes() {
           <Route path="/wallet/visa-analytics" element={<WalletVisaAnalyticsPage />} />
           <Route path="/my-report" element={<ReportBuilderPage />} />
           <Route path="/email-logs" element={<EmailDeliveryLogPage />} />
+          <Route path="/agents/trends" element={<AgentTrendsPage />} />
           <Route
             path="/users"
             element={

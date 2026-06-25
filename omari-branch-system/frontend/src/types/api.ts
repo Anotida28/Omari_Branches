@@ -355,6 +355,42 @@ export type AlertStats = {
 };
 
 // ============================================================================
+// Agents
+// ============================================================================
+
+export type AgentSearchResult = {
+  agentAccount: string;
+  fullName: string | null;
+  mobileNumber: string | null;
+};
+
+export type AgentTrendPoint = {
+  date: string;
+  cashInVolume: number;
+  cashOutVolume: number;
+  totalTransactionVolume: number;
+  cashInValue: number;
+  cashOutValue: number;
+  totalTransactionValue: number;
+  commissionOnDeposits: number;
+  commissionOnWithdrawals: number;
+  totalCommission: number;
+};
+
+export type AgentTrendsKpis = {
+  totalTransactionValue: number;
+  totalTransactionVolume: number;
+  totalCommission: number;
+  cashInValue: number;
+  cashOutValue: number;
+};
+
+export type AgentTrendsData = {
+  kpis: AgentTrendsKpis;
+  trend: AgentTrendPoint[];
+};
+
+// ============================================================================
 // Email Delivery Logs
 // ============================================================================
 

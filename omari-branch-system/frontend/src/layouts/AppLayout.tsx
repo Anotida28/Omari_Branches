@@ -134,12 +134,27 @@ const notificationsSection: NavSection = {
   items: notificationsItems,
 };
 
+const agentsItems: NavItem[] = [
+  {
+    to: "/agents/trends",
+    label: "Agent Trends",
+    subtitle: "Search agents across the country and analyse individual or group performance trends",
+    icon: LineChart,
+  },
+];
+
 const navSections: NavSection[] = [
   {
     id: "remittance-center",
     label: "Remittance Center",
     icon: Building2,
     items: remittanceCenterItems,
+  },
+  {
+    id: "agents",
+    label: "Agents",
+    icon: UserRound,
+    items: agentsItems,
   },
   {
     id: "wallet",
@@ -204,7 +219,11 @@ const navSections: NavSection[] = [
   },
 ];
 
-const navItems = [...navSections.flatMap((section) => section.items), ...notificationsSection.items];
+const navItems = [
+  ...navSections.flatMap((section) => section.items),
+  ...agentsItems,
+  ...notificationsSection.items,
+];
 
 const EXPANDED_WIDTH = 280;
 const COLLAPSED_WIDTH = 88;
@@ -530,6 +549,7 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     "remittance-center": true,
+    agents: false,
     notifications: false,
     wallet: false,
   });
