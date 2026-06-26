@@ -73,6 +73,7 @@ async function fetchSnapshotRowsFromSource(sinceDate?: Date): Promise<SnapshotRo
   const tx = parseTable(env.SOURCE_SQL_TRANSACTIONS_TABLE);
   const acct = parseTable(env.SOURCE_SQL_USD_ACCOUNTS_TABLE);
   const cust = parseTable(env.SOURCE_SQL_CUSTOMER_TABLE);
+  const agentT = parseTable(env.SOURCE_SQL_AGENT_SUMMARY_TABLE);
 
   const asOfDate = new Date();
   const last30 = new Date(asOfDate.getTime() - 29 * 86_400_000);
@@ -82,6 +83,14 @@ async function fetchSnapshotRowsFromSource(sinceDate?: Date): Promise<SnapshotRo
   request.input("currency", sql.NVarChar(10), "USD");
   request.input("last30", sql.Date, last30);
   request.input("last60", sql.Date, last60);
+
+  const agentCifCte = `
+    agent_cifs AS (
+      SELECT DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(50)))) AS cif
+      FROM [${agentT.schema}].[${agentT.table}] WITH (NOLOCK)
+      WHERE [customer_id] IS NOT NULL
+        AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(50)))) != ''
+    )`;
 
   // Build the query — incremental mode adds an active_cifs CTE to restrict which customers
   // we process, while still aggregating their full transaction history.
@@ -96,6 +105,7 @@ async function fetchSnapshotRowsFromSource(sinceDate?: Date): Promise<SnapshotRo
         JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
         WHERE t.[Date] >= @sinceDate AND t.[Currency] = @currency AND a.[CIF] IS NOT NULL
       ),
+      ${agentCifCte},
       customer_tx AS (
         SELECT
           a.[CIF],
@@ -137,10 +147,13 @@ async function fetchSnapshotRowsFromSource(sinceDate?: Date): Promise<SnapshotRo
         ctx.sourceRowCount
       FROM customer_tx ctx
       LEFT JOIN customer_info ci ON ctx.[CIF] = ci.[CIF]
+      LEFT JOIN agent_cifs ag ON ctx.[CIF] = ag.cif
+      WHERE ag.cif IS NULL
     `;
   } else {
     query = `
-      WITH customer_tx AS (
+      WITH ${agentCifCte},
+      customer_tx AS (
         SELECT
           a.[CIF],
           MIN(CAST(t.[Date] AS DATE))                                                AS firstSeenDate,
@@ -179,6 +192,8 @@ async function fetchSnapshotRowsFromSource(sinceDate?: Date): Promise<SnapshotRo
         ctx.sourceRowCount
       FROM customer_tx ctx
       LEFT JOIN customer_info ci ON ctx.[CIF] = ci.[CIF]
+      LEFT JOIN agent_cifs ag ON ctx.[CIF] = ag.cif
+      WHERE ag.cif IS NULL
     `;
   }
 
