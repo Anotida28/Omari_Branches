@@ -649,6 +649,10 @@ function getBalanceHistoryTable(currency: Currency): QualifiedTableName {
   );
 }
 
+function getAgentSummaryTable(): QualifiedTableName {
+  return parseQualifiedTableName(env.SOURCE_SQL_AGENT_SUMMARY_TABLE);
+}
+
 function buildComparisonKpi(current: number, previous: number): WalletComparisonKpi {
   const absoluteChange = current - previous;
   const percentChange = previous === 0 ? null : (absoluteChange / previous) * 100;
@@ -1806,9 +1810,33 @@ async function queryCustomer360List(params: {
         ? "AND cls.lastDate < @statusDate"
         : "";
 
+  const agentT = getAgentSummaryTable();
+  const agentCifCte = `
+    agent_cifs AS (
+      SELECT DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(50)))) AS cif
+      FROM [${agentT.schema}].[${agentT.table}] WITH (NOLOCK)
+      WHERE [customer_id] IS NOT NULL
+        AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(50)))) != ''
+    )`;
+
+  const merchantCifCte = `
+    merchant_cifs AS (
+      SELECT DISTINCT dc.[CIF] AS cif
+      FROM apex_postilion_postcard.dbo.dim_omari_merchant_accounts ma WITH (NOLOCK)
+      JOIN apex_postilion_postcard.dbo.pc_customer_accounts_8_A pca WITH (NOLOCK)
+        ON pca.account_id COLLATE SQL_Latin1_General_CP1_CI_AS = ma.account_id COLLATE SQL_Latin1_General_CP1_CI_AS
+      JOIN apex_postilion_postcard.dbo.pc_customers_8_A pc WITH (NOLOCK)
+        ON pc.customer_id COLLATE SQL_Latin1_General_CP1_CI_AS = pca.customer_id COLLATE SQL_Latin1_General_CP1_CI_AS
+      JOIN [${cust.schema}].[${cust.table}] dc WITH (NOLOCK)
+        ON dc.[MobileNumber] COLLATE SQL_Latin1_General_CP1_CI_AS = pc.mobile_nr COLLATE SQL_Latin1_General_CP1_CI_AS
+      WHERE dc.[CIF] IS NOT NULL
+    )`;
+
   const [resCount, resItems] = await Promise.all([
     reqCount.query(`
-      WITH customer_stats AS (
+      WITH ${agentCifCte},
+      ${merchantCifCte},
+      customer_stats AS (
         SELECT a.[CIF], MAX(CAST(t.[Date] AS DATE)) AS lastDate
         FROM [${tx.schema}].[${tx.table}] t WITH (NOLOCK)
         JOIN [${acct.schema}].[${acct.table}] a WITH (NOLOCK) ON t.[AccountId] = a.[AccountId]
@@ -1817,9 +1845,14 @@ async function queryCustomer360List(params: {
       )
       SELECT COUNT(*) AS total FROM customer_stats cls
       JOIN [${cust.schema}].[${cust.table}] c WITH (NOLOCK) ON cls.[CIF] = c.[CIF]
-      WHERE cls.lastDate <= @asOfDate ${searchClause} ${statusClause}
-    `),  reqItems.query(`
-      WITH customer_stats AS (
+      LEFT JOIN agent_cifs ac ON cls.[CIF] = ac.cif
+      LEFT JOIN merchant_cifs mc ON cls.[CIF] = mc.cif
+      WHERE cls.lastDate <= @asOfDate AND ac.cif IS NULL AND mc.cif IS NULL ${searchClause} ${statusClause}
+    `),
+    reqItems.query(`
+      WITH ${agentCifCte},
+      ${merchantCifCte},
+      customer_stats AS (
         SELECT
           a.[CIF],
           MIN(CAST(t.[Date] AS DATE)) AS firstDate,
@@ -1847,7 +1880,9 @@ async function queryCustomer360List(params: {
         cls.last60Value AS last60DayTransactionValue
       FROM customer_stats cls
       JOIN [${cust.schema}].[${cust.table}] c WITH (NOLOCK) ON cls.[CIF] = c.[CIF]
-      WHERE cls.lastDate <= @asOfDate ${searchClause} ${statusClause}
+      LEFT JOIN agent_cifs ac ON cls.[CIF] = ac.cif
+      LEFT JOIN merchant_cifs mc ON cls.[CIF] = mc.cif
+      WHERE cls.lastDate <= @asOfDate AND ac.cif IS NULL AND mc.cif IS NULL ${searchClause} ${statusClause}
       ORDER BY cls.lifetimeValue DESC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
     `),

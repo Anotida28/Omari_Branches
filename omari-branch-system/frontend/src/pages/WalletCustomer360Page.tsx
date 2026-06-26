@@ -244,17 +244,27 @@ export default function WalletCustomer360Page() {
             </Typography>
           )}
         </Stack>
-        {isSuperAdmin && (
+        <Stack direction="row" spacing={1}>
           <Button
             size="small"
             variant="outlined"
-            startIcon={syncMutation.isPending ? undefined : <Database size={14} />}
-            disabled={syncMutation.isPending}
-            onClick={() => syncMutation.mutate()}
+            onClick={() => setSearchParams({}, { replace: true })}
+            sx={{ whiteSpace: "nowrap" }}
           >
-            {syncMutation.isPending ? "Syncing…" : "Sync Snapshot"}
+            Reset Filters
           </Button>
-        )}
+          {isSuperAdmin && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={syncMutation.isPending ? undefined : <Database size={14} />}
+              disabled={syncMutation.isPending}
+              onClick={() => syncMutation.mutate()}
+            >
+              {syncMutation.isPending ? "Syncing…" : "Sync Snapshot"}
+            </Button>
+          )}
+        </Stack>
       </Stack>
       <FilterBar>
         <Stack direction={{ xs: "column", xl: "row" }} spacing={1.2} alignItems={{ xs: "stretch", xl: "center" }}>
@@ -304,13 +314,6 @@ export default function WalletCustomer360Page() {
             InputLabelProps={{ shrink: true }}
             sx={{ minWidth: { xs: "100%", xl: 170 } }}
           />
-          <Button
-            variant="outlined"
-            onClick={() => setSearchParams({}, { replace: true })}
-            sx={{ width: { xs: "100%", xl: "auto" }, whiteSpace: "nowrap" }}
-          >
-            Reset Filters
-          </Button>
         </Stack>
       </FilterBar>
 
