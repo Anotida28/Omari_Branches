@@ -260,6 +260,30 @@ async function runFullSync(refreshedAt: Date): Promise<number> {
 }
 
 /**
+ * Fetch distinct agent CIFs from source DB, then delete any matching snapshot records.
+ * Called after every incremental sync to remove agents that may already be in the table.
+ */
+async function purgeAgentsFromSnapshot(): Promise<number> {
+  const pool = await getSourcePool();
+  const agentT = parseTable(env.SOURCE_SQL_AGENT_SUMMARY_TABLE);
+  const result = await pool.request().query(`
+    SELECT DISTINCT LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(50)))) AS cif
+    FROM [${agentT.schema}].[${agentT.table}] WITH (NOLOCK)
+    WHERE [customer_id] IS NOT NULL
+      AND LTRIM(RTRIM(CAST([customer_id] AS VARCHAR(50)))) != ''
+  `);
+  const agentCifs = (result.recordset as Array<{ cif: string }>).map((r) => r.cif);
+  if (agentCifs.length === 0) return 0;
+  const { count } = await prisma.walletCustomerActivitySnapshot.deleteMany({
+    where: { customerId: { in: agentCifs } },
+  });
+  if (count > 0) {
+    console.log(`[WalletSnapshot] Purged ${count} agent record(s) from snapshot.`);
+  }
+  return count;
+}
+
+/**
  * Run an incremental sync: fetches only customers active since sinceDate, then upserts
  * their records. Inactive customers are left untouched.
  */
@@ -336,6 +360,9 @@ export async function syncWalletCustomerSnapshot(mode: "full" | "incremental" = 
       effectiveMode = "incremental";
     }
   }
+
+  // Always purge any agents that ended up in the snapshot (guards the incremental path).
+  await purgeAgentsFromSnapshot();
 
   console.log(`[WalletSnapshot] ${effectiveMode} sync complete — ${customerCount} customers in ${Date.now() - startMs}ms`);
 
