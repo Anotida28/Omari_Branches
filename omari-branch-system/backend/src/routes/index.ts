@@ -14,6 +14,7 @@ import recurringRemindersRoutes from "./recurring-reminders.routes";
 import recipientsRoutes from "./recipients.routes";
 import usersRoutes from "./users.routes";
 import walletRoutes from "./wallet.routes";
+import subscriptionSmsRoutes from "./subscription-sms.routes";
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use("/recurring-reminders", recurringRemindersRoutes);
 router.use("/recipients", recipientsRoutes);
 router.use("/users", usersRoutes);
 router.use("/wallet", walletRoutes);
+router.use("/subscription-sms", subscriptionSmsRoutes);
 
 export default router;

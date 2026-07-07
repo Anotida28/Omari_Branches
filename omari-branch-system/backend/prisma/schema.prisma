@@ -304,3 +304,24 @@ model JobLock {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+model SubscriptionSmsLog {
+  id                  BigInt   @id @default(autoincrement())
+  mobileNr            String   @db.VarChar(50)
+  serviceName         String   @db.VarChar(100)
+  predictedChargeDate DateTime @db.Date
+  lane                String   @db.VarChar(5)
+  subscriptionAmount  Decimal  @db.Decimal(18, 4)
+  feeAmount           Decimal  @db.Decimal(18, 4)
+  totalNeeded         Decimal  @db.Decimal(18, 4)
+  currentBalance      Decimal  @db.Decimal(18, 4)
+  topUpAmount         Decimal  @db.Decimal(18, 4)
+  smsSent             Boolean  @default(false)
+  smsError            String?  @db.VarChar(500)
+  sentAt              DateTime @default(now())
+
+  @@unique([mobileNr, serviceName, predictedChargeDate], name: "uq_subscription_sms_dedupe")
+  @@index([sentAt])
+  @@index([mobileNr])
+  @@index([predictedChargeDate])
+}

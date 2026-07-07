@@ -338,6 +338,14 @@ export const loginHandler: RequestHandler = async (req, res, next) => {
   const password = parsed.data.password;
 
   try {
+    if (!env.AUTH_EXTERNAL_ENABLED) {
+      // Dev bypass: skip external auth and access gateway entirely.
+      // Only active when AUTH_EXTERNAL_ENABLED=false in .env.
+      const user = await upsertAuthenticatedUser(normalizedUsername);
+      issueLoginSuccess(res, user);
+      return;
+    }
+
     const external = await callExternalAuth(normalizedUsername, password);
 
     if (external.outcome === "unavailable") {

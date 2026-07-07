@@ -18,6 +18,7 @@ import {
 } from "./source-metrics-sync.job";
 import { runCustomReportJobWithLock } from "./custom-report.job";
 import { runWalletSnapshotJobWithLock } from "./wallet-snapshot.job";
+import { runSubscriptionSmsReminderJobWithLock } from "./subscription-sms-reminder.job";
 
 // ============================================================================
 // Types
@@ -39,17 +40,19 @@ const scheduledJobs: ScheduledJob[] = [];
 // Cron Expressions
 // ============================================================================
 
-/**
- * Daily at 08:00 Africa/Harare (UTC+2)
- * Since node-cron uses system timezone, we run at 06:00 UTC = 08:00 Harare
- */
-const DAILY_ALERT_CRON = "0 6 * * *";                // 06:00 UTC = 08:00 Harare (UTC+2)
-const DAILY_BRANCH_REPORT_CRON = "0 6 * * *";        // 06:00 UTC = 08:00 Harare (UTC+2)
-const DAILY_WALLET_REPORT_CRON = "0 6 * * *";        // 06:00 UTC = 08:00 Harare (UTC+2)
-const CUSTOM_REPORT_CRON = "30 6 * * *";              // 06:30 UTC = 08:30 Harare (UTC+2) — after branch/wallet reports
-const WALLET_SNAPSHOT_INCREMENTAL_CRON = "0 2 * * *"; // 02:00 UTC daily = 04:00 Harare — incremental (active customers only)
-const WALLET_SNAPSHOT_FULL_CRON = "0 3 * * 0";        // 03:00 UTC Sunday = 05:00 Harare — full reset weekly
-const SOURCE_METRICS_SYNC_CRON = env.SOURCE_SQL_SYNC_CRON;
+// All cron expressions are in Africa/Harare local time.
+// node-cron is given { timezone: 'Africa/Harare' } so the server's OS clock
+// or timezone setting does not affect when jobs fire.
+const CRON_TZ = 'Africa/Harare';
+
+const DAILY_ALERT_CRON                  = "0 8 * * *";   // 08:00 Harare daily
+const DAILY_BRANCH_REPORT_CRON          = "0 8 * * *";   // 08:00 Harare daily
+const DAILY_WALLET_REPORT_CRON          = "0 8 * * *";   // 08:00 Harare daily
+const CUSTOM_REPORT_CRON                = "30 8 * * *";  // 08:30 Harare — after branch/wallet reports
+const WALLET_SNAPSHOT_INCREMENTAL_CRON  = "0 4 * * *";   // 04:00 Harare daily — incremental
+const WALLET_SNAPSHOT_FULL_CRON         = "0 5 * * 0";   // 05:00 Harare Sunday — full reset
+const SOURCE_METRICS_SYNC_CRON          = env.SOURCE_SQL_SYNC_CRON;
+const SUBSCRIPTION_SMS_REMINDER_CRON    = "0 9 * * *";   // 09:00 Harare — after balances refresh
 
 // ============================================================================
 // Job Handlers
@@ -216,6 +219,35 @@ async function runDailyCustomReports(): Promise<void> {
   }
 }
 
+async function runDailySubscriptionSmsReminders(): Promise<void> {
+  console.log(`[Scheduler] Running subscription SMS reminders at ${new Date().toISOString()}`);
+
+  const { executed, result, error } = await runSubscriptionSmsReminderJobWithLock();
+
+  if (!executed) {
+    console.log(`[Scheduler] Subscription SMS reminder job skipped - another instance is running`);
+    return;
+  }
+
+  if (error) {
+    console.error(`[Scheduler] Subscription SMS reminder job failed:`, error);
+    return;
+  }
+
+  if (result) {
+    console.log(`[Scheduler] Subscription SMS reminder job completed:`, {
+      runDate:          result.runDate,
+      candidates:       result.candidatesDetected,
+      sent:             result.smsSentCount,
+      failed:           result.smsFailedCount,
+      skippedBalance:   result.sufficientBalanceSkipped,
+      skippedDedup:     result.alreadySentSkipped,
+      lane1:            result.lane1Count,
+      lane2a:           result.lane2aCount,
+    });
+  }
+}
+
 async function runWeeklyWalletSnapshotFull(): Promise<void> {
   console.log(`[Scheduler] Running weekly wallet snapshot (full reset) at ${new Date().toISOString()}`);
 
@@ -252,7 +284,7 @@ export function startScheduler(): void {
   console.log(`[Scheduler] Starting job scheduler...`);
 
   // Daily Alert Evaluator
-  const alertTask = cron.schedule(DAILY_ALERT_CRON, runDailyAlerts);
+  const alertTask = cron.schedule(DAILY_ALERT_CRON, runDailyAlerts, { timezone: CRON_TZ });
 
   scheduledJobs.push({
     name: "daily-alert-evaluator",
@@ -260,7 +292,7 @@ export function startScheduler(): void {
     task: alertTask,
   });
 
-  const reportTask = cron.schedule(DAILY_BRANCH_REPORT_CRON, runDailyBranchReports);
+  const reportTask = cron.schedule(DAILY_BRANCH_REPORT_CRON, runDailyBranchReports, { timezone: CRON_TZ });
 
   scheduledJobs.push({
     name: "daily-branch-report-emailer",
@@ -268,7 +300,7 @@ export function startScheduler(): void {
     task: reportTask,
   });
 
-  const walletReportTask = cron.schedule(DAILY_WALLET_REPORT_CRON, runDailyWalletReports);
+  const walletReportTask = cron.schedule(DAILY_WALLET_REPORT_CRON, runDailyWalletReports, { timezone: CRON_TZ });
 
   scheduledJobs.push({
     name: "daily-wallet-report-emailer",
@@ -276,31 +308,39 @@ export function startScheduler(): void {
     task: walletReportTask,
   });
 
-  const customReportTask = cron.schedule(CUSTOM_REPORT_CRON, runDailyCustomReports);
+  const customReportTask = cron.schedule(CUSTOM_REPORT_CRON, runDailyCustomReports, { timezone: CRON_TZ });
   scheduledJobs.push({
     name: "custom-report-emailer",
     cronExpression: CUSTOM_REPORT_CRON,
     task: customReportTask,
   });
 
-  const walletSnapshotDailyTask = cron.schedule(WALLET_SNAPSHOT_INCREMENTAL_CRON, runDailyWalletSnapshotIncremental);
+  const walletSnapshotDailyTask = cron.schedule(WALLET_SNAPSHOT_INCREMENTAL_CRON, runDailyWalletSnapshotIncremental, { timezone: CRON_TZ });
   scheduledJobs.push({
     name: "wallet-customer-snapshot-incremental",
     cronExpression: WALLET_SNAPSHOT_INCREMENTAL_CRON,
     task: walletSnapshotDailyTask,
   });
 
-  const walletSnapshotFullTask = cron.schedule(WALLET_SNAPSHOT_FULL_CRON, runWeeklyWalletSnapshotFull);
+  const walletSnapshotFullTask = cron.schedule(WALLET_SNAPSHOT_FULL_CRON, runWeeklyWalletSnapshotFull, { timezone: CRON_TZ });
   scheduledJobs.push({
     name: "wallet-customer-snapshot-full",
     cronExpression: WALLET_SNAPSHOT_FULL_CRON,
     task: walletSnapshotFullTask,
   });
 
+  const subscriptionSmsTask = cron.schedule(SUBSCRIPTION_SMS_REMINDER_CRON, runDailySubscriptionSmsReminders, { timezone: CRON_TZ });
+  scheduledJobs.push({
+    name: "subscription-sms-reminder",
+    cronExpression: SUBSCRIPTION_SMS_REMINDER_CRON,
+    task: subscriptionSmsTask,
+  });
+
   if (shouldEnableSourceMetricsSync()) {
     const sourceMetricsTask = cron.schedule(
       SOURCE_METRICS_SYNC_CRON,
       runDailySourceMetricsSync,
+      { timezone: CRON_TZ },
     );
 
     scheduledJobs.push({

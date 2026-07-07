@@ -117,7 +117,7 @@ const envSchema = z.object({
     z.boolean().default(true),
   ),
   SOURCE_SQL_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(15000),
-  SOURCE_SQL_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(30000),
+  SOURCE_SQL_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600_000).default(30000),
   SOURCE_SQL_AGENT_SUMMARY_TABLE: z
     .string()
     .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_AGENT_SUMMARY_TABLE must be schema.table")
@@ -166,6 +166,10 @@ const envSchema = z.object({
   ),
   SOURCE_SQL_SYNC_CRON: z.string().min(5).default("15 7 * * *"),
   SOURCE_SQL_SYNC_LOOKBACK_DAYS: z.coerce.number().int().min(1).max(30).default(2),
+  OMARISMS_URL: z.preprocess(normalizeOptionalString, z.string().min(1).optional()),
+  OMARISMS_USER: z.preprocess(normalizeOptionalString, z.string().min(1).optional()),
+  OMARISMS_USER_PASSWORD: z.preprocess(normalizeOptionalString, z.string().min(1).optional()),
+  OMARISMS_USER_SENDER: z.preprocess(normalizeOptionalString, z.string().min(1).optional()),
 });
 
 const parsed = envSchema.safeParse(process.env);
