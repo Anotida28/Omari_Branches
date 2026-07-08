@@ -19,6 +19,7 @@ import {
 import { runCustomReportJobWithLock } from "./custom-report.job";
 import { runWalletSnapshotJobWithLock } from "./wallet-snapshot.job";
 import { runSubscriptionSmsReminderJobWithLock } from "./subscription-sms-reminder.job";
+import { runSmsReconciliationJobWithLock } from "./subscription-sms-reconciliation.job";
 
 // ============================================================================
 // Types
@@ -53,6 +54,7 @@ const WALLET_SNAPSHOT_INCREMENTAL_CRON  = "0 4 * * *";   // 04:00 Harare daily �
 const WALLET_SNAPSHOT_FULL_CRON         = "0 5 * * 0";   // 05:00 Harare Sunday — full reset
 const SOURCE_METRICS_SYNC_CRON          = env.SOURCE_SQL_SYNC_CRON;
 const SUBSCRIPTION_SMS_REMINDER_CRON    = "0 9 * * *";   // 09:00 Harare — after balances refresh
+const SUBSCRIPTION_SMS_RECON_CRON       = "0 10 * * *";  // 10:00 Harare — after SMS reminders
 
 // ============================================================================
 // Job Handlers
@@ -248,6 +250,31 @@ async function runDailySubscriptionSmsReminders(): Promise<void> {
   }
 }
 
+async function runDailySmsReconciliation(): Promise<void> {
+  console.log(`[Scheduler] Running SMS reconciliation at ${new Date().toISOString()}`);
+
+  const { executed, result, error } = await runSmsReconciliationJobWithLock();
+
+  if (!executed) {
+    console.log(`[Scheduler] SMS reconciliation job skipped - another instance is running`);
+    return;
+  }
+
+  if (error) {
+    console.error(`[Scheduler] SMS reconciliation job failed:`, error);
+    return;
+  }
+
+  if (result) {
+    console.log(`[Scheduler] SMS reconciliation job completed:`, {
+      checked:   result.checkedCount,
+      confirmed: result.confirmedCount,
+      expired:   result.expiredCount,
+      pending:   result.pendingCount,
+    });
+  }
+}
+
 async function runWeeklyWalletSnapshotFull(): Promise<void> {
   console.log(`[Scheduler] Running weekly wallet snapshot (full reset) at ${new Date().toISOString()}`);
 
@@ -334,6 +361,13 @@ export function startScheduler(): void {
     name: "subscription-sms-reminder",
     cronExpression: SUBSCRIPTION_SMS_REMINDER_CRON,
     task: subscriptionSmsTask,
+  });
+
+  const subscriptionSmsReconTask = cron.schedule(SUBSCRIPTION_SMS_RECON_CRON, runDailySmsReconciliation, { timezone: CRON_TZ });
+  scheduledJobs.push({
+    name: "subscription-sms-reconciliation",
+    cronExpression: SUBSCRIPTION_SMS_RECON_CRON,
+    task: subscriptionSmsReconTask,
   });
 
   if (shouldEnableSourceMetricsSync()) {

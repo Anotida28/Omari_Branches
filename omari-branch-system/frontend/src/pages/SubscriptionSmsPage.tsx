@@ -21,6 +21,8 @@ import {
   Tabs,
   TextField,
   Tooltip,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import {
@@ -28,6 +30,7 @@ import {
   CheckCircle2,
   MessageSquare,
   RefreshCw,
+  TrendingUp,
 } from "lucide-react";
 
 import { glassPanelSx } from "../app/theme";
@@ -36,6 +39,7 @@ import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
 import {
   fetchSmsLog,
   fetchSmsPreview,
+  fetchSmsImpact,
   type SmsPreviewEntry,
 } from "../services/subscription-sms";
 
@@ -522,6 +526,181 @@ function PreviewTab() {
   );
 }
 
+// ── Impact Tab ────────────────────────────────────────────────────────────────
+
+const PERIOD_OPTIONS: { label: string; days: number }[] = [
+  { label: "7d",  days: 7  },
+  { label: "30d", days: 30 },
+  { label: "90d", days: 90 },
+  { label: "All", days: 0  },
+];
+
+function ImpactTab() {
+  const [days, setDays] = useState(30);
+
+  const { data, isLoading, isError, isFetching, dataUpdatedAt } = useQuery({
+    queryKey: ["subscription-sms-impact", days],
+    queryFn:  () => fetchSmsImpact(days),
+    staleTime: 5 * 60_000,
+  });
+
+  const queryClient = useQueryClient();
+
+  return (
+    <Stack spacing={2.5}>
+      {/* Header controls */}
+      <Stack direction="row" alignItems="center" gap={2} flexWrap="wrap">
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={days}
+          onChange={(_, v) => { if (v !== null) setDays(v); }}
+        >
+          {PERIOD_OPTIONS.map(o => (
+            <ToggleButton key={o.days} value={o.days} sx={{ px: 2, fontWeight: 600 }}>
+              {o.label}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={isFetching ? <CircularProgress size={12} /> : <RefreshCw size={13} />}
+          disabled={isFetching}
+          onClick={() => queryClient.invalidateQueries({ queryKey: ["subscription-sms-impact", days] })}
+        >
+          {isFetching ? "Loading…" : "Refresh"}
+        </Button>
+
+        {dataUpdatedAt > 0 && !isFetching && (
+          <Typography variant="caption" color="text.secondary">
+            {fmtDateTime(new Date(dataUpdatedAt).toISOString())}
+          </Typography>
+        )}
+      </Stack>
+
+      {isError && (
+        <Alert severity="error">Failed to load impact data. Check backend connection.</Alert>
+      )}
+
+      {/* KPI tiles */}
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(2,1fr)", xl: "repeat(4,1fr)" } }}>
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+        ) : data ? (
+          <>
+            <StatCard
+              label="SMS Sent"
+              value={String(data.smsSent)}
+              hint={`Cost: $${data.smsCost.toFixed(4)} @ $0.01155 each`}
+              icon={<MessageSquare size={20} />}
+            />
+            <StatCard
+              label="Conversions"
+              value={String(data.conversions)}
+              hint={`${data.conversionRate}% of sent SMS led to a charge`}
+              icon={<CheckCircle2 size={20} />}
+            />
+            <StatCard
+              label="Revenue Earned"
+              value={fmtUsd(data.revenueEarned)}
+              hint="Sum of Omari nett fees on converted transactions"
+              icon={<TrendingUp size={20} />}
+            />
+            <StatCard
+              label="Net ROI"
+              value={fmtUsd(data.netRoi)}
+              hint={data.netRoi >= 0 ? "Revenue exceeds SMS cost" : "Cost exceeds revenue so far"}
+            />
+          </>
+        ) : null}
+      </Box>
+
+      {/* Pending reconciliation note */}
+      {data && data.pendingReconciliation > 0 && (
+        <Alert severity="info" sx={{ py: 0.5 }}>
+          <strong>{data.pendingReconciliation}</strong> SMS{data.pendingReconciliation === 1 ? "" : "es"} are still within the charge window — conversions will update when the reconciliation job runs at 10:00.
+        </Alert>
+      )}
+
+      {data && data.pendingReconciliation === 0 && data.smsSent === 0 && (
+        <Paper variant="outlined" sx={{ p: 5, textAlign: "center", borderStyle: "dashed", borderRadius: 2 }}>
+          <MessageSquare size={36} style={{ color: "#9ca3af", margin: "0 auto 12px" }} />
+          <Typography variant="h6" fontWeight={600} color="text.secondary">No data yet</Typography>
+          <Typography variant="body2" color="text.secondary" mt={0.5}>
+            Impact stats appear once SMS messages have been sent and reconciled.
+          </Typography>
+        </Paper>
+      )}
+
+      {/* By service table */}
+      {data && data.byService.length > 0 && (
+        <Paper sx={{ ...glassPanelSx }}>
+          <Typography variant="subtitle1" fontWeight={700} sx={{ px: 2.5, pt: 2.2, pb: 1.5 }}>
+            By Service
+          </Typography>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>Service</TableCell>
+                  <TableCell sx={{ fontWeight: 700, textAlign: "right" }}>SMS Sent</TableCell>
+                  <TableCell sx={{ fontWeight: 700, textAlign: "right" }}>Converted</TableCell>
+                  <TableCell sx={{ fontWeight: 700, textAlign: "right" }}>Rate</TableCell>
+                  <TableCell sx={{ fontWeight: 700, textAlign: "right" }}>Revenue</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.byService.map(row => (
+                  <TableRow key={row.serviceName} hover>
+                    <TableCell>
+                      <Chip
+                        label={row.serviceName}
+                        size="small"
+                        sx={{
+                          bgcolor: serviceColor(row.serviceName),
+                          color: "#fff",
+                          fontWeight: 600,
+                          fontSize: 11,
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontFamily: "monospace" }}>{row.sent}</TableCell>
+                    <TableCell align="right" sx={{ fontFamily: "monospace" }}>{row.converted}</TableCell>
+                    <TableCell align="right">
+                      <Chip
+                        label={`${row.conversionRate}%`}
+                        size="small"
+                        color={row.conversionRate >= 50 ? "success" : row.conversionRate >= 25 ? "warning" : "default"}
+                        variant="outlined"
+                        sx={{ fontFamily: "monospace", fontWeight: 700 }}
+                      />
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontFamily: "monospace", fontWeight: 700, color: "#0c5f3f" }}>
+                      {fmtUsd(row.revenue)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {/* Totals row */}
+                <TableRow sx={{ "& td": { borderTop: "2px solid rgba(0,0,0,0.12)", fontWeight: 700 } }}>
+                  <TableCell>Total</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: "monospace" }}>{data.smsSent}</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: "monospace" }}>{data.conversions}</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: "monospace" }}>{data.conversionRate}%</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: "monospace", color: "#0c5f3f" }}>
+                    {fmtUsd(data.revenueEarned)}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
+    </Stack>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SubscriptionSmsPage() {
@@ -545,10 +724,12 @@ export default function SubscriptionSmsPage() {
       >
         <Tab label="Sent Log" />
         <Tab label="Tomorrow's Preview" />
+        <Tab label="Business Impact" />
       </Tabs>
 
       {tab === 0 && <SentLogTab />}
       {tab === 1 && <PreviewTab />}
+      {tab === 2 && <ImpactTab />}
     </Box>
   );
 }

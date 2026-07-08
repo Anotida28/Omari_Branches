@@ -320,8 +320,14 @@ model SubscriptionSmsLog {
   smsError            String?  @db.VarChar(500)
   sentAt              DateTime @default(now())
 
+  // Reconciliation fields — populated by the daily reconciliation job
+  chargeSucceeded     Boolean?
+  chargeDate          DateTime?
+  nettFeeEarned       Decimal?  @db.Decimal(18, 4)
+
   @@unique([mobileNr, serviceName, predictedChargeDate], name: "uq_subscription_sms_dedupe")
   @@index([sentAt])
   @@index([mobileNr])
   @@index([predictedChargeDate])
+  @@index([chargeSucceeded])
 }

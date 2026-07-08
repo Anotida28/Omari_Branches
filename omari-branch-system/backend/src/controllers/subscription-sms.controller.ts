@@ -5,6 +5,7 @@ import { prisma } from '../db/prisma';
 import {
   previewSubscriptionSmsReminders,
 } from '../services/subscription-sms-reminder.service';
+import { getSmsImpactStats } from '../services/subscription-sms-reconciliation.service';
 
 function parseDateOrUndefined(value: unknown): Date | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -91,6 +92,16 @@ export async function getSmsLog(req: Request, res: Response, next: NextFunction)
 export async function getSmsPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await previewSubscriptionSmsReminders();
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getSmsImpact(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const days = parseInt(String(req.query.days ?? '30'), 10);
+    const result = await getSmsImpactStats(Number.isFinite(days) && days >= 0 ? days : 30);
     res.json(result);
   } catch (err) {
     next(err);

@@ -83,3 +83,30 @@ export async function fetchSmsPreview(): Promise<SmsPreviewResult> {
   });
   return data;
 }
+
+export interface ImpactByService {
+  serviceName:    string;
+  sent:           number;
+  converted:      number;
+  conversionRate: number;
+  revenue:        number;
+}
+
+export interface SmsImpactResult {
+  days:                  number;
+  smsSent:               number;
+  smsCost:               number;
+  conversions:           number;
+  conversionRate:        number;
+  revenueEarned:         number;
+  netRoi:                number;
+  pendingReconciliation: number;
+  byService:             ImpactByService[];
+}
+
+export async function fetchSmsImpact(days: number): Promise<SmsImpactResult> {
+  const { data } = await api.get<SmsImpactResult>("/api/subscription-sms/impact", {
+    params: { days },
+  });
+  return data;
+}
