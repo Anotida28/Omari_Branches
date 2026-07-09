@@ -12,6 +12,7 @@ import {
   calculateOmariVisaFee,
   calculateTotalNeeded,
 } from './subscription-merchants';
+import { isSmsSendingEnabled } from './system-config.service';
 
 // ============================================================================
 // Types
@@ -219,6 +220,21 @@ function buildSmsMessage(sub: ClassifiedSubscription): string {
 export async function runSubscriptionSmsReminders(): Promise<SubscriptionReminderResult> {
   const runDate = new Date().toISOString().slice(0, 10);
   console.log(`[SubscriptionSmsReminder] Starting run for ${runDate}`);
+
+  const smsEnabled = await isSmsSendingEnabled();
+  if (!smsEnabled) {
+    console.log(`[SubscriptionSmsReminder] SMS sending is DISABLED — skipping run`);
+    return {
+      runDate,
+      candidatesDetected:       0,
+      sufficientBalanceSkipped: 0,
+      alreadySentSkipped:       0,
+      smsSentCount:             0,
+      smsFailedCount:           0,
+      lane1Count:               0,
+      lane2aCount:              0,
+    };
+  }
 
   const candidates = await fetchSubscriptionCandidates();
   const medians = computeServiceMediansFromCandidates(candidates);

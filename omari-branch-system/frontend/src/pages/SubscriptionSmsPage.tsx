@@ -1,16 +1,21 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Alert,
   Box,
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   MenuItem,
   Paper,
   Select,
   Stack,
+  Switch,
   Tab,
   Table,
   TableBody,
@@ -40,6 +45,8 @@ import {
   fetchSmsLog,
   fetchSmsPreview,
   fetchSmsImpact,
+  fetchSmsConfig,
+  updateSmsConfig,
   type SmsPreviewEntry,
 } from "../services/subscription-sms";
 
@@ -704,10 +711,38 @@ function ImpactTab() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SubscriptionSmsPage() {
-  const [tab, setTab] = useState(0);
+  const [tab, setTab]               = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const queryClient                 = useQueryClient();
+
+  const { data: config, isLoading: configLoading } = useQuery({
+    queryKey: ["subscription-sms-config"],
+    queryFn:  fetchSmsConfig,
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (enabled: boolean) => updateSmsConfig(enabled),
+    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ["subscription-sms-config"] }),
+  });
+
+  const enabled = config?.smsSendingEnabled ?? true;
+
+  function handleToggleRequest() {
+    if (enabled) {
+      setConfirmOpen(true); // ask before disabling
+    } else {
+      toggleMutation.mutate(true); // turning on — no confirmation needed
+    }
+  }
+
+  function handleConfirmDisable() {
+    setConfirmOpen(false);
+    toggleMutation.mutate(false);
+  }
 
   return (
     <Box>
+      {/* Header row */}
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={2.5} flexWrap="wrap" gap={2}>
         <Box>
           <Typography variant="h5" fontWeight={700}>Subscription SMS</Typography>
@@ -715,7 +750,34 @@ export default function SubscriptionSmsPage() {
             Track SMS reminders sent to wallet customers with upcoming or failed subscription payments.
           </Typography>
         </Box>
+
+        {/* On/Off toggle */}
+        <Stack direction="row" alignItems="center" spacing={1}
+          sx={{ p: 1.5, pl: 2, pr: 2, borderRadius: 2, border: "1px solid", borderColor: enabled ? "success.light" : "error.light", bgcolor: enabled ? "rgba(46,125,50,0.06)" : "rgba(211,47,47,0.06)" }}
+        >
+          <Chip
+            label={configLoading ? "Loading…" : enabled ? "SMS Active" : "SMS Paused"}
+            color={enabled ? "success" : "error"}
+            size="small"
+            sx={{ fontWeight: 700 }}
+          />
+          <Tooltip title={enabled ? "Click to pause SMS sending" : "Click to resume SMS sending"}>
+            <Switch
+              checked={enabled}
+              onChange={handleToggleRequest}
+              disabled={configLoading || toggleMutation.isPending}
+              color="success"
+            />
+          </Tooltip>
+        </Stack>
       </Stack>
+
+      {/* Warning banner when SMS is paused */}
+      {!configLoading && !enabled && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          SMS sending is currently <strong>paused</strong>. The daily reminder job will run but no messages will be sent to customers. Toggle the switch above to resume.
+        </Alert>
+      )}
 
       <Tabs
         value={tab}
@@ -730,6 +792,24 @@ export default function SubscriptionSmsPage() {
       {tab === 0 && <SentLogTab />}
       {tab === 1 && <PreviewTab />}
       {tab === 2 && <ImpactTab />}
+
+      {/* Disable confirmation dialog */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Pause SMS sending?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            The daily reminder job will still run and detect candidates, but <strong>no SMS messages will be sent</strong> to customers until you turn it back on.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setConfirmOpen(false)} variant="outlined">Cancel</Button>
+          <Button onClick={handleConfirmDisable} variant="contained" color="error"
+            disabled={toggleMutation.isPending}
+          >
+            {toggleMutation.isPending ? <CircularProgress size={18} /> : "Pause SMS"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

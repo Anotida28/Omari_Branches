@@ -110,3 +110,19 @@ export async function fetchSmsImpact(days: number): Promise<SmsImpactResult> {
   });
   return data;
 }
+
+export interface SmsConfig {
+  smsSendingEnabled: boolean;
+}
+
+export async function fetchSmsConfig(): Promise<SmsConfig> {
+  const { data } = await api.get<SmsConfig>("/api/subscription-sms/config");
+  return data;
+}
+
+export async function updateSmsConfig(enabled: boolean): Promise<SmsConfig> {
+  const { data } = await api.put<SmsConfig>("/api/subscription-sms/config", {
+    smsSendingEnabled: enabled,
+  });
+  return data;
+}

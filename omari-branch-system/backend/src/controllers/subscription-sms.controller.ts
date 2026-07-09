@@ -7,6 +7,7 @@ import {
 } from '../services/subscription-sms-reminder.service';
 import { getSmsImpactStats } from '../services/subscription-sms-reconciliation.service';
 import { sendSms } from '../services/sms.service';
+import { isSmsSendingEnabled, setConfig, CONFIG_KEYS } from '../services/system-config.service';
 
 function parseDateOrUndefined(value: unknown): Date | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -104,6 +105,30 @@ export async function getSmsImpact(req: Request, res: Response, next: NextFuncti
     const days = parseInt(String(req.query.days ?? '30'), 10);
     const result = await getSmsImpactStats(Number.isFinite(days) && days >= 0 ? days : 30);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getSmsConfig(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const enabled = await isSmsSendingEnabled();
+    res.json({ smsSendingEnabled: enabled });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateSmsConfig(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { smsSendingEnabled } = req.body as { smsSendingEnabled: boolean };
+    if (typeof smsSendingEnabled !== 'boolean') {
+      res.status(400).json({ error: 'smsSendingEnabled must be a boolean' });
+      return;
+    }
+    const updatedBy = (req as any).user?.username ?? 'unknown';
+    await setConfig(CONFIG_KEYS.SMS_SENDING_ENABLED, String(smsSendingEnabled), updatedBy);
+    res.json({ smsSendingEnabled });
   } catch (err) {
     next(err);
   }
