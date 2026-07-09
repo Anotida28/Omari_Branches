@@ -68,7 +68,7 @@ const envSchema = zod_1.z.object({
     SOURCE_SQL_ENCRYPT: zod_1.z.preprocess(normalizeOptionalBoolean, zod_1.z.boolean().default(true)),
     SOURCE_SQL_TRUST_SERVER_CERTIFICATE: zod_1.z.preprocess(normalizeOptionalBoolean, zod_1.z.boolean().default(true)),
     SOURCE_SQL_CONNECT_TIMEOUT_MS: zod_1.z.coerce.number().int().min(1000).max(120000).default(15000),
-    SOURCE_SQL_REQUEST_TIMEOUT_MS: zod_1.z.coerce.number().int().min(1000).max(120000).default(30000),
+    SOURCE_SQL_REQUEST_TIMEOUT_MS: zod_1.z.coerce.number().int().min(1000).max(600000).default(30000),
     SOURCE_SQL_AGENT_SUMMARY_TABLE: zod_1.z
         .string()
         .regex(/^[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/, "SOURCE_SQL_AGENT_SUMMARY_TABLE must be schema.table")
@@ -111,6 +111,11 @@ const envSchema = zod_1.z.object({
     SOURCE_SQL_SYNC_ENABLED: zod_1.z.preprocess(normalizeOptionalBoolean, zod_1.z.boolean().default(false)),
     SOURCE_SQL_SYNC_CRON: zod_1.z.string().min(5).default("15 7 * * *"),
     SOURCE_SQL_SYNC_LOOKBACK_DAYS: zod_1.z.coerce.number().int().min(1).max(30).default(2),
+    OMARISMS_URL: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().min(1).optional()),
+    OMARISMS_USER: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().min(1).optional()),
+    OMARISMS_USER_PASSWORD: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().min(1).optional()),
+    OMARISMS_USER_SENDER: zod_1.z.preprocess(normalizeOptionalString, zod_1.z.string().min(1).optional()),
+    SMS_LOW_CREDIT_THRESHOLD: zod_1.z.coerce.number().int().min(0).default(50),
 });
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {

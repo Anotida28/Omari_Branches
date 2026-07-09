@@ -19,6 +19,7 @@ const recurring_reminders_routes_1 = __importDefault(require("./recurring-remind
 const recipients_routes_1 = __importDefault(require("./recipients.routes"));
 const users_routes_1 = __importDefault(require("./users.routes"));
 const wallet_routes_1 = __importDefault(require("./wallet.routes"));
+const subscription_sms_routes_1 = __importDefault(require("./subscription-sms.routes"));
 const router = (0, express_1.Router)();
 router.use("/admin", admin_routes_1.default);
 router.use("/agents", agents_routes_1.default);
@@ -35,4 +36,5 @@ router.use("/recurring-reminders", recurring_reminders_routes_1.default);
 router.use("/recipients", recipients_routes_1.default);
 router.use("/users", users_routes_1.default);
 router.use("/wallet", wallet_routes_1.default);
+router.use("/subscription-sms", subscription_sms_routes_1.default);
 exports.default = router;
