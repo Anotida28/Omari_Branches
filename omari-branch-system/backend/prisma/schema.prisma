@@ -316,6 +316,7 @@ model SubscriptionSmsLog {
   totalNeeded         Decimal  @db.Decimal(18, 4)
   currentBalance      Decimal  @db.Decimal(18, 4)
   topUpAmount         Decimal  @db.Decimal(18, 4)
+  message             String?  @db.VarChar(500)
   smsSent             Boolean  @default(false)
   smsError            String?  @db.VarChar(500)
   sentAt              DateTime @default(now())

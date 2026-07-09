@@ -170,6 +170,7 @@ const envSchema = z.object({
   OMARISMS_USER: z.preprocess(normalizeOptionalString, z.string().min(1).optional()),
   OMARISMS_USER_PASSWORD: z.preprocess(normalizeOptionalString, z.string().min(1).optional()),
   OMARISMS_USER_SENDER: z.preprocess(normalizeOptionalString, z.string().min(1).optional()),
+  SMS_LOW_CREDIT_THRESHOLD: z.coerce.number().int().min(0).default(50),
 });
 
 const parsed = envSchema.safeParse(process.env);

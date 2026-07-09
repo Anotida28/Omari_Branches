@@ -6,6 +6,7 @@ import {
   previewSubscriptionSmsReminders,
 } from '../services/subscription-sms-reminder.service';
 import { getSmsImpactStats } from '../services/subscription-sms-reconciliation.service';
+import { sendSms } from '../services/sms.service';
 
 function parseDateOrUndefined(value: unknown): Date | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -103,6 +104,59 @@ export async function getSmsImpact(req: Request, res: Response, next: NextFuncti
     const days = parseInt(String(req.query.days ?? '30'), 10);
     const result = await getSmsImpactStats(Number.isFinite(days) && days >= 0 ? days : 30);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function retrySms(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const date = parseDateOrUndefined(req.query.date);
+
+    // Build the where clause: smsSent=false, optionally scoped to a date
+    const where: Prisma.SubscriptionSmsLogWhereInput = { smsSent: false };
+    if (date) {
+      const dayStart = new Date(date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(date);
+      dayEnd.setHours(23, 59, 59, 999);
+      where.sentAt = { gte: dayStart, lte: dayEnd };
+    }
+
+    const failed = await prisma.subscriptionSmsLog.findMany({
+      where,
+      orderBy: { sentAt: 'desc' },
+      take: 500,
+    });
+
+    if (failed.length === 0) {
+      res.json({ retried: 0, succeeded: 0, failed: 0, message: 'No failed SMS entries found for the given filter.' });
+      return;
+    }
+
+    let succeeded = 0;
+    let failedCount = 0;
+
+    await Promise.all(failed.map(async (entry) => {
+      // Use the stored message text; fall back to rebuilding it for older records that predate the message column
+      const text = entry.message ?? (
+        `Your ${entry.serviceName} payment of $${Number(entry.subscriptionAmount).toFixed(2)} ` +
+        `is due on ${entry.predictedChargeDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}. ` +
+        `Please top up at least $${Number(entry.topUpAmount).toFixed(2)} to your Omari wallet ` +
+        `to avoid a failed charge on your Omari Visa card.`
+      );
+      const sent = await sendSms(entry.mobileNr, text);
+      await prisma.subscriptionSmsLog.update({
+        where: { id: entry.id },
+        data: {
+          smsSent: sent,
+          smsError: sent ? null : 'Retry failed — see console logs',
+        },
+      });
+      if (sent) succeeded++; else failedCount++;
+    }));
+
+    res.json({ retried: failed.length, succeeded, failed: failedCount });
   } catch (err) {
     next(err);
   }

@@ -1,9 +1,39 @@
 import axios from 'axios';
 
 import { env } from '../config/env';
+import { sendEmail } from './email.service';
 
 export function isSmsConfigured(): boolean {
   return !!(env.OMARISMS_URL && env.OMARISMS_USER && env.OMARISMS_USER_PASSWORD && env.OMARISMS_USER_SENDER);
+}
+
+const SMS_ALERT_RECIPIENTS = [
+  'takudzwag@oldmutual.co.zw',
+  'timukudzemah@oldmutual.co.zw',
+  'jasperm@oldmutual.co.zw',
+  'tanyaradzwau@oldmutual.co.zw',
+  'lourencer@oldmutual.co.zw',
+];
+
+async function fireLowCreditAlert(remaining: number): Promise<void> {
+  try {
+    await sendEmail({
+      to: SMS_ALERT_RECIPIENTS,
+      subject: `[Omari] SMS credits low — ${remaining} remaining`,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;">
+          <h3 style="color:#d32f2f;">SMS Credit Warning</h3>
+          <p>The ZSS SMS gateway account has <strong>${remaining} credits remaining</strong>,
+          which is below the alert threshold of <strong>${env.SMS_LOW_CREDIT_THRESHOLD}</strong>.</p>
+          <p>Please top up at <a href="https://secure.zss.co.zw">secure.zss.co.zw</a> before
+          the daily subscription reminder job runs to avoid missed customer notifications.</p>
+        </div>`,
+      text: `SMS credits low: ${remaining} remaining (threshold: ${env.SMS_LOW_CREDIT_THRESHOLD}). Top up at secure.zss.co.zw.`,
+    });
+    console.log(`[SMS] Low-credit alert sent to ${SMS_ALERT_RECIPIENTS.join(', ')}`);
+  } catch (err: any) {
+    console.error('[SMS] Failed to send low-credit alert email:', err.message);
+  }
 }
 
 export async function sendSms(phoneNumber: string, message: string): Promise<boolean> {
@@ -41,6 +71,14 @@ export async function sendSms(phoneNumber: string, message: string): Promise<boo
 
     if (success) {
       console.log(`[SMS] Sent to ${phoneNumber}`);
+      const credits = typeof data.credits === 'number' ? data.credits : null;
+      if (credits !== null) {
+        console.log(`[SMS] Remaining credits: ${credits}`);
+        if (credits < env.SMS_LOW_CREDIT_THRESHOLD) {
+          console.warn(`[SMS] LOW CREDIT WARNING: only ${credits} credits remaining (threshold: ${env.SMS_LOW_CREDIT_THRESHOLD})`);
+          fireLowCreditAlert(credits).catch(() => {});
+        }
+      }
       return true;
     }
 

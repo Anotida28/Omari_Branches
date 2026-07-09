@@ -58,6 +58,7 @@ export interface SmsPreviewResult {
 
 interface ClassifiedSubscription {
   mobileNr: string;
+  firstName: string;
   customerName: string;
   serviceName: string;
   lane: '1' | '2A';
@@ -135,6 +136,7 @@ function classifyCandidates(
       if (daysUntilCharge >= 1 && daysUntilCharge <= LOOK_AHEAD_DAYS) {
         classified.push({
           mobileNr: c.mobileNr,
+          firstName: c.firstName || customerName.split(' ')[0],
           customerName,
           serviceName: c.serviceName,
           lane: '1',
@@ -166,6 +168,7 @@ function classifyCandidates(
       if (daysUntilCharge >= 1 && daysUntilCharge <= LOOK_AHEAD_DAYS) {
         classified.push({
           mobileNr: c.mobileNr,
+          firstName: c.firstName || customerName.split(' ')[0],
           customerName,
           serviceName: c.serviceName,
           lane: '2A',
@@ -202,10 +205,10 @@ function formatDate(date: Date): string {
 
 function buildSmsMessage(sub: ClassifiedSubscription): string {
   return (
-    `Your ${sub.serviceName} payment of $${formatAmount(sub.totalNeeded)} ` +
-    `(incl. fees) is due on ${formatDate(sub.predictedChargeDate)}. ` +
-    `Balance: $${formatAmount(sub.currentBalance)}. ` +
-    `Top up $${formatAmount(sub.topUpAmount)} to avoid a failed payment.`
+    `Hi ${sub.firstName}, your ${sub.serviceName} payment of $${formatAmount(sub.subscriptionAmount)} ` +
+    `is due on ${formatDate(sub.predictedChargeDate)}. ` +
+    `Please top up at least $${formatAmount(sub.topUpAmount)} to your Omari wallet ` +
+    `to avoid a failed charge on your Omari Visa card.`
   );
 }
 
@@ -273,6 +276,7 @@ export async function runSubscriptionSmsReminders(): Promise<SubscriptionReminde
         totalNeeded:         sub.totalNeeded,
         currentBalance:      sub.currentBalance,
         topUpAmount:         sub.topUpAmount,
+        message,
         smsSent,
         smsError:            smsSent ? null : 'Send failed — see console logs',
       },

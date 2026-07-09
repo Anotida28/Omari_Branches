@@ -9,6 +9,7 @@
 import cron from "node-cron";
 
 import { env } from "../config/env";
+import { sendEmail } from "../services/email.service";
 import { runAlertEvaluatorJobWithLock } from "./alert-evaluator.job";
 import { runDailyBranchReportJobWithLock } from "./daily-branch-report.job";
 import { runDailyWalletReportJobWithLock } from "./wallet-report.job";
@@ -221,6 +222,36 @@ async function runDailyCustomReports(): Promise<void> {
   }
 }
 
+const SMS_ALERT_RECIPIENTS = [
+  'takudzwag@oldmutual.co.zw',
+  'timukudzemah@oldmutual.co.zw',
+  'jasperm@oldmutual.co.zw',
+  'tanyaradzwau@oldmutual.co.zw',
+  'lourencer@oldmutual.co.zw',
+];
+
+async function fireSmsJobFailureAlert(candidatesDetected: number, failed: number): Promise<void> {
+  try {
+    await sendEmail({
+      to: SMS_ALERT_RECIPIENTS,
+      subject: `[Omari] SMS reminder job sent 0 messages — action needed`,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;">
+          <h3 style="color:#d32f2f;">Subscription SMS Job Failure</h3>
+          <p>The daily subscription SMS reminder job ran on <strong>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
+          and found <strong>${candidatesDetected} candidates</strong> to notify, but sent <strong>0 messages</strong>
+          (${failed} failed).</p>
+          <p>Likely causes: SMS credits exhausted, ZSS gateway unreachable, or missing OMARISMS_* config.</p>
+          <p>Check the server logs and top up credits at <a href="https://secure.zss.co.zw">secure.zss.co.zw</a> if needed.</p>
+        </div>`,
+      text: `SMS reminder job found ${candidatesDetected} candidates but sent 0 messages (${failed} failed). Check credits and gateway config.`,
+    });
+    console.log(`[Scheduler] SMS job failure alert sent to ${SMS_ALERT_RECIPIENTS.join(', ')}`);
+  } catch (err: any) {
+    console.error(`[Scheduler] Failed to send SMS job failure alert:`, err.message);
+  }
+}
+
 async function runDailySubscriptionSmsReminders(): Promise<void> {
   console.log(`[Scheduler] Running subscription SMS reminders at ${new Date().toISOString()}`);
 
@@ -247,6 +278,11 @@ async function runDailySubscriptionSmsReminders(): Promise<void> {
       lane1:            result.lane1Count,
       lane2a:           result.lane2aCount,
     });
+
+    // Alert if candidates were found but nothing was sent — likely gateway/credits issue
+    if (result.candidatesDetected > 0 && result.smsSentCount === 0) {
+      fireSmsJobFailureAlert(result.candidatesDetected, result.smsFailedCount).catch(() => {});
+    }
   }
 }
 
