@@ -8,6 +8,7 @@
 
 import cron from "node-cron";
 
+import { prisma } from "../db/prisma";
 import { env } from "../config/env";
 import { sendEmail } from "../services/email.service";
 import { runAlertEvaluatorJobWithLock } from "./alert-evaluator.job";
@@ -428,6 +429,45 @@ export function startScheduler(): void {
   for (const job of scheduledJobs) {
     console.log(`  - ${job.name}: ${job.cronExpression}`);
   }
+
+  // Catchup: if we started after the SMS window (09:00 Harare) and nothing was sent today, run now
+  catchupSmsIfMissed().catch((err) =>
+    console.error(`[Scheduler] SMS catchup check failed:`, err?.message ?? err),
+  );
+}
+
+async function catchupSmsIfMissed(): Promise<void> {
+  const nowHarare = new Date(new Date().toLocaleString('en-US', { timeZone: CRON_TZ }));
+  const hourHarare = nowHarare.getHours();
+
+  // Only catchup within the business window 09:00–15:59 Harare.
+  // Before 09:00 → the cron will fire at 09:00 as normal.
+  // 16:00 or later → too late, skip today entirely.
+  if (hourHarare < 9) {
+    console.log(`[Scheduler] SMS catchup: before 09:00 Harare — cron will handle it`);
+    return;
+  }
+  if (hourHarare >= 16) {
+    console.log(`[Scheduler] SMS catchup: past 16:00 Harare — skipping today`);
+    return;
+  }
+
+  const todayStart = new Date(nowHarare);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd   = new Date(nowHarare);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const sentToday = await prisma.subscriptionSmsLog.count({
+    where: { sentAt: { gte: todayStart, lte: todayEnd } },
+  });
+
+  if (sentToday > 0) {
+    console.log(`[Scheduler] SMS catchup: ${sentToday} already sent today — no catchup needed`);
+    return;
+  }
+
+  console.log(`[Scheduler] SMS catchup: no SMS sent today and time is ${hourHarare}:xx Harare — running now`);
+  await runDailySubscriptionSmsReminders();
 }
 
 /**

@@ -274,13 +274,20 @@ async function purgeAgentsFromSnapshot(): Promise<number> {
   `);
   const agentCifs = (result.recordset as Array<{ cif: string }>).map((r) => r.cif);
   if (agentCifs.length === 0) return 0;
-  const { count } = await prisma.walletCustomerActivitySnapshot.deleteMany({
-    where: { customerId: { in: agentCifs } },
-  });
-  if (count > 0) {
-    console.log(`[WalletSnapshot] Purged ${count} agent record(s) from snapshot.`);
+  // SQL Server caps IN-clause parameters at 2100 — batch to stay well under
+  const PURGE_BATCH = 500;
+  let total = 0;
+  for (let i = 0; i < agentCifs.length; i += PURGE_BATCH) {
+    const batch = agentCifs.slice(i, i + PURGE_BATCH);
+    const { count } = await prisma.walletCustomerActivitySnapshot.deleteMany({
+      where: { customerId: { in: batch } },
+    });
+    total += count;
   }
-  return count;
+  if (total > 0) {
+    console.log(`[WalletSnapshot] Purged ${total} agent record(s) from snapshot.`);
+  }
+  return total;
 }
 
 /**

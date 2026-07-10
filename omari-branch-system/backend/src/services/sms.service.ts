@@ -7,6 +7,11 @@ export function isSmsConfigured(): boolean {
   return !!(env.OMARISMS_URL && env.OMARISMS_USER && env.OMARISMS_USER_PASSWORD && env.OMARISMS_USER_SENDER);
 }
 
+// Tracks the date (YYYY-MM-DD) on which a low-credit alert was last sent so we
+// fire at most one alert email per calendar day regardless of how many messages
+// are processed below the threshold.
+let lowCreditAlertFiredDate: string | null = null;
+
 const SMS_ALERT_RECIPIENTS = [
   'takudzwag@oldmutual.co.zw',
   'timukudzemah@oldmutual.co.zw',
@@ -76,7 +81,11 @@ export async function sendSms(phoneNumber: string, message: string): Promise<boo
         console.log(`[SMS] Remaining credits: ${credits}`);
         if (credits < env.SMS_LOW_CREDIT_THRESHOLD) {
           console.warn(`[SMS] LOW CREDIT WARNING: only ${credits} credits remaining (threshold: ${env.SMS_LOW_CREDIT_THRESHOLD})`);
-          fireLowCreditAlert(credits).catch(() => {});
+          const today = new Date().toISOString().slice(0, 10);
+          if (lowCreditAlertFiredDate !== today) {
+            lowCreditAlertFiredDate = today;
+            fireLowCreditAlert(credits).catch(() => {});
+          }
         }
       }
       return true;

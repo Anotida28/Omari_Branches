@@ -142,12 +142,6 @@ const agentsItems: NavItem[] = [
     subtitle: "Search agents across the country and analyse individual or group performance trends",
     icon: LineChart,
   },
-  {
-    to: "/subscription-sms",
-    label: "Subscription SMS",
-    subtitle: "Track SMS reminders sent to wallet customers with upcoming or failed subscription payments",
-    icon: MessageSquare,
-  },
 ];
 
 const navSections: NavSection[] = [
@@ -221,6 +215,12 @@ const navSections: NavSection[] = [
         label: "Visa Analytics",
         subtitle: "VISA card transaction volume, value, and usage breakdown",
         icon: CreditCard,
+      },
+      {
+        to: "/subscription-sms",
+        label: "Subscription SMS",
+        subtitle: "Track SMS reminders sent to wallet customers with upcoming or failed subscription payments",
+        icon: MessageSquare,
       },
     ],
   },
