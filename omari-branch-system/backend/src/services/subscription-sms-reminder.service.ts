@@ -208,7 +208,7 @@ function buildSmsMessage(sub: ClassifiedSubscription): string {
   return (
     `Hi ${sub.firstName}, your ${sub.serviceName} payment of $${formatAmount(sub.subscriptionAmount)} ` +
     `is due on ${formatDate(sub.predictedChargeDate)}. ` +
-    `Please top up at least $${formatAmount(sub.topUpAmount)} to your Omari wallet ` +
+    `Please ensure you have $${formatAmount(sub.totalNeeded)} in your Omari wallet ` +
     `to avoid a failed charge on your Omari Visa card.`
   );
 }
@@ -280,23 +280,35 @@ export async function runSubscriptionSmsReminders(): Promise<SubscriptionReminde
     const message  = buildSmsMessage(sub);
     const smsSent  = await sendSms(sub.mobileNr, message);
 
-    // Persist log regardless of success/failure
-    await prisma.subscriptionSmsLog.create({
-      data: {
-        mobileNr:            sub.mobileNr,
-        serviceName:         sub.serviceName,
-        predictedChargeDate: sub.predictedChargeDate,
-        lane:                sub.lane,
-        subscriptionAmount:  sub.subscriptionAmount,
-        feeAmount:           sub.feeAmount,
-        totalNeeded:         sub.totalNeeded,
-        currentBalance:      sub.currentBalance,
-        topUpAmount:         sub.topUpAmount,
-        message,
-        smsSent,
-        smsError:            smsSent ? null : 'Send failed — see console logs',
-      },
-    });
+    // Persist log regardless of success/failure.
+    // Guard against duplicate inserts (P2002) caused by customers with multiple
+    // accounts for the same service — the unique constraint on
+    // (mobileNr, serviceName, predictedChargeDate) would otherwise crash the run.
+    try {
+      await prisma.subscriptionSmsLog.create({
+        data: {
+          mobileNr:            sub.mobileNr,
+          serviceName:         sub.serviceName,
+          predictedChargeDate: sub.predictedChargeDate,
+          lane:                sub.lane,
+          subscriptionAmount:  sub.subscriptionAmount,
+          feeAmount:           sub.feeAmount,
+          totalNeeded:         sub.totalNeeded,
+          currentBalance:      sub.currentBalance,
+          topUpAmount:         sub.topUpAmount,
+          message,
+          smsSent,
+          smsError:            smsSent ? null : 'Send failed — see console logs',
+        },
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        result.alreadySentSkipped++;
+        console.log(`[SubscriptionSmsReminder] Duplicate log skipped for ${sub.mobileNr} | ${sub.serviceName}`);
+        continue;
+      }
+      throw err;
+    }
 
     if (smsSent) {
       result.smsSentCount++;

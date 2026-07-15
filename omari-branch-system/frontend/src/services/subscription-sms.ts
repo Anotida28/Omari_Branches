@@ -126,3 +126,34 @@ export async function updateSmsConfig(enabled: boolean): Promise<SmsConfig> {
   });
   return data;
 }
+
+export interface RetryResult {
+  retried: number;
+  succeeded: number;
+  failed: number;
+}
+
+export async function retryFailedSms(date?: string): Promise<RetryResult> {
+  const { data } = await api.post<RetryResult>("/api/subscription-sms/retry", null, {
+    params: date ? { date } : {},
+  });
+  return data;
+}
+
+export interface RunResult {
+  runDate: string;
+  candidatesDetected: number;
+  sufficientBalanceSkipped: number;
+  alreadySentSkipped: number;
+  smsSentCount: number;
+  smsFailedCount: number;
+  lane1Count: number;
+  lane2aCount: number;
+}
+
+export async function runSmsNow(): Promise<RunResult> {
+  const { data } = await api.post<RunResult>("/api/subscription-sms/run", null, {
+    timeout: 600_000, // 10 min — full detection + send cycle
+  });
+  return data;
+}

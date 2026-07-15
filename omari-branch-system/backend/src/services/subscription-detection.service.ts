@@ -89,40 +89,57 @@ export async function fetchSubscriptionCandidates(): Promise<SubscriptionCandida
 
   // Build a deduplicated account ID list for targeted lookups.
   const accountIds = [...new Set(stats.map((r: any) => String(r.account_id)))];
-  const idList = accountIds.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
 
-  // ── Queries 2 & 3: run in parallel ───────────────────────────────────────────
+  // Chunk into batches of 1000 to avoid slow SQL parsing with huge IN clauses.
+  // Run at most 4 batches concurrently to stay within the connection pool limit.
+  const ID_BATCH = 1000;
+  const CONCURRENCY = 4;
+  const batches: string[][] = [];
+  for (let i = 0; i < accountIds.length; i += ID_BATCH) {
+    batches.push(accountIds.slice(i, i + ID_BATCH));
+  }
 
-  // Query 2: customer info (omari_dp — no cross-DB join)
-  const customerSql = `
-    SELECT
-      a.AccountId     AS account_id,
-      dc.MobileNumber AS mobile_nr,
-      dc.FirstName    AS first_name,
-      dc.LastName     AS last_name
-    FROM reporting.df_usd_accounts a WITH (NOLOCK)
-    JOIN reporting.dim_customer dc WITH (NOLOCK)
-      ON dc.CIF = a.CIF
-    WHERE a.AccountId IN (${idList})
-  `;
+  const buildIdList = (ids: string[]) =>
+    ids.map(id => `'${id.replace(/'/g, "''")}'`).join(',');
 
-  // Query 3: current balances (omari_dp — no cross-DB join)
-  const balanceSql = `
-    SELECT account_number AS account_id, available_balance
-    FROM reporting.omari_account_balances_usd_current WITH (NOLOCK)
-    WHERE account_number IN (${idList})
-  `;
+  const customerRows: any[] = [];
+  const balanceRows: any[] = [];
 
-  const [customerResult, balanceResult] = await Promise.all([
-    pool.request().query(customerSql),
-    pool.request().query(balanceSql),
-  ]);
+  // ── Queries 2 & 3: process batches with bounded concurrency ──────────────────
+  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    const window = batches.slice(i, i + CONCURRENCY);
+    await Promise.all(
+      window.map(async (batch) => {
+        const idList = buildIdList(batch);
+        const [cRes, bRes] = await Promise.all([
+          pool.request().query(`
+            SELECT
+              a.AccountId     AS account_id,
+              dc.MobileNumber AS mobile_nr,
+              dc.FirstName    AS first_name,
+              dc.LastName     AS last_name
+            FROM reporting.df_usd_accounts a WITH (NOLOCK)
+            JOIN reporting.dim_customer dc WITH (NOLOCK)
+              ON dc.CIF = a.CIF
+            WHERE a.AccountId IN (${idList})
+          `),
+          pool.request().query(`
+            SELECT account_number AS account_id, available_balance
+            FROM reporting.omari_account_balances_usd_current WITH (NOLOCK)
+            WHERE account_number IN (${idList})
+          `),
+        ]);
+        customerRows.push(...cRes.recordset);
+        balanceRows.push(...bRes.recordset);
+      }),
+    );
+  }
 
-  console.log(`[SubscriptionDetection] Queries 2/3 done — customers=${customerResult.recordset.length} balances=${balanceResult.recordset.length}`);
+  console.log(`[SubscriptionDetection] Queries 2/3 done — customers=${customerRows.length} balances=${balanceRows.length}`);
 
   // Build lookup maps
   const customerMap = new Map<string, { mobileNr: string; firstName: string | null; lastName: string | null }>();
-  for (const row of customerResult.recordset) {
+  for (const row of customerRows) {
     customerMap.set(String(row.account_id).toLowerCase(), {
       mobileNr:  String(row.mobile_nr ?? ''),
       firstName: row.first_name ?? null,
@@ -131,7 +148,7 @@ export async function fetchSubscriptionCandidates(): Promise<SubscriptionCandida
   }
 
   const balanceMap = new Map<string, number>();
-  for (const row of balanceResult.recordset) {
+  for (const row of balanceRows) {
     balanceMap.set(String(row.account_id).toLowerCase(), Number(row.available_balance));
   }
 

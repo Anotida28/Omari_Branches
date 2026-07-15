@@ -37,6 +37,7 @@ export const SUBSCRIPTION_MERCHANTS: SubscriptionMerchant[] = [
   { name: 'Figma',        patterns: ['%FIGMA%'] },
   { name: 'Shopify',      patterns: ['%SHOPIFY%'] },
   { name: 'Mailchimp',    patterns: ['%MAILCHIMP%'] },
+  { name: 'Starlink',     patterns: ['%STARLINK%'] },
 ];
 
 // Generates SQL CASE WHEN expression mapping merchant name to service name.

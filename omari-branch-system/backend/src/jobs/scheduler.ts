@@ -505,6 +505,14 @@ export async function triggerDailyBranchReportJobManually(): Promise<{
   return runDailyBranchReportJobWithLock();
 }
 
+export async function triggerSubscriptionSmsJobManually(): Promise<{
+  executed: boolean;
+  result?: any;
+  error?: Error;
+}> {
+  return runSubscriptionSmsReminderJobWithLock();
+}
+
 export async function triggerDailyWalletReportJobManually(): Promise<{
   executed: boolean;
   result?: any;

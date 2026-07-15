@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Alert,
@@ -34,7 +34,9 @@ import {
   AlertCircle,
   CheckCircle2,
   MessageSquare,
+  Play,
   RefreshCw,
+  RotateCcw,
   TrendingUp,
 } from "lucide-react";
 
@@ -47,6 +49,8 @@ import {
   fetchSmsImpact,
   fetchSmsConfig,
   updateSmsConfig,
+  retryFailedSms,
+  runSmsNow,
   type SmsPreviewEntry,
 } from "../services/subscription-sms";
 
@@ -106,6 +110,7 @@ const KNOWN_SERVICES = [
   "LinkedIn", "Grammarly", "Duolingo", "Paramount+", "HBO Max",
   "PlayStation", "Audible", "Coursera", "Udemy", "Steam",
   "NordVPN", "ExpressVPN", "Figma", "Shopify", "Mailchimp",
+  "Starlink",
 ];
 
 // ── Sent Log Tab ──────────────────────────────────────────────────────────────
@@ -119,6 +124,40 @@ function SentLogTab() {
   const [laneFilter,  setLaneFilter]  = useState("");
   const [svcFilter,   setSvcFilter]   = useState("");
   const [sentFilter,  setSentFilter]  = useState<"all" | "true" | "false">("all");
+  const [actionMsg,   setActionMsg]   = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const queryClient = useQueryClient();
+
+  const retryMutation = useMutation({
+    mutationFn: () => retryFailedSms(today),
+    onSuccess: (r) => {
+      setActionMsg({ type: "success", text: `Retried ${r.retried} failed SMS — ${r.succeeded} succeeded, ${r.failed} still failed.` });
+      queryClient.invalidateQueries({ queryKey: ["subscription-sms-log"] });
+    },
+    onError: () => setActionMsg({ type: "error", text: "Retry request failed. Check backend connection." }),
+  });
+
+  const runMutation = useMutation({
+    mutationFn: runSmsNow,
+    onSuccess: (r) => {
+      setActionMsg({ type: "success", text: `Run complete — sent ${r.smsSentCount}, failed ${r.smsFailedCount}, skipped ${r.alreadySentSkipped} already sent.` });
+      queryClient.invalidateQueries({ queryKey: ["subscription-sms-log"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error ?? err?.message ?? "Unknown error";
+      setActionMsg({ type: "error", text: msg });
+    },
+  });
+
+  const busy = retryMutation.isPending || runMutation.isPending;
+
+  // Auto-clear action message after 8 s
+  const clearMsg = useCallback(() => setActionMsg(null), []);
+  useEffect(() => {
+    if (!actionMsg) return;
+    const t = setTimeout(clearMsg, 8000);
+    return () => clearTimeout(t);
+  }, [actionMsg, clearMsg]);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["subscription-sms-log", dateFrom, dateTo, laneFilter, svcFilter, sentFilter],
@@ -138,6 +177,35 @@ function SentLogTab() {
 
   return (
     <Stack spacing={2.5}>
+      {/* Action bar */}
+      <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+        <Button
+          variant="contained"
+          color="primary"
+          size="small"
+          startIcon={runMutation.isPending ? <CircularProgress size={13} color="inherit" /> : <Play size={13} />}
+          disabled={busy}
+          onClick={() => { setActionMsg(null); runMutation.mutate(); }}
+          sx={{ fontWeight: 700 }}
+        >
+          {runMutation.isPending ? "Running…" : "Run SMS Now"}
+        </Button>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={retryMutation.isPending ? <CircularProgress size={13} /> : <RotateCcw size={13} />}
+          disabled={busy}
+          onClick={() => { setActionMsg(null); retryMutation.mutate(); }}
+        >
+          {retryMutation.isPending ? "Retrying…" : "Retry Today's Failed"}
+        </Button>
+        {actionMsg && (
+          <Alert severity={actionMsg.type} sx={{ py: 0, flex: 1, minWidth: 0 }} onClose={clearMsg}>
+            {actionMsg.text}
+          </Alert>
+        )}
+      </Stack>
+
       {/* Filter bar */}
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="flex-start" flexWrap="wrap">
