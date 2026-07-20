@@ -15,6 +15,7 @@ import recipientsRoutes from "./recipients.routes";
 import usersRoutes from "./users.routes";
 import walletRoutes from "./wallet.routes";
 import subscriptionSmsRoutes from "./subscription-sms.routes";
+import flocashAnalyticsRoutes from "./flocash-analytics.routes";
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use("/recipients", recipientsRoutes);
 router.use("/users", usersRoutes);
 router.use("/wallet", walletRoutes);
 router.use("/subscription-sms", subscriptionSmsRoutes);
+router.use("/flocash", flocashAnalyticsRoutes);
 
 export default router;

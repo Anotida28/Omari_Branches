@@ -25,6 +25,8 @@ export interface SmsLogSummary {
 }
 
 export interface SmsLogResponse {
+  page: number;
+  pageSize: number;
   summary: SmsLogSummary;
   entries: SmsLogEntry[];
   total: number;
@@ -64,6 +66,8 @@ export async function fetchSmsLog(params: {
   lane?: string;
   serviceName?: string;
   smsSent?: boolean;
+  page?: number;
+  pageSize?: number;
 }): Promise<SmsLogResponse> {
   const { data } = await api.get<SmsLogResponse>("/api/subscription-sms/log", {
     params: {
@@ -72,6 +76,8 @@ export async function fetchSmsLog(params: {
       ...(params.lane        && { lane:          params.lane }),
       ...(params.serviceName && { serviceName:   params.serviceName }),
       ...(params.smsSent !== undefined && { smsSent: String(params.smsSent) }),
+      page:     params.page     ?? 1,
+      pageSize: params.pageSize ?? 50,
     },
   });
   return data;

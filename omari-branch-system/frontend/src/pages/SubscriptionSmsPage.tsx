@@ -12,6 +12,8 @@ import {
   DialogTitle,
   Divider,
   MenuItem,
+  Pagination,
+  PaginationItem,
   Paper,
   Select,
   Stack,
@@ -125,6 +127,8 @@ function SentLogTab() {
   const [svcFilter,   setSvcFilter]   = useState("");
   const [sentFilter,  setSentFilter]  = useState<"all" | "true" | "false">("all");
   const [actionMsg,   setActionMsg]   = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [page,        setPage]        = useState(0);   // MUI TablePagination is 0-indexed
+  const [pageSize,    setPageSize]    = useState(50);
 
   const queryClient = useQueryClient();
 
@@ -160,7 +164,7 @@ function SentLogTab() {
   }, [actionMsg, clearMsg]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["subscription-sms-log", dateFrom, dateTo, laneFilter, svcFilter, sentFilter],
+    queryKey: ["subscription-sms-log", dateFrom, dateTo, laneFilter, svcFilter, sentFilter, page, pageSize],
     queryFn: () =>
       fetchSmsLog({
         dateFrom,
@@ -168,6 +172,8 @@ function SentLogTab() {
         lane:        laneFilter  || undefined,
         serviceName: svcFilter   || undefined,
         smsSent:     sentFilter === "all" ? undefined : sentFilter === "true",
+        page:        page + 1,   // MUI is 0-indexed, API is 1-indexed
+        pageSize,
       }),
     staleTime: 60_000,
   });
@@ -214,7 +220,7 @@ function SentLogTab() {
             type="date"
             size="small"
             value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
+            onChange={e => { setDateFrom(e.target.value); setPage(0); }}
             InputLabelProps={{ shrink: true }}
             sx={{ minWidth: 150 }}
           />
@@ -223,14 +229,14 @@ function SentLogTab() {
             type="date"
             size="small"
             value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
+            onChange={e => { setDateTo(e.target.value); setPage(0); }}
             InputLabelProps={{ shrink: true }}
             sx={{ minWidth: 150 }}
           />
           <Select
             size="small"
             value={laneFilter}
-            onChange={e => setLaneFilter(e.target.value)}
+            onChange={e => { setLaneFilter(e.target.value); setPage(0); }}
             displayEmpty
             sx={{ minWidth: 160 }}
           >
@@ -241,7 +247,7 @@ function SentLogTab() {
           <Select
             size="small"
             value={svcFilter}
-            onChange={e => setSvcFilter(e.target.value)}
+            onChange={e => { setSvcFilter(e.target.value); setPage(0); }}
             displayEmpty
             sx={{ minWidth: 160 }}
           >
@@ -253,7 +259,7 @@ function SentLogTab() {
           <Select
             size="small"
             value={sentFilter}
-            onChange={e => setSentFilter(e.target.value as "all" | "true" | "false")}
+            onChange={e => { setSentFilter(e.target.value as "all" | "true" | "false"); setPage(0); }}
             sx={{ minWidth: 140 }}
           >
             <MenuItem value="all">All statuses</MenuItem>
@@ -270,6 +276,7 @@ function SentLogTab() {
               setLaneFilter("");
               setSvcFilter("");
               setSentFilter("all");
+              setPage(0);
             }}
           >
             Reset
@@ -308,11 +315,9 @@ function SentLogTab() {
       {entries.length > 0 && (
         <Paper sx={{ ...glassPanelSx }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2.5, pt: 2.2, pb: 1.5 }}>
-            <Typography variant="subtitle1" fontWeight={700}>
-              SMS Log
-            </Typography>
+            <Typography variant="subtitle1" fontWeight={700}>SMS Log</Typography>
             <Typography variant="caption" color="text.secondary">
-              Showing {entries.length} of {data?.total ?? entries.length} records
+              {data?.total ? `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, data.total)} of ${data.total} records` : "—"}
             </Typography>
           </Stack>
           <TableContainer sx={{ overflowX: "auto" }}>
@@ -377,6 +382,38 @@ function SentLogTab() {
               </TableBody>
             </Table>
           </TableContainer>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            flexWrap="wrap"
+            gap={1}
+            sx={{ px: 2, py: 1.5, borderTop: "1px solid rgba(0,0,0,0.08)" }}
+          >
+            <Pagination
+              count={Math.ceil((data?.total ?? 0) / pageSize)}
+              page={page + 1}
+              onChange={(_: unknown, newPage: number) => setPage(newPage - 1)}
+              shape="rounded"
+              siblingCount={2}
+              renderItem={(item) => (
+                <PaginationItem
+                  slots={{ previous: () => <>Previous</>, next: () => <>Next</> }}
+                  {...item}
+                />
+              )}
+            />
+            <Select
+              size="small"
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
+              sx={{ fontSize: 13 }}
+            >
+              {[10, 20, 50, 75, 100, 200].map(n => (
+                <MenuItem key={n} value={n}>{n} / page</MenuItem>
+              ))}
+            </Select>
+          </Stack>
         </Paper>
       )}
     </Stack>
@@ -727,7 +764,7 @@ function ImpactTab() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.byService.map(row => (
+                {data.byService.slice().sort((a, b) => b.sent - a.sent).map(row => (
                   <TableRow key={row.serviceName} hover>
                     <TableCell>
                       <Chip

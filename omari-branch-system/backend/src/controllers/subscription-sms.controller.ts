@@ -29,6 +29,10 @@ export async function getSmsLog(req: Request, res: Response, next: NextFunction)
     const service   = parseStringOrUndefined(req.query.serviceName);
     const sentParam = parseStringOrUndefined(req.query.smsSent);
 
+    const pageSize = Math.min(Math.max(parseInt(String(req.query.pageSize ?? '50'), 10) || 50, 10), 200);
+    const page     = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
+    const skip     = (page - 1) * pageSize;
+
     const where: Prisma.SubscriptionSmsLogWhereInput = {};
 
     if (dateFrom || dateTo) {
@@ -45,7 +49,7 @@ export async function getSmsLog(req: Request, res: Response, next: NextFunction)
     if (sentParam !== undefined) where.smsSent = sentParam === 'true';
 
     const [entries, total, allForSummary] = await Promise.all([
-      prisma.subscriptionSmsLog.findMany({ where, orderBy: { sentAt: 'desc' }, take: 500 }),
+      prisma.subscriptionSmsLog.findMany({ where, orderBy: { sentAt: 'desc' }, skip, take: pageSize }),
       prisma.subscriptionSmsLog.count({ where }),
       prisma.subscriptionSmsLog.findMany({
         where,
@@ -63,6 +67,8 @@ export async function getSmsLog(req: Request, res: Response, next: NextFunction)
     const topService = Object.entries(serviceFreq).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
 
     res.json({
+      page,
+      pageSize,
       summary: {
         totalSent:             sentCount,
         totalFailed:           allForSummary.length - sentCount,
