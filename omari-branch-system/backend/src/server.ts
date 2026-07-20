@@ -13,6 +13,10 @@ const server = app.listen(port, async () => {
   startScheduler();
 });
 
+// Allow long-running analytics queries (FLOCASH source-DB scan can take 8+ min)
+server.requestTimeout = 0;
+server.setTimeout(0);
+
 // Graceful shutdown
 process.on("SIGTERM", () => {
   console.log("SIGTERM received, shutting down gracefully");

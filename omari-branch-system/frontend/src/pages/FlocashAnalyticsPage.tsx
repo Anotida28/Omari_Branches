@@ -16,9 +16,9 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   Divider,
   Paper,
-  Skeleton,
   Stack,
   Table,
   TableBody,
@@ -53,7 +53,6 @@ import {
 import { ChartSkeleton } from "../shared/components/ChartSkeleton";
 import { StatCard } from "../shared/components/StatCard";
 import { StatCardSkeleton } from "../shared/components/StatCardSkeleton";
-import { FocusDialog } from "../shared/components/FocusDialog";
 
 // ── Formatters ────────────────────────────────────────────────────────────
 
@@ -91,170 +90,161 @@ function ChartCard({
   children: React.ReactNode;
   minHeight?: number;
 }) {
+  const [open, setOpen] = useState(true);
+
   return (
-    <Paper sx={{ p: 2.5, ...glassPanelSx, minHeight }}>
-      <Typography variant="subtitle1" fontWeight={700} gutterBottom>
-        {title}
-      </Typography>
-      {subtitle && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          {subtitle}
-        </Typography>
-      )}
-      {children}
+    <Paper sx={{ ...glassPanelSx, minHeight: open ? minHeight : "auto" }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        onClick={() => setOpen((v) => !v)}
+        sx={{ px: 2.5, pt: 2.5, pb: open ? 0.5 : 2.5, cursor: "pointer", userSelect: "none" }}
+      >
+        <Box>
+          <Typography variant="subtitle1" fontWeight={700}>
+            {title}
+          </Typography>
+          {subtitle && !open && (
+            <Typography variant="caption" color="text.secondary">
+              {subtitle}
+            </Typography>
+          )}
+        </Box>
+        {open ? <ChevronUp size={16} style={{ opacity: 0.5 }} /> : <ChevronDown size={16} style={{ opacity: 0.5 }} />}
+      </Stack>
+      <Collapse in={open} timeout="auto" unmountOnExit>
+        <Box sx={{ px: 2.5, pb: 2.5 }}>
+          {subtitle && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              {subtitle}
+            </Typography>
+          )}
+          {children}
+        </Box>
+      </Collapse>
     </Paper>
   );
 }
 
-// ── Reseller detail dialog ─────────────────────────────────────────────────
+// ── Inline expanded reseller detail ───────────────────────────────────────
 
-function ResellerDetailDialog({
-  reseller,
-  open,
-  onClose,
-}: {
-  reseller: FlocashReseller | null;
-  open: boolean;
-  onClose: () => void;
-}) {
+function ResellerExpandedDetail({ reseller }: { reseller: FlocashReseller }) {
   const detailQuery = useQuery({
-    queryKey: ["flocash", "reseller", reseller?.accountId],
-    queryFn: () => fetchResellerDetail(reseller!.accountId),
-    enabled: open && !!reseller,
+    queryKey: ["flocash", "reseller", reseller.accountId],
+    queryFn: () => fetchResellerDetail(reseller.accountId),
     staleTime: 30 * 60 * 1000,
   });
 
-  if (!reseller) return null;
-
-  const displayName =
-    reseller.firstName || reseller.lastName
-      ? `${reseller.firstName ?? ""} ${reseller.lastName ?? ""}`.trim()
-      : reseller.mobileNr ?? reseller.accountId;
-
   return (
-    <FocusDialog
-      open={open}
-      onClose={onClose}
-      title={`Reseller: ${displayName}`}
-      subtitle={`Account ${reseller.accountId} · ${reseller.activeMonths} active months · avg $${reseller.avgMonthlyPayment.toFixed(0)}/mo`}
-    >
-      {/* Summary stats */}
-      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-        <Paper sx={{ p: 2, flex: 1, ...glassPanelSx }}>
-          <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
+    <Box sx={{ p: 2.5, bgcolor: "action.hover" }}>
+      {/* Summary stat row */}
+      <Stack direction="row" spacing={2} sx={{ mb: 2.5 }}>
+        <Paper sx={{ p: 1.5, flex: 1, ...glassPanelSx }}>
+          <Typography variant="overline" color="text.secondary" fontSize={10} fontWeight={700}>
             Successful FLOCASH
           </Typography>
-          <Typography variant="h5" sx={{ mt: 0.5, color: "success.main" }}>
+          <Typography variant="h6" sx={{ color: "success.main" }}>
             {fmtN(reseller.successfulTxns)}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Last 365 days
-          </Typography>
+          <Typography variant="caption" color="text.secondary">Last 365 days</Typography>
         </Paper>
-        <Paper sx={{ p: 2, flex: 1, ...glassPanelSx }}>
-          <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
-            Visa Failures (Insuf. Funds)
+        <Paper sx={{ p: 1.5, flex: 1, ...glassPanelSx }}>
+          <Typography variant="overline" color="text.secondary" fontSize={10} fontWeight={700}>
+            Visa Failures
           </Typography>
-          <Typography variant="h5" sx={{ mt: 0.5, color: "error.main" }}>
+          <Typography variant="h6" sx={{ color: "error.main" }}>
             {fmtN(reseller.failedTxns)}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="caption" color="text.secondary">
             {reseller.successfulTxns + reseller.failedTxns > 0
               ? `${fmtPct((reseller.failedTxns / (reseller.successfulTxns + reseller.failedTxns)) * 100)} fail rate`
               : "—"}
           </Typography>
         </Paper>
-        <Paper sx={{ p: 2, flex: 1, ...glassPanelSx }}>
-          <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
+        <Paper sx={{ p: 1.5, flex: 1, ...glassPanelSx }}>
+          <Typography variant="overline" color="text.secondary" fontSize={10} fontWeight={700}>
             Total Paid (yr)
           </Typography>
-          <Typography variant="h5" sx={{ mt: 0.5 }}>
-            {fmtM(reseller.totalPaidYr)}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="h6">{fmtM(reseller.totalPaidYr)}</Typography>
+          <Typography variant="caption" color="text.secondary">
             Peak month: {fmtM(reseller.peakMonthPayment)}
           </Typography>
         </Paper>
       </Stack>
 
-      {/* Monthly breakdown chart */}
-      <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
-        Monthly breakdown — Successful vs Failed
-      </Typography>
-      {detailQuery.isPending && <ChartSkeleton height={220} />}
+      {/* Monthly chart + table side by side */}
+      {detailQuery.isPending && <ChartSkeleton height={200} />}
       {detailQuery.isError && (
-        <Alert severity="error" sx={{ mb: 2 }}>{getErrorMessage(detailQuery.error)}</Alert>
+        <Alert severity="error">{getErrorMessage(detailQuery.error)}</Alert>
       )}
       {detailQuery.data && (
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={detailQuery.data.months} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} />
-            <ReTooltip
-              formatter={(value, name) => [value != null ? fmtN(value as number) : "—", name as string]}
-              contentStyle={{ fontSize: 12 }}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="successfulTxns" name="Successful" fill={chartPalette.primary} radius={[3, 3, 0, 0]} maxBarSize={22} />
-            <Bar dataKey="failedTxns"     name="Failed"     fill={chartPalette.danger}  radius={[3, 3, 0, 0]} maxBarSize={22} />
-          </BarChart>
-        </ResponsiveContainer>
-      )}
-
-      {/* Monthly amounts table */}
-      {detailQuery.data && detailQuery.data.months.length > 0 && (
-        <>
-          <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 3, mb: 1 }}>
-            Monthly amounts paid
-          </Typography>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Month</TableCell>
-                  <TableCell align="right">Successful</TableCell>
-                  <TableCell align="right">Failed</TableCell>
-                  <TableCell align="right">Amount Paid</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {detailQuery.data.months.map((m) => (
-                  <TableRow key={m.yearMonth} hover>
-                    <TableCell>{m.label}</TableCell>
-                    <TableCell align="right" sx={{ color: "success.main" }}>{fmtN(m.successfulTxns)}</TableCell>
-                    <TableCell align="right" sx={{ color: "error.main" }}>{fmtN(m.failedTxns)}</TableCell>
-                    <TableCell align="right">{fmtM(m.totalAmountPaid)}</TableCell>
+        <Box display="grid" gridTemplateColumns={{ xs: "1fr", md: "1fr 1fr" }} gap={2}>
+          <Box>
+            <Typography variant="caption" fontWeight={700} sx={{ mb: 1, display: "block" }}>
+              Monthly — Successful vs Failed
+            </Typography>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={detailQuery.data.months} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.mutedGrid} vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <ReTooltip
+                  formatter={(value, name) => [value != null ? fmtN(value as number) : "—", name as string]}
+                  contentStyle={{ fontSize: 11 }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="successfulTxns" name="Successful" fill={chartPalette.primary} radius={[3, 3, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="failedTxns"     name="Failed"     fill={chartPalette.danger}  radius={[3, 3, 0, 0]} maxBarSize={18} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Box>
+          <Box>
+            <Typography variant="caption" fontWeight={700} sx={{ mb: 1, display: "block" }}>
+              Monthly amounts paid
+            </Typography>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Month</TableCell>
+                    <TableCell align="right">Successful</TableCell>
+                    <TableCell align="right">Failed</TableCell>
+                    <TableCell align="right">Amount Paid</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </>
+                </TableHead>
+                <TableBody>
+                  {detailQuery.data.months.map((m) => (
+                    <TableRow key={m.yearMonth} hover>
+                      <TableCell>{m.label}</TableCell>
+                      <TableCell align="right" sx={{ color: "success.main" }}>{fmtN(m.successfulTxns)}</TableCell>
+                      <TableCell align="right" sx={{ color: "error.main" }}>{fmtN(m.failedTxns)}</TableCell>
+                      <TableCell align="right">{fmtM(m.totalAmountPaid)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </Box>
       )}
-    </FocusDialog>
+    </Box>
   );
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────
 
 export default function FlocashAnalyticsPage() {
-  const [selectedReseller, setSelectedReseller] = useState<FlocashReseller | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ["flocash", "analytics"],
     queryFn: () => fetchFlocashAnalytics(false),
-    staleTime: 60 * 60 * 1000, // treat cached for 1 hour on the frontend side too
+    staleTime: 60 * 60 * 1000,
     retry: 1,
   });
 
   const analytics = query.data;
-
-  function handleResellerClick(reseller: FlocashReseller) {
-    setSelectedReseller(reseller);
-    setDialogOpen(true);
-  }
 
   // ── Derived chart data ────────────────────────────────────────────────
 
@@ -575,39 +565,49 @@ export default function FlocashAnalyticsPage() {
                     r.firstName || r.lastName
                       ? `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim()
                       : r.mobileNr ?? "—";
+                  const isExpanded = expandedId === r.accountId;
                   return (
-                    <TableRow
-                      key={r.accountId}
-                      hover
-                      sx={{ cursor: "pointer" }}
-                      onClick={() => handleResellerClick(r)}
-                    >
-                      <TableCell>
-                        <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
-                          {r.accountId}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{nameOrMobile}</TableCell>
-                      <TableCell align="right">{r.activeMonths}</TableCell>
-                      <TableCell align="right">{fmtM(r.avgMonthlyPayment)}</TableCell>
-                      <TableCell align="right">{fmtM(r.peakMonthPayment)}</TableCell>
-                      <TableCell align="right">{fmtM(r.totalPaidYr)}</TableCell>
-                      <TableCell align="right" sx={{ color: "success.main" }}>{fmtN(r.successfulTxns)}</TableCell>
-                      <TableCell align="right" sx={{ color: r.failedTxns > 0 ? "error.main" : "text.secondary" }}>
-                        {fmtN(r.failedTxns)}
-                      </TableCell>
-                      <TableCell align="right">
-                        <Chip
-                          label={fmtPct(failPct)}
-                          size="small"
-                          color={failPct > 40 ? "error" : failPct > 20 ? "warning" : "success"}
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <ChevronDown size={14} style={{ opacity: 0.4 }} />
-                      </TableCell>
-                    </TableRow>
+                    <>
+                      <TableRow
+                        key={r.accountId}
+                        hover
+                        sx={{ cursor: "pointer", "& td": { borderBottom: isExpanded ? 0 : undefined } }}
+                        onClick={() => setExpandedId(isExpanded ? null : r.accountId)}
+                      >
+                        <TableCell>
+                          <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                            {r.accountId}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{nameOrMobile}</TableCell>
+                        <TableCell align="right">{r.activeMonths}</TableCell>
+                        <TableCell align="right">{fmtM(r.avgMonthlyPayment)}</TableCell>
+                        <TableCell align="right">{fmtM(r.peakMonthPayment)}</TableCell>
+                        <TableCell align="right">{fmtM(r.totalPaidYr)}</TableCell>
+                        <TableCell align="right" sx={{ color: "success.main" }}>{fmtN(r.successfulTxns)}</TableCell>
+                        <TableCell align="right" sx={{ color: r.failedTxns > 0 ? "error.main" : "text.secondary" }}>
+                          {fmtN(r.failedTxns)}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Chip
+                            label={fmtPct(failPct)}
+                            size="small"
+                            color={failPct > 40 ? "error" : failPct > 20 ? "warning" : "success"}
+                            variant="outlined"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} style={{ opacity: 0.4 }} />}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow key={`${r.accountId}-detail`}>
+                        <TableCell colSpan={10} sx={{ p: 0, border: 0 }}>
+                          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                            <ResellerExpandedDetail reseller={r} />
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    </>
                   );
                 })}
               </TableBody>
@@ -616,12 +616,6 @@ export default function FlocashAnalyticsPage() {
         </Paper>
       ) : null}
 
-      {/* Reseller detail dialog */}
-      <ResellerDetailDialog
-        reseller={selectedReseller}
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-      />
     </section>
   );
 }
