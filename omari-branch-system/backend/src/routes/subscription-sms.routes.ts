@@ -8,6 +8,7 @@ import {
   updateSmsConfig,
   retrySms,
   runSmsNow,
+  runReconNow,
 } from '../controllers/subscription-sms.controller';
 
 const router = Router();
@@ -19,5 +20,6 @@ router.get('/config',   getSmsConfig);
 router.put('/config',   updateSmsConfig);
 router.post('/retry',   retrySms);
 router.post('/run',     runSmsNow);
+router.post('/recon',   runReconNow);
 
 export default router;

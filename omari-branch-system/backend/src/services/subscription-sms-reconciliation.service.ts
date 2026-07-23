@@ -149,9 +149,15 @@ export async function runSmsReconciliation(): Promise<ReconciliationResult> {
 
     for (const accountId of accountIds) {
       const trans = transMap.get(accountId) ?? [];
+      // Compare by calendar date (not exact time) for the lower bound —
+      // transactions are timestamped at midnight local which can be UTC-2 hours,
+      // landing before sentAt (09:00 local = 07:00 UTC) on the same calendar day.
+      const sentAtDay = new Date(log.sentAt); sentAtDay.setHours(0, 0, 0, 0);
+      const txDay     = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+
       const hit = trans.find(t =>
         t.serviceName === log.serviceName &&
-        t.date >= log.sentAt &&
+        txDay(t.date) >= sentAtDay &&
         t.date <= windowEnd,
       );
       if (hit) { matched = hit; break; }

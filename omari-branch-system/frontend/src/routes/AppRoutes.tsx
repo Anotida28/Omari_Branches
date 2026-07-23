@@ -28,6 +28,7 @@ const EmailDeliveryLogPage = lazy(() => import("../pages/EmailDeliveryLogPage"))
 const AgentTrendsPage = lazy(() => import("../pages/AgentTrendsPage"));
 const SubscriptionSmsPage = lazy(() => import("../pages/SubscriptionSmsPage"));
 const FlocashAnalyticsPage = lazy(() => import("../pages/FlocashAnalyticsPage"));
+const CRBuilderPage = lazy(() => import("../pages/CRBuilderPage"));
 const UsersPage = lazy(() => import("../pages/UsersPage"));
 
 function RouteLoadingFallback() {
@@ -88,6 +89,7 @@ export function AppRoutes() {
           <Route path="/agents/trends" element={<AgentTrendsPage />} />
           <Route path="/subscription-sms" element={<SubscriptionSmsPage />} />
           <Route path="/wallet/flocash-analytics" element={<FlocashAnalyticsPage />} />
+          <Route path="/crbuilder" element={<CRBuilderPage />} />
           <Route
             path="/users"
             element={

@@ -51,6 +51,7 @@ import {
   fetchSmsImpact,
   fetchSmsConfig,
   updateSmsConfig,
+  runReconNow,
   retryFailedSms,
   runSmsNow,
   type SmsPreviewEntry,
@@ -649,6 +650,7 @@ const PERIOD_OPTIONS: { label: string; days: number }[] = [
 
 function ImpactTab() {
   const [days, setDays] = useState(30);
+  const [reconRunning, setReconRunning] = useState(false);
 
   const { data, isLoading, isError, isFetching, dataUpdatedAt } = useQuery({
     queryKey: ["subscription-sms-impact", days],
@@ -657,6 +659,20 @@ function ImpactTab() {
   });
 
   const queryClient = useQueryClient();
+
+  const handleRefresh = async () => {
+    setReconRunning(true);
+    try {
+      await runReconNow();
+    } catch {
+      // recon error is non-fatal — still refresh the display
+    } finally {
+      setReconRunning(false);
+      queryClient.invalidateQueries({ queryKey: ["subscription-sms-impact", days] });
+    }
+  };
+
+  const busy = reconRunning || isFetching;
 
   return (
     <Stack spacing={2.5}>
@@ -678,11 +694,11 @@ function ImpactTab() {
         <Button
           variant="outlined"
           size="small"
-          startIcon={isFetching ? <CircularProgress size={12} /> : <RefreshCw size={13} />}
-          disabled={isFetching}
-          onClick={() => queryClient.invalidateQueries({ queryKey: ["subscription-sms-impact", days] })}
+          startIcon={busy ? <CircularProgress size={12} /> : <RefreshCw size={13} />}
+          disabled={busy}
+          onClick={handleRefresh}
         >
-          {isFetching ? "Loading…" : "Refresh"}
+          {reconRunning ? "Running recon…" : isFetching ? "Loading…" : "Refresh"}
         </Button>
 
         {dataUpdatedAt > 0 && !isFetching && (
@@ -732,7 +748,7 @@ function ImpactTab() {
       {/* Pending reconciliation note */}
       {data && data.pendingReconciliation > 0 && (
         <Alert severity="info" sx={{ py: 0.5 }}>
-          <strong>{data.pendingReconciliation}</strong> SMS{data.pendingReconciliation === 1 ? "" : "es"} are still within the charge window — conversions will update when the reconciliation job runs at 10:00.
+          <strong>{data.pendingReconciliation}</strong> SMS{data.pendingReconciliation === 1 ? "" : "es"} are still within the charge window — conversions update automatically every 30 minutes.
         </Alert>
       )}
 

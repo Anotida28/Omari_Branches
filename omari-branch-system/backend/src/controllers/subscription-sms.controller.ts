@@ -8,7 +8,7 @@ import {
 import { getSmsImpactStats } from '../services/subscription-sms-reconciliation.service';
 import { sendSms } from '../services/sms.service';
 import { isSmsSendingEnabled, setConfig, CONFIG_KEYS } from '../services/system-config.service';
-import { triggerSubscriptionSmsJobManually } from '../jobs/scheduler';
+import { triggerSubscriptionSmsJobManually, triggerSmsReconciliationJobManually } from '../jobs/scheduler';
 
 function parseDateOrUndefined(value: unknown): Date | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -199,6 +199,23 @@ export async function runSmsNow(_req: Request, res: Response, next: NextFunction
     const { executed, result, error } = await triggerSubscriptionSmsJobManually();
     if (!executed) {
       res.status(409).json({ error: 'Job is already running — try again in a moment.' });
+      return;
+    }
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function runReconNow(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { executed, result, error } = await triggerSmsReconciliationJobManually();
+    if (!executed) {
+      res.status(409).json({ error: 'Reconciliation job is already running — try again in a moment.' });
       return;
     }
     if (error) {

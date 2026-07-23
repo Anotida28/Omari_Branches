@@ -56,7 +56,11 @@ const WALLET_SNAPSHOT_INCREMENTAL_CRON  = "0 4 * * *";   // 04:00 Harare daily �
 const WALLET_SNAPSHOT_FULL_CRON         = "0 5 * * 0";   // 05:00 Harare Sunday — full reset
 const SOURCE_METRICS_SYNC_CRON          = env.SOURCE_SQL_SYNC_CRON;
 const SUBSCRIPTION_SMS_REMINDER_CRON    = "0 9 * * *";   // 09:00 Harare — after balances refresh
-const SUBSCRIPTION_SMS_RECON_CRON       = "0 10 * * *";  // 10:00 Harare — after SMS reminders
+const SUBSCRIPTION_SMS_RECON_CRON       = "*/30 * * * *";  // every 30 min — re-checks pending SMS against new transactions
+// Periodic health-check: re-runs any daily job that missed its window today.
+// Fires every 30 min during business hours so a cron missed due to event-loop
+// blocking self-heals within half an hour rather than waiting until next day.
+const DAILY_JOBS_CATCHUP_CRON           = "*/30 8-15 * * *"; // every 30 min, 08:00–15:30 Harare
 
 // ============================================================================
 // Job Handlers
@@ -407,6 +411,18 @@ export function startScheduler(): void {
     task: subscriptionSmsReconTask,
   });
 
+  // Self-healing catchup: re-fires any daily job that missed its scheduled window.
+  const catchupTask = cron.schedule(DAILY_JOBS_CATCHUP_CRON, () => {
+    catchupDailyJobsIfMissed().catch((err: unknown) =>
+      console.error(`[Scheduler] Periodic catchup error:`, (err as Error)?.message ?? err),
+    );
+  }, { timezone: CRON_TZ });
+  scheduledJobs.push({
+    name: "daily-jobs-catchup",
+    cronExpression: DAILY_JOBS_CATCHUP_CRON,
+    task: catchupTask,
+  });
+
   if (shouldEnableSourceMetricsSync()) {
     const sourceMetricsTask = cron.schedule(
       SOURCE_METRICS_SYNC_CRON,
@@ -430,9 +446,12 @@ export function startScheduler(): void {
     console.log(`  - ${job.name}: ${job.cronExpression}`);
   }
 
-  // Catchup: if we started after the SMS window (09:00 Harare) and nothing was sent today, run now
+  // Catchup: if we started after any scheduled window and the job missed, run it now
   catchupSmsIfMissed().catch((err) =>
     console.error(`[Scheduler] SMS catchup check failed:`, err?.message ?? err),
+  );
+  catchupDailyJobsIfMissed().catch((err) =>
+    console.error(`[Scheduler] Daily jobs catchup failed:`, err?.message ?? err),
   );
 }
 
@@ -468,6 +487,55 @@ async function catchupSmsIfMissed(): Promise<void> {
 
   console.log(`[Scheduler] SMS catchup: no SMS sent today and time is ${hourHarare}:xx Harare — running now`);
   await runDailySubscriptionSmsReminders();
+}
+
+/** Returns true if the given job's lock was last updated today (Harare calendar date). */
+async function hasJobRunToday(jobName: string): Promise<boolean> {
+  const lock = await prisma.jobLock.findFirst({ where: { jobName } });
+  if (!lock) return false;
+  const todayStr = new Date().toLocaleDateString('en-ZA', { timeZone: CRON_TZ });
+  const lockStr  = lock.updatedAt.toLocaleDateString('en-ZA', { timeZone: CRON_TZ });
+  return todayStr === lockStr;
+}
+
+/**
+ * On startup, run any daily jobs that missed their scheduled window today.
+ * Mirrors the SMS catchup pattern — only fires within a business window so we
+ * never send stale yesterday-data late at night.
+ */
+async function catchupDailyJobsIfMissed(): Promise<void> {
+  const nowHarare = new Date(new Date().toLocaleString('en-US', { timeZone: CRON_TZ }));
+  const hourHarare = nowHarare.getHours();
+
+  // Catchup window: 08:00–15:59 Harare. Before 08:00 the crons will fire normally.
+  if (hourHarare < 8 || hourHarare >= 16) return;
+
+  // 08:00 Harare report jobs — only attempt if we're past their window
+  const reportJobs: Array<{ name: string; fn: () => Promise<void> }> = [
+    { name: 'daily-alert-evaluator',      fn: runDailyAlerts        },
+    { name: 'daily-branch-report-emailer', fn: runDailyBranchReports },
+    { name: 'daily-wallet-report-emailer', fn: runDailyWalletReports },
+    { name: 'custom-report-emailer',       fn: runDailyCustomReports },
+  ];
+
+  for (const job of reportJobs) {
+    if (!(await hasJobRunToday(job.name))) {
+      console.log(`[Scheduler] Catchup: ${job.name} missed today — running now`);
+      await job.fn().catch((err: unknown) =>
+        console.error(`[Scheduler] Catchup ${job.name} error:`, (err as Error)?.message ?? err),
+      );
+    }
+  }
+
+  // Subscription SMS reminder (09:00 Harare) — only attempt if we're past its window
+  if (hourHarare >= 9 && !(await hasJobRunToday('subscription-sms-reminder'))) {
+    console.log('[Scheduler] Catchup: subscription-sms-reminder missed today — running now');
+    await runDailySubscriptionSmsReminders().catch((err: unknown) =>
+      console.error('[Scheduler] Catchup SMS reminder error:', (err as Error)?.message ?? err),
+    );
+  }
+  // Note: subscription-sms-reconciliation no longer needs catchup here — it now
+  // runs on its own every-30-minutes cron (SUBSCRIPTION_SMS_RECON_CRON) all day.
 }
 
 /**
@@ -511,6 +579,14 @@ export async function triggerSubscriptionSmsJobManually(): Promise<{
   error?: Error;
 }> {
   return runSubscriptionSmsReminderJobWithLock();
+}
+
+export async function triggerSmsReconciliationJobManually(): Promise<{
+  executed: boolean;
+  result?: any;
+  error?: Error;
+}> {
+  return runSmsReconciliationJobWithLock();
 }
 
 export async function triggerDailyWalletReportJobManually(): Promise<{

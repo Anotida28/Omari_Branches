@@ -16,6 +16,7 @@ import usersRoutes from "./users.routes";
 import walletRoutes from "./wallet.routes";
 import subscriptionSmsRoutes from "./subscription-sms.routes";
 import flocashAnalyticsRoutes from "./flocash-analytics.routes";
+import crbuilderRoutes from "./crbuilder.routes";
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use("/users", usersRoutes);
 router.use("/wallet", walletRoutes);
 router.use("/subscription-sms", subscriptionSmsRoutes);
 router.use("/flocash", flocashAnalyticsRoutes);
+router.use("/crbuilder", crbuilderRoutes);
 
 export default router;

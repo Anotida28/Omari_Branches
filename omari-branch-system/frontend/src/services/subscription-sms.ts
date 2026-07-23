@@ -163,3 +163,10 @@ export async function runSmsNow(): Promise<RunResult> {
   });
   return data;
 }
+
+export async function runReconNow(): Promise<{ checkedCount: number; confirmedCount: number; expiredCount: number; pendingCount: number }> {
+  const { data } = await api.post("/api/subscription-sms/recon", null, {
+    timeout: 120_000,
+  });
+  return data;
+}

@@ -76,7 +76,7 @@ interface ClassifiedSubscription {
 // Lane classification
 // ============================================================================
 
-const LOOK_AHEAD_DAYS      = 3;   // send SMS when payment is this many days away
+const LOOK_AHEAD_DAYS      = 4;   // send SMS when payment is this many days away
 const LANE1_MAX_INTERVAL   = 45;  // days — cap on avg billing interval for Lane 1
 const LANE1_MIN_INTERVAL   = 20;
 const LANE1_MAX_LAPSE      = 50;  // days since last charge before subscription is considered lapsed
@@ -134,7 +134,7 @@ function classifyCandidates(
       predictedDate.setDate(predictedDate.getDate() + c.avgIntervalDays);
       const daysUntilCharge = daysBetween(today, startOfDay(predictedDate));
 
-      if (daysUntilCharge >= 1 && daysUntilCharge <= LOOK_AHEAD_DAYS) {
+      if (daysUntilCharge >= 2 && daysUntilCharge <= LOOK_AHEAD_DAYS) {
         classified.push({
           mobileNr: c.mobileNr,
           firstName: c.firstName || customerName.split(' ')[0],
@@ -166,7 +166,7 @@ function classifyCandidates(
       predictedDate.setDate(predictedDate.getDate() + medianInterval);
       const daysUntilCharge = daysBetween(today, startOfDay(predictedDate));
 
-      if (daysUntilCharge >= 1 && daysUntilCharge <= LOOK_AHEAD_DAYS) {
+      if (daysUntilCharge >= 2 && daysUntilCharge <= LOOK_AHEAD_DAYS) {
         classified.push({
           mobileNr: c.mobileNr,
           firstName: c.firstName || customerName.split(' ')[0],
